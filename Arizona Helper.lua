@@ -3,9 +3,9 @@
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("RICS")
-script_version("1.4.2")
+script_version("1.4.1")
 ----------------------------------------------- INIT ---------------------------------------------
-local UPDATE_JSON_URL = "https://greentechyt.github.io/arizona-helper-unlimited/Update.json"
+local UPDATE_JSON_URL = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Update.json"
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
 print('Инициализация скрипта версии ' .. thisScript().version)
@@ -5430,7 +5430,9 @@ function check_update()
 			local uText = tostring(updateInfo.info or "Доступно обновление.")
 			if uVer ~= "" and uUrl ~= "" and thisScript().version ~= uVer then
 				print('Доступно обновление! | Локальная: ' .. thisScript().version .. ' | В облаке: ' .. uVer)
-				sampAddChatMessage('[Arizona Helper] {ffffff}Доступна новая версия хелпера!', message_color)
+				sampAddChatMessage(' ', message_color)
+				sampAddChatMessage('[Arizona Helper] {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. uVer .. '{ffffff}!', message_color)
+				sampAddChatMessage(' ', message_color)
 				MODULE.Update.is_need_update = true
 				MODULE.Update.url     = uUrl
 				MODULE.Update.version = uVer
@@ -5439,8 +5441,8 @@ function check_update()
 				play_sound()
 			else
 				print('Обновление не нужно!')
-				isUpdateChecked = true
 			end
+			isUpdateChecked = true
 		end,
 		function(err)
 			print('Ошибка проверки обновления: ' .. tostring(err))
@@ -7522,7 +7524,6 @@ imgui.OnInitialize(function()
 	TextEditCallback = ffi.cast('int (*)(ImGuiInputTextCallbackData* data)', TextEditCallback)
 
 end)
-
 imgui.OnFrame(
     function() return MODULE.Initial.Window[0] end,
     function(player)
@@ -9670,8 +9671,17 @@ function render_assist_item(name, description, tbl, key, isVip, func)
 		end
 		imgui.EndPopup()
 	end
-	if imgui.CenterColumnSmallButton(u8('Посмотреть##' .. name .. key)) then
-		imgui.OpenPopup(fa.CIRCLE_INFO .. ' ' .. u8(name) .. ' ' .. fa.CIRCLE_INFO)
+	if func then
+		if imgui.CenterColumnSmallButton(fa.DOWNLOAD .. u8(' Ручное обновление##' .. name .. key)) then
+			func()
+		end
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip(u8(description))
+		end
+	else
+		if imgui.CenterColumnSmallButton(u8('Посмотреть##' .. name .. key)) then
+			imgui.OpenPopup(fa.CIRCLE_INFO .. ' ' .. u8(name) .. ' ' .. fa.CIRCLE_INFO)
+		end
 	end
 	imgui.NextColumn()
 	if imgui.CenterColumnSmallButton((((tbl and tbl[key]) and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##' .. name .. key)) then
@@ -9679,17 +9689,7 @@ function render_assist_item(name, description, tbl, key, isVip, func)
 		save_settings()
 	end
 	if imgui.IsItemHovered() then
-		local label = (tbl and tbl[key]) and ('Отключить') or ('Включить')
-		imgui.SetTooltip(u8(label))
-	end
-	if func and tbl and tbl[key] then
-		imgui.SameLine()
-		if imgui.SmallButton(fa.GEAR .. '##' .. name) then
-			func()
-		end
-		if imgui.IsItemHovered() then
-			imgui.SetTooltip(u8("Настроить"))
-		end
+		imgui.SetTooltip((tbl and tbl[key]) and u8('Включено') or u8('Выключено'))
 	end
 	imgui.Columns(1)
 end
@@ -9931,10 +9931,12 @@ function render_fractions_functions()
 						"leadpanel"
 					)
 					render_assist_item(
-						"Доступ к обновлениям хелпера",
-						"Открывает доступ к обновлениям хелпера (есть риск потери данных/VIP-доступа)",
+						"Автоматические обновления",
+						"\nКнопка \"Ручное обновление\" запускает проверку версии прямо сейчас, независимо от тумблера.",
 						settings.general,
-						"updater"
+						"updater",
+						false,
+						check_update
 					)
 					imgui.Separator()
 					imgui.EndChild()
@@ -12555,16 +12557,36 @@ imgui.OnFrame(
 )
 ----------------------------------- UPDATE GUI -----------------------------
 imgui.OnFrame(
-    function() return MODULE.Update.Window[0] end,
-    function(player)
-		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
-		imgui.Begin(fa.CIRCLE_INFO .. u8" Доступно обновление Arizona Helper ".. fa.CIRCLE_INFO .. "##update_window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize )
+	function() return MODULE.Update.Window[0] end,
+	function(player)
 		if not IS_MOBILE then change_dpi() end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.SetNextWindowSize(imgui.ImVec2(480 * settings.general.custom_dpi, 300 * settings.general.custom_dpi), imgui.Cond.Always)
+		imgui.Begin(fa.CIRCLE_INFO .. u8" Доступно обновление Arizona Helper " .. fa.CIRCLE_INFO .. "##update_window",
+			MODULE.Update.Window,
+			imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+		imgui.CenterText(u8("Версия в облаке: ") .. tostring(MODULE.Update.version or ""))
 		imgui.CenterText(u8("Список изменений в новой версии:"))
-		for line in MODULE.Update.info:gmatch("[^\r\n]+") do
-			imgui.BulletText(u8(line))
+		imgui.Separator()
+		if imgui.BeginChild('##update_info', imgui.ImVec2(0, 170 * settings.general.custom_dpi), true) then
+			for line in (MODULE.Update.info or ""):gmatch("[^\r\n]+") do
+				imgui.BulletText(line)
+			end
 		end
-    end
+		imgui.EndChild()
+		imgui.Separator()
+		local bw = (imgui.GetWindowWidth() - 16) / 2
+		if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Установить обновление', imgui.ImVec2(bw, 30 * settings.general.custom_dpi)) then
+			download_file = 'helper'
+			downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
+			MODULE.Update.Window[0] = false
+		end
+		imgui.SameLine()
+		if imgui.Button(u8' Позже', imgui.ImVec2(bw, 30 * settings.general.custom_dpi)) then
+			MODULE.Update.Window[0] = false
+		end
+		imgui.End()
+	end
 )
 ----------------------------------- Other GUI -----------------------------
 imgui.OnFrame(
