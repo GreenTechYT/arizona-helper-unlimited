@@ -2,8 +2,8 @@
 
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
-script_author("RICS")
-script_version("1.4.1")
+script_author("GreenTechYT")
+script_version("1.4.2")
 ----------------------------------------------- INIT ---------------------------------------------
 local UPDATE_JSON_URL = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Update.json"
 local worked_dir = getWorkingDirectory():gsub('\\','/')
@@ -20,7 +20,7 @@ if not doesFileExist(errors_handler_path) then
 function onSystemMessage(msg, type, script)
 	if script and script.name == 'Arizona&Rodina Helper' and msg and ((msg:find('stack traceback')) or (type == 3 and not msg:find('Script died due to an error'))) then
 		local errorMessage = ('{ffffff}Произошла непредусмотренная ошибка в работе скрипта, из-за чего он был отключён!\n\n' ..
-		'Отправьте скриншот этого диалога в {ff9900}тех.поддержку MTG MODS (Telegram/Discord/BlastHack){ffffff}.\n\n' ..
+		'Отправьте скриншот этого диалога в {ff9900}тех.поддержку (VK: vk.com/homkarpyt | DS: Jone8204){ffffff}.\n\n' ..
 		'Детали возникшей ошибки:\n{ff6666}' .. msg .. '{ffffff}\n\n' ..
 		'Полный лог работы скрипта: \n{66BB6A}' .. getLog())
 		sampShowDialog(123123, '{009EFF}Arizona&Rodina Helper [' .. script.version .. ']', errorMessage, 'Закрыть диалог', '', 0)
@@ -2460,7 +2460,6 @@ return defaultPieMenu
 			if file then
 				file:write([[
 -- ported to Lua by FYP, ported to mimgui by #Northn
--- modified by MTG MODS
 
 local imgui = require 'mimgui'
 local ImVec2 = imgui.ImVec2
@@ -3774,9 +3773,6 @@ function main()
 
 	welcome_message()
 	
-	-- Сбор аналитики (версия, сервер, устройство мобайл/пк)
-	if settings.general.analytics then sendAnalytics() end
-
 	while true do
 		wait(0)
 
@@ -4872,7 +4868,7 @@ function get_vehicle_name(id)
 	end
 	sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось получить модель т/c ' .. id .. " ID, обновляю конфиг транспорта...", message_color)
 	download_file = 'arz_veh'
-	downloadFileFromUrlToPath('https://mtgmods.github.io/arizona-helper/SmartVEH/Vehicles' .. 
+	downloadFileFromUrlToPath('https://github.com/GreenTechYT/arizona-helper-unlimited/SmartVEH/Vehicles' .. 
 	((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), modules.arz_veh.path)
 	return 'транспортного средства'
 end
@@ -5457,16 +5453,16 @@ function check_resources()
 	end
 	if not doesFileExist(config_dir .. '/Resourse/logo.png') then
 		print('Подгружаю логотип хелпера...')
-		downloadFileFromUrlToPath('https://mtgmods.github.io/arizona-helper/Resourse/logo.png', config_dir .. '/Resourse/logo.png')
+		downloadFileFromUrlToPath('https://github.com/GreenTechYT/arizona-helper-unlimited/Resourse/logo.png', config_dir .. '/Resourse/logo.png')
 	end
 	if not doesFileExist(config_dir .. "/Resourse/notify.mp3") then
 		print('Подгружаю звук оповещений хелпера...')
-		downloadFileFromUrlToPath('https://mtgmods.github.io/arizona-helper/Resourse/notify.mp3', config_dir .. "/Resourse/notify.mp3")
+		downloadFileFromUrlToPath('https://github.com/GreenTechYT/arizona-helper-unlimited/Resourse/notify.mp3', config_dir .. "/Resourse/notify.mp3")
 	end
 	if not doesFileExist(modules.arz_veh.path) then
 		print('Подгружаю список кастомных т/с для определенения моделей...')
 		download_file = 'arz_veh'
-		downloadFileFromUrlToPath('https://mtgmods.github.io/arizona-helper/SmartVEH/Vehicles' .. 
+		downloadFileFromUrlToPath('https://github.com/GreenTechYT/arizona-helper-unlimited/SmartVEH/Vehicles' .. 
 		((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), modules.arz_veh.path)
 	end
 end
@@ -6612,24 +6608,6 @@ function sampev.onServerMessage(color, text)
 		sampAddChatMessage('[Arizona Helper] {ffffff}111 Баланс | 60 Время | 911 МЮ | 912 МЗ | 913 Такси | 914 Мехи | 8828 Банк | 997 Дома', message_color)
 		return false
 	end
-
-	if (text:find('Bogdan_Martelli') and getServerNumber() == '20') or text:find('%[20%]Bogdan_Martelli') then
-		local lastColor = text:match("(.+){%x+}$")
-		if text:find('%[VIP ADV%]') or text:find('%[FOREVER%]') then lastColor = "{FFFFFF}" end
-   		if not lastColor then lastColor = "{" .. rgba_to_hex(color) .. "}" end
-		if text:find('%[20%]Bogdan_Martelli%[%d+%]') then
-			local id = text:match('%[20%]Bogdan_Martelli%[(%d+)%]') or ''
-			text = string.gsub(text, '%[20%]Bogdan_Martelli%[%d+%]', message_color_hex .. '[20]MTGMODS[' .. id .. ']' .. lastColor)
-		elseif text:find('%[20%]Bogdan_Martelli') then
-			text = string.gsub(text, '%[20%]Bogdan_Martelli', message_color_hex .. '[20]MTGMODS' .. lastColor)
-		elseif text:find('Bogdan_Martelli%[%d+%]') then
-			local id = text:match('Bogdan_Martelli%[(%d+)%]') or ''
-			text = string.gsub(text, 'Bogdan_Martelli%[%d+%]', message_color_hex .. 'MTGMODS[' .. id .. ']' .. lastColor)
-		elseif text:find('Bogdan_Martelli') then
-			text = string.gsub(text, 'Bogdan_Martelli', message_color_hex .. 'MTGMODS' .. lastColor)
-		end
-		return {color,text}
-	end
 end
 function sampev.onSendChat(text)
 	if MODULE.DEBUG then
@@ -7531,6 +7509,7 @@ imgui.OnFrame(
         imgui.Begin(fa.GEARS .. u8' Первичная настройка хелпера ' .. fa.GEARS, MODULE.Initial.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
         change_dpi()
 		if MODULE.Initial.step == 0 then
+			MODULE.Initial.terms_accepted = MODULE.Initial.terms_accepted or false
 			if doesFileExist(config_dir .. '/Resourse/logo.png') then
 				if (not _G.helper_logo) then
 					local path = config_dir .. '/Resourse/logo.png'
@@ -7543,32 +7522,82 @@ imgui.OnFrame(
 					imgui.Text("\n\n\n")
 					imgui.CenterTextDisabled(u8('Не удалось загрузить дополнительные ресурсы хелпера!\n\n'))
 					imgui.CenterTextDisabled(u8('Для автоматической загрузки временно включите VPN или скачайте файлы вручную'))
-					imgui.CenterUnderlineText("https://github.com/MTGMODS/arizona-helper")
-					if imgui.IsItemClicked() then openLink('https://github.com/MTGMODS/arizona-helper/tree/main/Resourse') end
+					imgui.CenterUnderlineText("https://github.com/GreenTechYT/arizona-helper-unlimited")
+					if imgui.IsItemClicked() then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited/tree/main/Resourse') end
 					imgui.EndChild()
 				end
 			end
 			imgui.CenterText(u8("Настроим хелпер для комфортной игры"))
 			imgui.Separator()
-			imgui.CenterText(u8("Выберите способ настройки:"))
-			if imgui.CenterButton(fa.CIRCLE_ARROW_RIGHT .. u8(' Автоматически через /stats ') .. fa.CIRCLE_ARROW_LEFT) then
-				check_stats = true
-				sampSendChat('/stats')
-				MODULE.Initial.Window[0] = false
+			imgui.CenterText(u8("Продолжая использование хелпера, вы соглашаетесь с:"))
+			if imgui.CenterButton(fa.BOOK .. u8(' Прочитать пользовательское соглашение ') .. fa.BOOK) then
+				imgui.OpenPopup(fa.BOOK .. u8' Пользовательское соглашение ' .. fa.BOOK .. '##terms_popup')
 			end
-			if imgui.CenterButton(fa.CIRCLE_ARROW_RIGHT .. u8(' Настроить вручную ') .. fa.CIRCLE_ARROW_LEFT) then
-				MODULE.Initial.fraction_type_selector = 0
-				MODULE.Initial.step = 1
+			if MODULE.Initial.terms_accepted then
+				imgui.CenterText(fa.FLAG_CHECKERED .. u8' Соглашение принято. Вы можете продолжить настройку.')
+			else
+				imgui.CenterTextDisabled(fa.CIRCLE_XMARK .. u8' Соглашение не принято. Продолжение настройки недоступно.')
 			end
 			imgui.Separator()
-			imgui.CenterText(u8("Продолжая использование хелпера, вы соглашаетесь с:"))
-			imgui.CenterUnderlineText(u8("Пользовательское соглашение и политика конфиденциальности"))
-			if imgui.IsItemHovered() then
-				imgui.BeginTooltip()
-				imgui.Text('https://mtgmods.com/terms')
-				imgui.EndTooltip()
+			imgui.CenterText(u8("Выберите способ настройки:"))
+			if MODULE.Initial.terms_accepted then
+				if imgui.CenterButton(fa.CIRCLE_ARROW_RIGHT .. u8(' Автоматически через /stats ') .. fa.CIRCLE_ARROW_LEFT) then
+					check_stats = true
+					sampSendChat('/stats')
+					MODULE.Initial.Window[0] = false
+				end
+				if imgui.CenterButton(fa.CIRCLE_ARROW_RIGHT .. u8(' Настроить вручную ') .. fa.CIRCLE_ARROW_LEFT) then
+					MODULE.Initial.fraction_type_selector = 0
+					MODULE.Initial.step = 1
+				end
+			else
+				imgui.CenterTextDisabled(fa.CIRCLE_INFO .. u8' Примите пользовательское соглашение, чтобы разблокировать настройку.')
+				imgui.CenterTextDisabled(fa.CIRCLE_ARROW_RIGHT .. u8(' Автоматически через /stats ') .. fa.CIRCLE_ARROW_LEFT)
+				imgui.CenterTextDisabled(fa.CIRCLE_ARROW_RIGHT .. u8(' Настроить вручную ') .. fa.CIRCLE_ARROW_LEFT)
 			end
-			if imgui.IsItemClicked() then openLink('https://mtgmods.com/terms') end
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+			if imgui.BeginPopupModal(fa.BOOK .. u8' Пользовательское соглашение ' .. fa.BOOK .. '##terms_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+				change_dpi()
+				imgui.CenterText(u8'Пользовательское соглашение и политика конфиденциальности')
+				imgui.Separator()
+				if imgui.BeginChild('##terms_text', imgui.ImVec2(520 * settings.general.custom_dpi, 270 * settings.general.custom_dpi), true) then
+					imgui.TextWrapped(u8([[
+						1. Общие положения
+						1.1. Настоящее соглашение регулирует использование программного обеспечения «Arizona Helper» (далее — «Хелпер»).
+						1.2. Хелпер является неофициальной модификацией и не связан с администрацией проекта Arizona Role Play.
+						1.3. Используя Хелпер, вы подтверждаете, что ознакомлены с условиями настоящего соглашения и принимаете их в полном объёме.
+
+						2. Риски и ответственность
+						2.1. Использование Хелпера осуществляется исключительно на ваш страх и риск.
+						2.2. Установка и использование стороннего программного обеспечения может нарушать правила сервера и привести к блокировке вашего игрового аккаунта.
+						2.3. Автор Хелпера не несёт ответственности за любые санкции со стороны администрации сервера, потерю игровых ценностей, данных или иные последствия использования Хелпера.
+
+						3. Данные и конфиденциальность
+						3.1. Хелпер хранит настройки и данные персонажа (никнейм, организация, должность) локально на вашем устройстве.
+						3.2. Хелпер не передаёт ваши личные данные третьим лицам.
+						3.3. Опциональная функция аналитики (при её включении) передаёт только обезличенную техническую информацию (версия Хелпера, номер сервера, тип устройства).
+
+						4. Изменение условий
+						4.1. Автор оставляет за собой право изменять условия соглашения и функциональность Хелпера без предварительного уведомления.
+
+						5. Заключительные положения
+						5.1. Продолжая использование Хелпера, вы подтверждаете согласие с условиями настоящего соглашения.
+						5.2. Если вы не согласны с условиями, вы должны прекратить использование Хелпера.
+						]]))
+					imgui.EndChild()
+				end
+				imgui.Separator()
+				if imgui.Button(fa.FLAG_CHECKERED .. u8' Принять', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+					MODULE.Initial.terms_accepted = true
+					imgui.CloseCurrentPopup()
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отказаться', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+					MODULE.Initial.terms_accepted = false
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
 		elseif MODULE.Initial.step == 1 then
 			imgui.CenterText(u8('Выберите категорию вашей организации:'))
 
@@ -7852,8 +7881,8 @@ imgui.OnFrame(
 						imgui.Text("\n\n\n")
 						imgui.CenterTextDisabled(u8('Не удалось загрузить дополнительные ресурсы хелпера!\n\n'))
 						imgui.CenterTextDisabled(u8('Для автоматической загрузки временно включите VPN или скачайте файлы вручную'))
-						imgui.CenterUnderlineText("https://github.com/MTGMODS/arizona-helper")
-						if imgui.IsItemClicked() then openLink('https://github.com/MTGMODS/arizona-helper/tree/main/Resourse') end
+						imgui.CenterUnderlineText("https://github.com/GreenTechYT/arizona-helper-unlimited")
+						if imgui.IsItemClicked() then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited/tree/main/Resourse') end
 						imgui.EndChild()
 					end
 				end
@@ -8088,7 +8117,7 @@ imgui.OnFrame(
 				end
 				if imgui.BeginChild('##3', imgui.ImVec2(589 * settings.general.custom_dpi, 27 * settings.general.custom_dpi), true) then
 						imgui.Columns(2)
-						imgui.Text(fa.CROWN .. u8"       Arizona Helper модифицирован by Rics (Тот самый с Scottdale). Права не защищены       " .. fa.CROWN)
+						imgui.Text(fa.CROWN .. u8"       Arizona Helper модифицирован by GreenTechYT (Rics с Scottdale). Права не защищены       " .. fa.CROWN)
 						imgui.SetColumnWidth(-1, 580 * settings.general.custom_dpi)
 						imgui.NextColumn()
 					imgui.EndChild()
@@ -9075,14 +9104,14 @@ imgui.OnFrame(
 				if imgui.BeginChild('##1', imgui.ImVec2(589 * settings.general.custom_dpi, 187 * settings.general.custom_dpi), true) then
 					imgui.CenterText(fa.CIRCLE_INFO .. u8' Дополнительная информация о хелпере ' .. fa.CIRCLE_INFO)
 					imgui.Separator()
-					imgui.Text(fa.CIRCLE_USER..u8" Разработчик хелпера: MTG MODS")
+					imgui.Text(fa.CIRCLE_USER..u8" Разработчик хелпера: MTG MODS (Mod by GreenTechYT)")
 					imgui.Separator()
 					imgui.Text(fa.CIRCLE_INFO..u8" Версия хелпера: " .. u8(thisScript().version))
 					imgui.Separator()
 					imgui.Text(fa.BOOK ..u8" Руководство по использованию:")
 					imgui.SameLine()
 					if imgui.SmallButton(u8'YouTube') then
-						openLink('https://www.youtube.com/@mtg_mods/videos')
+						openLink('https://www.youtube.com/1eos')
 					end
 					if imgui.IsItemHovered() then
 						imgui.SetTooltip(u8'Открыть видео-обзор хелпера')
@@ -9094,10 +9123,10 @@ imgui.OnFrame(
 						openLink('https://vk.com/homkarpyt')
 					end
 					if imgui.IsItemHovered() then
-						imgui.SetTooltip(u8'Перейти в Discord сервер MTG MODS')
+						imgui.SetTooltip(u8'Техническая поддержка: Jone8204')
 					end
 					imgui.Separator()
-					imgui.Text(fa.GLOBE..u8" Модификация: by " .. fa.CROWN .. " Rics " .. fa.CROWN)
+					imgui.Text(fa.GLOBE..u8" Модификация: by " .. fa.CROWN .. " GreenTechYT " .. fa.CROWN)
 					imgui.Separator()
 					imgui.Text(u8"-----------------------------------------------------------------------------------------------------------------------------------")
 					imgui.CenterText(fa.CROWN .. u8(" Приветствую, хозяин. Вы являетесь VIP-пользователем. Вам доступны все функции. ") .. fa.CROWN)
@@ -10072,7 +10101,7 @@ function render_fractions_functions()
 					)
 					render_assist_item(
 						"AI генерация обьявлений",
-						"Генерация редактирования обьявлений с помощью AI теперь доступна в хелпере!\n\nПоддерживает 2 режима работы:\n1) По кнопке робота, в менюшке редактирования (РЕКОМЕНДУЮ)\n2) Автоматически с отправкой, без открытия менюшки редактирования.\n\nПЕРЕД ИСПОЛЬЗОВАНИЕМ ВАМ НУЖНО НАСТРОИТЬ СВОЙ Gemini API key\nMTG MODS НЕ ДАЁТ ВАМ AI ГЕНЕРАТОР, ТОЛЬКО СВЯЗЫВАЕТ ЭТОТ СКРИПТ С GEMINI!\n\nДля настройки AI генерации используйте кнопку шестеренки справа\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+						"Генерация редактирования обьявлений с помощью AI теперь доступна в хелпере!\n\nПоддерживает 2 режима работы:\n1) По кнопке робота, в менюшке редактирования (РЕКОМЕНДУЮ)\n2) Автоматически с отправкой, без открытия менюшки редактирования.\n\nПЕРЕД ИСПОЛЬЗОВАНИЕМ ВАМ НУЖНО НАСТРОИТЬ СВОЙ Gemini API key\n\nДля настройки AI генерации используйте кнопку шестеренки справа\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
 						settings.smi.ai_generate,
 						"enable",
 						true,
@@ -11130,7 +11159,7 @@ if isMode('police') or isMode('fbi') or isMode('prison') then
 				end
 				imgui.SameLine()
 				if imgui.Button(fa.GLOBE .. u8' Открыть облако##open_web_smart' .. title, imgui.ImVec2(300 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
-					openLink("https://github.com/MTGMODS/arizona-helper")
+					openLink("https://github.com/GreenTechYT/arizona-helper-unlimited")
 					openLink(downloadPath)
 					imgui.CloseCurrentPopup()
 					MODULE.Main.Window[0] = false
@@ -13346,24 +13375,6 @@ function getHWID()
 		if success then return string.format("%08X", id) end
 	end
 	return 'Unknown'
-end
-function sendAnalytics()
-	asyncHttpRequest(
-		"POST",
-        "https://api.mtgmods.com/v1/usage/launch",
-        {
-            headers = {
-                ["Content-Type"] = "application/json"
-            },
-            data = safe_encode_json({
-                version = thisScript().version,
-                hwid = getHWID(),
-                server_id = tonumber(getServerNumber()),
-                device = IS_MOBILE and "MOBILE" or "PC"
-            }),
-            timeout = 5
-        }
-    )
 end
 ------------------------------------------ PC KEY ACTIONS --------------------------------------
 if not IS_MOBILE then
