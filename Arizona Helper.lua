@@ -5,11 +5,17 @@ script_description('Универсальный хелпер для игроков Arizona Online и Rodina Onl
 script_author("GreenTechYT")
 script_version("1.4.2")
 ----------------------------------------------- INIT ---------------------------------------------
-local UPDATE_JSON_URL = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Update.json"
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
 print('Инициализация скрипта версии ' .. thisScript().version)
 print('Директория: ' .. worked_dir .. '/')
+-------------------------------------------- UPDATE INFO -----------------------------------------
+local UPDATE_JSON_URL = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Update.json"
+local UPDATE_STATUS = {
+	patch     = { text = "Патч",                  color = "{00FF00}" },
+	global    = { text = "Глобальное обновление", color = "{3399FF}" },
+	emergency = { text = "Аварийное обновление",  color = "{FF0000}" },
+}
 ------------------------------------------ INIT CRASH INFO ---------------------------------------
 local errors_handler_path = worked_dir .. '/.Arizona Helper Handler.lua'
 if not doesFileExist(errors_handler_path) then
@@ -3751,8 +3757,8 @@ function main()
 	if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(0) end
 
+	check_update()
 	if settings.general.updater then
-		check_update()
 		while not isUpdateChecked do wait(0) end
 	end
 
@@ -5417,31 +5423,40 @@ function check_update()
 		function(response)
 			local ok, updateInfo = pcall(function() return decodeJson(response.text) end)
 			if not ok or type(updateInfo) ~= "table" then
-				print('Ошибка обработки Update.json')
 				isUpdateChecked = true
 				return
 			end
 			local uVer  = tostring(updateInfo.version or "")
 			local uUrl  = tostring(updateInfo.url or "")
 			local uText = tostring(updateInfo.info or "Доступно обновление.")
-			if uVer ~= "" and uUrl ~= "" and thisScript().version ~= uVer then
-				print('Доступно обновление! | Локальная: ' .. thisScript().version .. ' | В облаке: ' .. uVer)
+			local uStatusKey   = tostring(updateInfo.status or ""):lower()
+			local statusInfo   = UPDATE_STATUS[uStatusKey] or { text = "Обновление", color = "{FFFFFF}" }
+			local uStatus      = statusInfo.text
+			local status_color = statusInfo.color
+			local is_emergency = (uStatusKey == "emergency")
+			local show_update  = settings.general.updater or is_emergency
+			if uVer ~= "" and uUrl ~= "" and thisScript().version ~= uVer and show_update then
+				print('Доступно обновление! | Локальная: ' .. thisScript().version .. ' | В облаке: ' .. uVer .. ' | Статус: ' .. uStatus)
 				sampAddChatMessage(' ', message_color)
 				sampAddChatMessage('[Arizona Helper] {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. uVer .. '{ffffff}!', message_color)
+				sampAddChatMessage('[Arizona Helper] {ffffff}Статус обновления: ' .. status_color .. uStatus .. '{ffffff}!', message_color)
+				if is_emergency then
+					sampAddChatMessage('[Arizona Helper] {FF0000}ВНИМАНИЕ: это аварийное обновление, его установка настоятельно рекомендуется!', message_color)
+				end
 				sampAddChatMessage(' ', message_color)
 				MODULE.Update.is_need_update = true
 				MODULE.Update.url     = uUrl
 				MODULE.Update.version = uVer
 				MODULE.Update.info    = uText
+				MODULE.Update.status       = uStatus
+				MODULE.Update.status_color = status_color
+				MODULE.Update.is_emergency = is_emergency
 				MODULE.Update.Window[0] = true
 				play_sound()
-			else
-				print('Обновление не нужно!')
 			end
 			isUpdateChecked = true
 		end,
 		function(err)
-			print('Ошибка проверки обновления: ' .. tostring(err))
 			isUpdateChecked = true
 		end
 	)
@@ -12591,13 +12606,30 @@ imgui.OnFrame(
 		if not IS_MOBILE then change_dpi() end
 		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 		imgui.SetNextWindowSize(imgui.ImVec2(480 * settings.general.custom_dpi, 300 * settings.general.custom_dpi), imgui.Cond.Always)
-		imgui.Begin(fa.CIRCLE_INFO .. u8" Доступно обновление Arizona Helper " .. fa.CIRCLE_INFO .. "##update_window",
-			MODULE.Update.Window,
-			imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
-		imgui.CenterText(u8("Версия в облаке: ") .. tostring(MODULE.Update.version or ""))
+		local title_icon = MODULE.Update.is_emergency and fa.TRIANGLE_EXCLAMATION or fa.CIRCLE_INFO
+		imgui.Begin(title_icon .. u8" Доступно обновление Arizona Helper " .. title_icon .. "##update_window", MODULE.Update.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+		imgui.CenterText(u8("Версия в облаке: " .. tostring(MODULE.Update.version or "")))
+		local status_text = u8("Статус: " .. tostring(MODULE.Update.status or ""))
+		local hex = MODULE.Update.status_color or "{FFFFFF}"
+		local r, g, b = hex:match('{?(%x%x)(%x%x)(%x%x)}?')
+		local col = imgui.ImVec4(tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, 1.0)
+		local colored_ok = pcall(function()
+			local tw = imgui.CalcTextSize(status_text).x
+			imgui.SetCursorPosX((imgui.GetWindowWidth() - tw) / 2)
+			imgui.TextColored(col, status_text)
+		end)
+		if not colored_ok then
+			imgui.CenterText(status_text)
+		end
+		if MODULE.Update.is_emergency then
+			imgui.Separator()
+			imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1.0, 0.2, 0.2, 1.0))
+			imgui.TextWrapped(fa.TRIANGLE_EXCLAMATION .. u8(" ВНИМАНИЕ: это аварийное обновление, исправляющее критические ошибки. Его установка настоятельно рекомендуется!"))
+			imgui.PopStyleColor()
+		end
 		imgui.CenterText(u8("Список изменений в новой версии:"))
 		imgui.Separator()
-		if imgui.BeginChild('##update_info', imgui.ImVec2(0, 170 * settings.general.custom_dpi), true) then
+		if imgui.BeginChild('##update_info', imgui.ImVec2(0, 130 * settings.general.custom_dpi), true) then
 			for line in (MODULE.Update.info or ""):gmatch("[^\r\n]+") do
 				imgui.BulletText(line)
 			end
