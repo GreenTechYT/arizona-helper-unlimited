@@ -125,7 +125,9 @@ local default_settings = {
 		auto_invite_rank = 1,
 		auto_uninvite = false,
 		aflip_domkrat = false,
+		scoreboard = true,
 		updater = false,
+		nmembers = true,
 	},
     mj = {
 		auto_time = true,
@@ -653,6 +655,17 @@ local modules = {
 		name = 'Круговое меню',
 		path = config_dir .. "/PieMenu.json",
 		data = {}
+	},
+	scoreboard = {
+		name = 'Mimgui ScoreBoard',
+		path = config_dir .. "/Scoreboard.json",
+		data = {
+			show_actions_menu = true,
+			colored_id = true,
+			colored_nickname = true,
+			colored_score = true,
+			colored_ping = true
+		}
 	},
 	buttons = {
 		name = 'Кнопочки',
@@ -1189,6 +1202,16 @@ local MODULE = {
 		url = "",
 		info = "",
 		download_file = ""
+	},
+	Scoreboard = {
+		Window = imgui.new.bool(),
+		inputField = imgui.new.char[256](),
+		show_actions_menu = imgui.new.bool(modules.scoreboard.data.show_actions_menu),
+		colored_id = imgui.new.bool(modules.scoreboard.data.colored_id),
+		colored_nickname = imgui.new.bool(modules.scoreboard.data.colored_nickname),
+		colored_score = imgui.new.bool(modules.scoreboard.data.colored_score),
+		colored_ping = imgui.new.bool(modules.scoreboard.data.colored_ping),
+		call_checker = false
 	},
 	CommandStop = {
 		Window = imgui.new.bool()
@@ -3767,6 +3790,8 @@ function main()
 	if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(0) end
 
+	if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then sampToggleScoreboard(false) end
+
 	check_update()
 	if settings.general.updater then
 		while not isUpdateChecked do wait(0) end
@@ -4253,20 +4278,24 @@ function initialize_commands()
 	if not isMode('none') then
 		sampRegisterChatCommand("members", function(arg)
 			if not MODULE.Binder.state.isActive then
-				if MODULE.Members.Window[0] then
-					MODULE.Members.Window[0] = false
-					MODULE.Members.upd.check = false
-					sampAddChatMessage('[Arizona Helper] {ffffff}Меню списка сотрудников закрыто!', message_color)
+				if settings.general.nmembers then
+					if MODULE.Members.Window[0] then
+						MODULE.Members.Window[0] = false
+						MODULE.Members.upd.check = false
+						sampAddChatMessage('[Arizona Helper] {ffffff}Меню списка сотрудников закрыто!', message_color)
+					else
+						MODULE.Members.new = {}
+						MODULE.Members.info.check = true
+						MODULE.Members.upd.check = true
+						MODULE.Members.flood_retries = 0
+						lua_thread.create(function()
+							wait(250)
+							MODULE.Members.flood_suppress_until = os.time() + 3
+							sampSendChat("/members")
+						end)
+					end
 				else
-					MODULE.Members.new = {}
-					MODULE.Members.info.check = true
-					MODULE.Members.upd.check = true
-					MODULE.Members.flood_retries = 0
-					lua_thread.create(function()
-						wait(1250)
-						MODULE.Members.flood_suppress_until = os.time() + 3
-						sampSendChat("/members")
-					end)
+					sampSendChat("/members")
 				end
 			else
 				sampAddChatMessage('[Arizona Helper] {ffffff}Дождитесь завершения предыдущей команды.', message_color)
@@ -6096,6 +6125,16 @@ function sampev.onServerMessage(color, text)
 	if MODULE.DEBUG then
 		sampAddChatMessage('[ServerMessage] {ffffff}Color ' .. color .. " | Text " .. text, message_color)
 	end
+	if MODULE.Scoreboard and MODULE.Scoreboard.call_checker then
+		local c = (text or ""):gsub('%{......%}', '')
+		local id_in = c:match('%[(%d+)%]')
+		local num = c:match(':%s*(%d+)%s*$')
+		if id_in and num and tonumber(id_in) == MODULE.Scoreboard.call_checker then
+			sampSendChat("/call " .. num)
+			MODULE.Scoreboard.call_checker = false
+			return false
+		end
+	end
 	if MODULE.Edgo and MODULE.Edgo.try_consume_number(text) then return false end
 	if MODULE.Edgo and MODULE.Edgo._num_suppress_until and os.clock() < MODULE.Edgo._num_suppress_until then
 		local c = (text or ""):gsub('%{......%}', '')
@@ -7361,6 +7400,10 @@ addEventHandler('onSendPacket', function(id, bs, priority, reliability, ordering
 					end
 					print('[SendPacket] 220 ' .. packettype .. ' ' .. subtype .. ' | Unread bits ' .. unr .. ' : ' .. table.concat(unrs, ' '))
 					sampAddChatMessage('[SendPacket] 220 ' .. packettype .. ' ' .. subtype .. ' | Unread bits ' .. unr .. ' : ' .. table.concat(unrs, ' '), message_color)
+				end
+				if settings.general.scoreboard and packettype == 66 and subtype == 56 then
+					MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+					return false
 				end
 			end
 		else
@@ -9694,6 +9737,78 @@ function render_buttons()
 		)
 	end
 end
+------------------------------------------ SCOREBOARD ---------------------------------------------
+function drawScoreboardPlayer(id)
+	local nickname = u8(sampGetPlayerNickname(id))
+	local score = sampGetPlayerScore(id)
+	local ping = sampGetPlayerPing(id)
+	local color = sampGetPlayerColor(id)
+	if IS_MOBILE then if mobileColors[color] then color = mobileColors[color] end end
+	local rgbNormalized = argbToRgbNormalized(color)
+	local imgui_RGBA = imgui.ImVec4(rgbNormalized[1], rgbNormalized[2], rgbNormalized[3], 1)
+	imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(id)).x / 2)
+	if modules.scoreboard.data.colored_id then
+		if score == 0 then imgui.Text(tostring(id)) else imgui.TextColored(imgui_RGBA, tostring(id)) end
+	else
+		imgui.Text(tostring(id))
+	end
+	imgui.NextColumn()
+	if modules.scoreboard.data.colored_nickname then
+		if score == 0 then
+			imgui.Text(" " .. tostring(nickname)) imgui.SameLine() imgui.Text(u8"[Connecting...]")
+		else
+			imgui.TextColored(imgui_RGBA, ' ' .. nickname)
+		end
+	else
+		if score == 0 then
+			imgui.Text(" " .. tostring(nickname)) imgui.SameLine() imgui.Text(u8"[Connecting...]")
+		else
+			imgui.Text(' ' .. nickname)
+		end
+	end
+	imgui.NextColumn()
+	imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(score)).x / 2)
+	if modules.scoreboard.data.colored_score then
+		if score == 0 then imgui.Text(tostring(score)) else imgui.TextColored(imgui_RGBA, tostring(score)) end
+	else
+		imgui.Text(tostring(score))
+	end
+	imgui.NextColumn()
+	if modules.scoreboard.data.colored_ping then
+		if score == 0 then
+			imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(0)).x / 2)
+			imgui.Text("0")
+		else
+			imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(ping)).x / 2)
+			imgui.TextColored(imgui_RGBA, tostring(ping))
+		end
+	else
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(ping)).x / 2)
+		imgui.Text(tostring(ping))
+	end
+	imgui.NextColumn()
+	if modules.scoreboard.data.show_actions_menu then
+		if imgui.Button(fa.COPY .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
+			setClipboardText(tostring(nickname))
+		end
+		imgui.SameLine()
+		if imgui.Button(fa.PHONE .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
+			MODULE.Scoreboard.call_checker = id
+			sampSendChat("/number " .. id)
+		end
+		imgui.NextColumn()
+	end
+end
+local mobileColors = {
+	[4261215253] = 368966908, [4294967168] = 368966908, [4294967040] = 368966908,
+	[1717460481] = 23486046, [4286480000] = 2164227710, [2570282624] = 2157523814,
+	[2573611904] = 2157536819, [4284887936] = 2164221491, [9643929] = 2566951719,
+	[3484370560] = 2161094470, [4286578816] = 2164228096, [139422719] = 2150852249,
+	[2516714112] = 2157314562, [5177216] = 2147503871, [4849536] = 2147503871,
+	[3126074752] = 2159694877, [3439263872] = 2160918272, [3183328640] = 2159918525,
+	[3422604441] = 2580283596, [1718026137] = 2573625087, [4294967295] = 2580667164,
+	[3520797849] = 2580667164, [2826467456] = 2158524536, [16769689] = 2566979554
+}
 ------------------------------------------ FRACTION GUI -------------------------------------------
 function render_assist_item(name, description, tbl, key, isVip, func, manual_func)
 	imgui.Separator()
@@ -9829,6 +9944,18 @@ function firs_render_assist_gui()
 			"auto_doklad_post"
 		)
 	end
+	render_assist_item(
+		"Кастомный ScoreBoard",
+		"Заменяет оригинальный аризоновский ScoreBoard (TAB) на Mimgui версию.\nАктивация на ПК через TAB, на мобайле дабл-клик по иконке оружия.",
+		settings.general,
+		"scoreboard"
+	)
+	render_assist_item(
+		"Кастомный /members",
+		"Заменяет системный интерфейс /members на Mimgui версию.\nПри выключении используется стандартный серверный интерфейс.",
+		settings.general,
+		"nmembers"
+	)
 	local rank_num = modules.player.data.fraction_rank_number or 0
 	if rank_num >= 9 and not isMode('fbi') then
 		render_assist_item(
@@ -12610,6 +12737,88 @@ imgui.OnFrame(
 		imgui.End()
 	end
 )
+----------------------------------- SCOREBOARD -----------------------------
+imgui.OnFrame(
+	function() return MODULE.Scoreboard.Window[0] end,
+	function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 430 * settings.general.custom_dpi), imgui.Cond.Always)
+		imgui.Begin("##ScoreboardBegin", MODULE.Scoreboard.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar)
+		change_dpi()
+		imgui.Button(sampGetPlayerCount(false) .. u8' Online')
+		imgui.SameLine()
+		if imgui.CenterButton(' ' .. u8(sampGetCurrentServerName()) .. ' ') then
+			imgui.OpenPopup(fa.GLOBE .. u8' Информация о сервере')
+		end
+		if imgui.BeginPopupModal(fa.GLOBE .. u8' Информация о сервере', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar) then
+			change_dpi()
+			imgui.Text(u8'Название: ' .. u8(sampGetCurrentServerName()))
+			imgui.SameLine()
+			imgui.PushItemWidth(10 * settings.general.custom_dpi)
+			if imgui.Button(fa.COPY .. '##copy_name') then setClipboardText(u8(sampGetCurrentServerName())) end
+			local ip, port = sampGetCurrentServerAddress()
+			imgui.Text(u8'Адрес: ' .. ip .. ':' .. port)
+			imgui.SameLine()
+			imgui.PushItemWidth(10 * settings.general.custom_dpi)
+			if imgui.Button(fa.COPY .. '##copy_ip') then setClipboardText(ip .. ':' .. port) end
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(250 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				imgui.CloseCurrentPopup()
+			end
+			imgui.EndPopup()
+		end
+		imgui.SameLine()
+		imgui.SetCursorPosX(imgui.GetWindowWidth() - 146 * settings.general.custom_dpi)
+		imgui.PushItemWidth(114 * settings.general.custom_dpi)
+		imgui.InputTextWithHint(u8'', u8'Поиск ID/Nickname', MODULE.Scoreboard.inputField, 256)
+		imgui.SameLine()
+		imgui.SetCursorPosX(imgui.GetWindowWidth() - 30 * settings.general.custom_dpi)
+		if imgui.Button(fa.CIRCLE_XMARK) then MODULE.Scoreboard.Window[0] = false end
+		imgui.Separator()
+		if imgui.BeginChild('##scoreboard_list', imgui.ImVec2(592 * settings.general.custom_dpi, 396 * settings.general.custom_dpi), false) then
+			if modules.scoreboard.data.show_actions_menu then
+				imgui.Columns(5)
+				imgui.SetColumnWidth(-1, 45 * settings.general.custom_dpi) imgui.CenterColumnText('ID') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 370 * settings.general.custom_dpi) imgui.CenterColumnText('Nickname') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Score') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Ping') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 60 * settings.general.custom_dpi) imgui.CenterColumnText('Action') imgui.NextColumn()
+			else
+				imgui.Columns(4)
+				imgui.SetColumnWidth(-1, 45 * settings.general.custom_dpi) imgui.CenterColumnText('ID') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 430 * settings.general.custom_dpi) imgui.CenterColumnText('Nickname') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Score') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 60 * settings.general.custom_dpi) imgui.CenterColumnText('Ping') imgui.NextColumn()
+			end
+			local input_decoded = u8:decode(ffi.string(MODULE.Scoreboard.inputField)):gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1"):rlower()
+			local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			if input_decoded == "" then
+				imgui.Separator()
+				drawScoreboardPlayer(my_id)
+				for id = 0, sampGetMaxPlayerId() do
+					if my_id ~= id and sampIsPlayerConnected(id) then
+						imgui.Separator()
+						drawScoreboardPlayer(id)
+					end
+				end
+			else
+				for idd = 0, sampGetMaxPlayerId() do
+					if sampIsPlayerConnected(idd) or idd == my_id then
+						if tostring(idd):find(input_decoded) or sampGetPlayerNickname(idd):rlower():find(input_decoded) or idd == my_id then
+							imgui.Separator()
+							drawScoreboardPlayer(idd)
+						end
+					end
+				end
+			end
+			imgui.NextColumn()
+			imgui.Columns(1)
+			imgui.Separator()
+		end
+		imgui.EndChild()
+		imgui.End()
+	end
+)
 ----------------------------------- UPDATE GUI -----------------------------
 imgui.OnFrame(
 	function() return MODULE.Update.Window[0] end,
@@ -13440,10 +13649,20 @@ end
 ------------------------------------------ PC KEY ACTIONS --------------------------------------
 if not IS_MOBILE then
 	function onWindowMessage(msg, wparam, lparam)
+		if msg == 0x100 and settings.general.scoreboard then
+			if wparam == VK_TAB and not isKeyDown(VK_TAB) then
+				MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+				consumeWindowMessage(true, false)
+			end
+		end
 		if msg == 0x101 then
 			if (wparam == VK_ESCAPE and MODULE.Main.Window[0]) then
 				consumeWindowMessage(true, false)
 				MODULE.Main.Window[0] = false
+			end
+			if (wparam == VK_ESCAPE and MODULE.Scoreboard.Window[0]) then
+				consumeWindowMessage(true, false)
+				MODULE.Scoreboard.Window[0] = false
 			end
 			if (wparam == 13 and MODULE.SmiEdit.Window[0]) then
 				consumeWindowMessage(true, false)
