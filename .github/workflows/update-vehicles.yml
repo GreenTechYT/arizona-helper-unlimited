@@ -25,10 +25,10 @@ jobs:
         run: pip install requests
 
       - name: Update Arizona vehicles
-        run: python scripts/UpdateVehicles.py
+        run: python Scripts/UpdateVehicles.py
 
       - name: Update Rodina vehicles
-        run: python scripts/UpdateVehiclesRodina.py
+        run: python Scripts/UpdateVehiclesRodina.py
 
       - name: Commit and push if changed
         run: |
