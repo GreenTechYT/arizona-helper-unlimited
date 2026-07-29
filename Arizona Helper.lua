@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('”ниверсальный хелпер дл€ игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.4.2")
+script_version("1.4.3")
 ----------------------------------------------- INIT ---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
