@@ -114,8 +114,8 @@ local default_settings = {
 		mobile_fastmenu_button = true,
 		mobile_stop_button = true,
 		ping = true,
-		rp_guns = true,
-		rp_chat = true,
+		rp_guns = false,
+		rp_chat = false,
 		accent_enable = true,
 		auto_accept_docs = true,
 		auto_doklad_post = false,
@@ -125,7 +125,6 @@ local default_settings = {
 		auto_invite_rank = 1,
 		auto_uninvite = false,
 		aflip_domkrat = false,
-		leadpanel = false,
 		updater = false,
 	},
     mj = {
@@ -4617,59 +4616,52 @@ local cyrilic_characters = {
 	[253] = 'э', [254] = 'ю', [255] = 'я',
 }
 function string.rlower(s)
-    s = s:lower()
-    local strlen = s:len()
-    if strlen == 0 then return s end
-    s = s:lower()
-    local output = ''
-    for i = 1, strlen do
-        local ch = s:byte(i)
-        if ch >= 192 and ch <= 223 then -- upper cyrilic characters
-            output = output .. cyrilic_characters[ch + 32]
-        elseif ch == 168 then -- Ё
-            output = output .. cyrilic_characters[184]
-        else
-            output = output .. string.char(ch)
-        end
-    end
-    return output
+	if s:len() == 0 then return s end
+	s = s:lower()
+	local output = ''
+	for i = 1, s:len() do
+		local ch = s:byte(i)
+		if ch >= 192 and ch <= 223 then
+			output = output .. cyrilic_characters[ch + 32]
+		elseif ch == 168 then -- Ё
+			output = output .. cyrilic_characters[184]
+		else
+			output = output .. string.char(ch)
+		end
+	end
+	return output
 end
 function string.rupper(s)
-    s = s:upper()
-    local strlen = s:len()
-    if strlen == 0 then return s end
-    s = s:upper()
-    local output = ''
-    for i = 1, strlen do
-        local ch = s:byte(i)
-        if ch >= 224 and ch <= 255 then -- lower cyrilic characters
-            output = output .. cyrilic_characters[ch - 32]
-        elseif ch == 184 then -- ё
-            output = output .. cyrilic_characters[168]
-        else
-            output = output .. string.char(ch)
-        end
-    end
-    return output
+	if s:len() == 0 then return s end
+	s = s:upper()
+	local output = ''
+	for i = 1, s:len() do
+		local ch = s:byte(i)
+		if ch >= 224 and ch <= 255 then
+			output = output .. cyrilic_characters[ch - 32]
+		elseif ch == 184 then -- ё
+			output = output .. cyrilic_characters[168]
+		else
+			output = output .. string.char(ch)
+		end
+	end
+	return output
 end
 function translate(name)
 	if name and name:match('%a+') then
 		name = name:gsub("^%[%d+%]", "")
 		local translit_table = {
-       		['ph'] = 'ф',['Ph'] = 'Ф',['Ch'] = 'Ч',['ch'] = 'ч',['Th'] = 'Т', ['liy'] = 'лий', 
+			['ph'] = 'ф',['Ph'] = 'Ф',['Ch'] = 'Ч',['ch'] = 'ч',['Th'] = 'Т', ['liy'] = 'лий',
 			['th'] = 'т',['Sh'] = 'Ш',['sh'] = 'ш',['Ae'] = 'Э',['ae'] = 'э', ['ame'] = 'ейм',
 			['size'] = 'сайз', ['Jj'] = 'Джейджей',['Whi'] = 'Вай',['lack'] = 'лэк', ['ane'] = 'ейн',
 			['whi'] = 'вай',['Ck'] = 'К',['ck'] = 'к',['Kh'] = 'Х',['kh'] = 'х', ['Alex'] = 'Алекс',
 			['hn'] = 'н',['Hen'] = 'Ген',['Zh'] = 'Ж',['zh'] = 'ж',['Yu'] = 'Ю', ['Jason'] = 'Джейсон',
-			['yu'] = 'ю',['Yo'] = 'Ё',['yo'] = 'ё',['Cz'] = 'Ц',['cz'] = 'ц', ['Babe'] = 'Бэйби', 
+			['yu'] = 'ю',['Yo'] = 'Ё',['yo'] = 'ё',['Cz'] = 'Ц',['cz'] = 'ц', ['Babe'] = 'Бэйби',
 			['ia'] = 'я', ['ea'] = 'и',['Ya'] = 'Я', ['ya'] = 'я', ['ove'] = 'ав',['ci'] = 'ци',
 			['ay'] = 'эй', ['rise'] = 'райз',['oo'] = 'у', ['Oo'] = 'У', ['rown'] = 'раун',
 			['Ee'] = 'И', ['ee'] = 'и', ['Un'] = 'Ан', ['un'] = 'ан', ['Ci'] = 'Ци',
-			['yse'] = 'уз', ['cate'] = 'кейт', ['eow'] = 'яу', ['yev'] = 'уев', ['Alexei'] = 'Алексей', 
+			['yse'] = 'уз', ['cate'] = 'кейт', ['eow'] = 'яу', ['yev'] = 'уев', ['Alexei'] = 'Алексей',
 		}
-		for k, v in pairs(translit_table) do
-            name = name:gsub(k, v) 
-        end
 		local char_table = {
 			['B'] = 'Б',['Z'] = 'З',['T'] = 'Т',['Y'] = 'Й',['P'] = 'П',['J'] = 'Дж',['X'] = 'Кс',['G'] = 'Г',
 			['V'] = 'В',['H'] = 'Х',['N'] = 'Н',['E'] = 'Е',['I'] = 'И',['D'] = 'Д',['O'] = 'О',['K'] = 'К',['F'] = 'Ф',
@@ -4679,11 +4671,18 @@ function translate(name)
 			['j'] = 'ж',['k'] = 'к',['l'] = 'л',['m'] = 'м',['n'] = 'н',['o'] = 'о',['p'] = 'п',['r'] = 'р',
 			['s'] = 'с',['t'] = 'т',['u'] = 'у',['f'] = 'ф',['x'] = 'x',['c'] = 'к',['``'] = 'ъ',['`'] = 'ь',['_'] = ' '
 		}
-        for k, v in pairs(char_table) do
-			name = name:gsub(k, v) 
-        end
-        return name
-    end
+		local function apply(tbl)
+			local keys = {}
+			for k in pairs(tbl) do keys[#keys + 1] = k end
+			table.sort(keys, function(a, b) return #a > #b end)
+			for _, k in ipairs(keys) do
+				name = name:gsub(k, tbl[k])
+			end
+		end
+		apply(translit_table)
+		apply(char_table)
+		return name
+	end
 	return name
 end
 function isParamSampID(id)
@@ -5384,20 +5383,10 @@ function downloadFileFromUrlToPath(url, path)
 			local http = require("socket.http")
 			local ltn12 = require("ltn12")
 			local f, ferr = io.open(path, "wb")
-			if not f then
-				return false, "Не удалось создать файл: " .. tostring(ferr)
-			end
-			local ok, code, headers, status = http.request{
-				method = "GET",
-				url = url,
-				sink = ltn12.sink.file(f)
-			}
-			if not ok then
-				return false, "Ошибка запроса: " .. tostring(code)
-			end
-			if tonumber(code) ~= 200 then
-				return false, "HTTP код: " .. tostring(code)
-			end
+			if not f then return false, "Не удалось создать файл: " .. tostring(ferr) end
+			local ok, code, headers, status = http.request{ method = "GET", url = url, sink = ltn12.sink.file(f) }
+			if not ok then return false, "Ошибка запроса: " .. tostring(code) end
+			if tonumber(code) ~= 200 then return false, "HTTP код: " .. tostring(code) end
 			return true
 		end
 		local ok, err = downloadToFile(url, path)
@@ -5405,6 +5394,11 @@ function downloadFileFromUrlToPath(url, path)
 			on_finish_download()
 		else
 			sampAddChatMessage("[Arizona Helper] {ffffff}Ошибка загрузки файла: " .. tostring(err), message_color)
+			if download_file == 'helper' and MODULE.Update then
+				MODULE.Update.downloading = false
+				MODULE.Update.download_start = nil
+			end
+			download_file = ''
 		end
 	else
 		downloadUrlToFile(url, path, function(id, status)
@@ -6158,7 +6152,7 @@ function sampev.onServerMessage(color, text)
 		}
 	}
 
-	if settings.general.auto_invite and (modules.player.data.fraction_rank_number >= 9 or settings.general.leadpanel) then
+	if settings.general.auto_invite and modules.player.data.fraction_rank_number >= 9 then
 		local pID, msg = text:match("%[(%d+)%]:%s*(.+)")
 		if pID and msg then
 			local lower_msg = msg:lower()
@@ -6229,7 +6223,6 @@ function sampev.onServerMessage(color, text)
 		end
 		return false
 	end
-
 	if settings.mj.awanted and MODULE.Awanted.last_target ~= -1 then
 		if text:find('Чтобы закрепить игрока, у него должен быть розыск') or text:find('Вы не на дежурстве') or text:find('Нельзя использовать на выбранном игроке')  or text:find('Игрок АФК') or text:find('Вы не полицейский') or text:find('Этот игрок уже помечен как опасный преступник') then
 			MODULE.Awanted.last_target = -1
@@ -8410,7 +8403,7 @@ imgui.OnFrame(
 						imgui.EndTabItem()
 					end
 					if imgui.BeginTabItem(fa.BARS..u8' RP-команды (9/10)') then 
-						if settings.general.leadpanel or modules.player.data.fraction_rank_number >= 9 then
+						if modules.player.data.fraction_rank_number >= 9 then
 							render_cmds(true)
 						else
 							if imgui.BeginChild('##no_rank_access', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
@@ -8430,7 +8423,7 @@ imgui.OnFrame(
 								imgui.CenterText(u8(name))
 								imgui.Separator()
 								imgui.CenterText(u8("Использование:"))
-								if name == 'Leader FastMenu' and modules.player.data.fraction_rank_number < 9 and not settings.general.leadpanel then
+								if name == 'Leader FastMenu' and modules.player.data.fraction_rank_number < 9 then
 									imgui.CenterText(u8"Вам недоступно, вы не 9/10")
 								else
 									imgui.CenterText(use)
@@ -8443,7 +8436,7 @@ imgui.OnFrame(
 								imgui.CenterText(u8(text2))
 								imgui.SetCursorPosY(308 * settings.general.custom_dpi)
 								if imgui.Button(fa.GEAR .. u8(' Настроить команды меню ') .. "##" .. name) then
-									if name == 'Leader FastMenu' and modules.player.data.fraction_rank_number < 9 and not settings.general.leadpanel then
+									if name == 'Leader FastMenu' and modules.player.data.fraction_rank_number < 9 then
 										sampAddChatMessage('[Arizona Helper] {ffffff}Данное лидерское фастменю доступно только для 9 или 10 ранга!', message_color)
 									else
 										imgui.OpenPopup(fa.COMPASS .. u8' Настройка команд в ' .. u8(name) .. ' ' .. fa.COMPASS .. "##" .. name)
@@ -9688,7 +9681,7 @@ function render_buttons()
 	end
 end
 ------------------------------------------ FRACTION GUI -------------------------------------------
-function render_assist_item(name, description, tbl, key, isVip, func)
+function render_assist_item(name, description, tbl, key, isVip, func, manual_func)
 	imgui.Separator()
 	imgui.Columns(3)
 	if tbl and tbl[key] then
@@ -9715,9 +9708,9 @@ function render_assist_item(name, description, tbl, key, isVip, func)
 		end
 		imgui.EndPopup()
 	end
-	if func then
+	if manual_func then
 		if imgui.CenterColumnSmallButton(fa.DOWNLOAD .. u8(' Ручное обновление##' .. name .. key)) then
-			func()
+			manual_func()
 		end
 		if imgui.IsItemHovered() then
 			imgui.SetTooltip(u8(description))
@@ -9734,6 +9727,15 @@ function render_assist_item(name, description, tbl, key, isVip, func)
 	end
 	if imgui.IsItemHovered() then
 		imgui.SetTooltip((tbl and tbl[key]) and u8('Включено') or u8('Выключено'))
+	end
+	if func and tbl and tbl[key] then
+		imgui.SameLine()
+		if imgui.SmallButton(fa.GEAR .. '##' .. name) then
+			func()
+		end
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip(u8("Настроить"))
+		end
 	end
 	imgui.Columns(1)
 end
@@ -9963,23 +9965,18 @@ function render_fractions_functions()
 						"auto_rp_situation"
 					)
 					render_assist_item(
-						"AWANTED (преступники возле вас)",
+						"AutoWANTED",
 						"Оповещает вас, если в зоне прорисовки появился преступник.\nТак-же кидает на него /find и /z (если рядом)",
 						settings.mj,
 						"awanted"
 					)
 					render_assist_item(
-						"Доступ к разделу 9/10",
-						"Открывает доступ к разделу для 9/10 рангов",
-						settings.general,
-						"leadpanel"
-					)
-					render_assist_item(
 						"Автоматические обновления",
-						"\nКнопка \"Ручное обновление\" запускает проверку версии прямо сейчас, независимо от тумблера.",
+						"Открывает доступ к автоматической проверке обновлений хелпера при загрузке (есть риск потери данных/VIP-доступа).\nКнопка \"Ручное обновление\" запускает проверку версии прямо сейчас, независимо от тумблера.",
 						settings.general,
 						"updater",
 						false,
+						nil,
 						check_update
 					)
 					imgui.Separator()
@@ -12607,7 +12604,24 @@ imgui.OnFrame(
 		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 		imgui.SetNextWindowSize(imgui.ImVec2(480 * settings.general.custom_dpi, 300 * settings.general.custom_dpi), imgui.Cond.Always)
 		local title_icon = MODULE.Update.is_emergency and fa.TRIANGLE_EXCLAMATION or fa.CIRCLE_INFO
-		imgui.Begin(title_icon .. u8" Доступно обновление Arizona Helper " .. title_icon .. "##update_window", MODULE.Update.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+		imgui.Begin(title_icon .. u8" Доступно обновление Arizona Helper " .. title_icon .. "##update_window",
+			MODULE.Update.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+		if MODULE.Update.downloading then
+			imgui.Spacing(); imgui.Spacing()
+			imgui.CenterText(fa.DOWNLOAD .. u8(" Скачивание обновления..."))
+			imgui.Spacing()
+			local fraction = (os.clock() % 1.5) / 1.5
+			imgui.ProgressBar(fraction, imgui.ImVec2(-1, 20 * settings.general.custom_dpi))
+			imgui.Spacing()
+			imgui.CenterTextDisabled(u8("Не закрывайте игру до завершения загрузки."))
+			if MODULE.Update.download_start and os.time() - MODULE.Update.download_start > 60 then
+				MODULE.Update.downloading = false
+				MODULE.Update.download_start = nil
+				sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось загрузить обновление (таймаут). Попробуйте снова.', message_color)
+			end
+			imgui.End()
+			return
+		end
 		imgui.CenterText(u8("Версия в облаке: " .. tostring(MODULE.Update.version or "")))
 		local status_text = u8("Статус: " .. tostring(MODULE.Update.status or ""))
 		local hex = MODULE.Update.status_color or "{FFFFFF}"
@@ -12638,9 +12652,10 @@ imgui.OnFrame(
 		imgui.Separator()
 		local bw = (imgui.GetWindowWidth() - 16) / 2
 		if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Установить обновление', imgui.ImVec2(bw, 30 * settings.general.custom_dpi)) then
+			MODULE.Update.downloading = true
+			MODULE.Update.download_start = os.time()
 			download_file = 'helper'
 			downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
-			MODULE.Update.Window[0] = false
 		end
 		imgui.SameLine()
 		if imgui.Button(u8' Позже', imgui.ImVec2(bw, 30 * settings.general.custom_dpi)) then
