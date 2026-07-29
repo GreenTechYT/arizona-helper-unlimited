@@ -1007,6 +1007,7 @@ local MODULE = {
 		checked = {},
 		scanning = false,
 		last_target = -1,
+		last_target_time = 0,
 		last_reset = os.time(),
 		scan_radius = 50.0
 	},
@@ -3686,7 +3687,6 @@ function main()
 			end
 		end
 	end)
-
 	lua_thread.create(function()
 		while true do
 			wait(1000)
@@ -3694,7 +3694,7 @@ function main()
 			if settings.mj.awanted and ok and is_spawned and doesCharExist(PLAYER_PED) then
 				local my_x, my_y, my_z = getCharCoordinates(PLAYER_PED)
 				local _, my_id = sampGetPlayerIdByCharHandle(PLAYER_PED)
-				for id = 0, sampGetPlayerCount() - 1 do
+				for id = 0, 999 do
 					if sampIsPlayerConnected(id) and id ~= my_id then
 						if not MODULE.Awanted.checked[id] then
 							local res, handle = sampGetCharHandleBySampPlayerId(id)
@@ -3709,13 +3709,24 @@ function main()
 						end
 					end
 				end
+				if MODULE.Awanted.last_target ~= -1 and not sampIsPlayerConnected(MODULE.Awanted.last_target) then
+					MODULE.Awanted.last_target = -1
+				end
+				if MODULE.Awanted.last_target ~= -1
+				   and MODULE.Awanted.last_target_time
+				   and os.time() - MODULE.Awanted.last_target_time > 10 then
+					MODULE.Awanted.last_target = -1
+				end
 				if #MODULE.Awanted.queue > 0 and not MODULE.Awanted.scanning then
-					MODULE.Awanted.scanning = true
 					local target_id = table.remove(MODULE.Awanted.queue, 1)
-					MODULE.Awanted.last_target = target_id
-					sampSendChat('/z ' .. target_id)
-					wait(2000)
-					MODULE.Awanted.scanning = false
+					if sampIsPlayerConnected(target_id) then
+						MODULE.Awanted.scanning = true
+						MODULE.Awanted.last_target = target_id
+						MODULE.Awanted.last_target_time = os.time()
+						sampSendChat('/z ' .. target_id)
+						wait(2000)
+						MODULE.Awanted.scanning = false
+					end
 				end
 				if os.time() - (MODULE.Awanted.last_reset or 0) >= 45 then
 					MODULE.Awanted.checked = {}
@@ -6151,8 +6162,7 @@ function sampev.onServerMessage(color, text)
 			}
 		}
 	}
-
-	if settings.general.auto_invite and modules.player.data.fraction_rank_number >= 9 then
+	if settings.general.auto_invite and modules.player.data.fraction_rank_number >= 9 and not isMode('fbi') then
 		local pID, msg = text:match("%[(%d+)%]:%s*(.+)")
 		if pID and msg then
 			local lower_msg = msg:lower()
@@ -6174,7 +6184,6 @@ function sampev.onServerMessage(color, text)
 			end
 		end
 	end
-
 	if settings.mj.auto_doklad_arrest then
 		if text:find('^>> Вы посадили игрока ([%w_]+) в тюрьму на (%d+) минут') then
 			local nick, jail_time = text:match('^>> Вы посадили игрока ([%w_]+) в тюрьму на (%d+) минут')
@@ -6224,7 +6233,14 @@ function sampev.onServerMessage(color, text)
 		return false
 	end
 	if settings.mj.awanted and MODULE.Awanted.last_target ~= -1 then
-		if text:find('Чтобы закрепить игрока, у него должен быть розыск') or text:find('Вы не на дежурстве') or text:find('Нельзя использовать на выбранном игроке')  or text:find('Игрок АФК') or text:find('Вы не полицейский') or text:find('Этот игрок уже помечен как опасный преступник') then
+		if text:find('Чтобы закрепить игрока, у него должен быть розыск')
+		   or text:find('Вы не на дежурстве')
+		   or text:find('Нельзя использовать на выбранном игроке')
+		   or text:find('Игрок АФК')
+		   or text:find('Вы не полицейский')
+		   or text:find('Этот игрок уже помечен как опасный преступник')
+		   or text:find('Игрок не найден')
+		   or text:find('Вы слишком далеко') then
 			MODULE.Awanted.last_target = -1
 			return false
 		elseif text:find('успешно') and (text:find('закрепили') or text:find('пометили')) then
@@ -6251,7 +6267,7 @@ function sampev.onServerMessage(color, text)
 		play_sound()
 	end
 
-	if modules.player.data.fraction_rank_number >= 9 then
+	if modules.player.data.fraction_rank_number >= 9 and not isMode('fbi') then
 		if settings.general.auto_uninvite then
 			local function auto_uninvite_handler(tag, name, playerID, message)
 				if not message:find("отправьте (.+) +++ чтобы уволится ПСЖ!") and not message:find("Сотрудник (.+) был уволен по причине") and message:rupper():find("ПСЖ") or message:rupper():find("УВОЛЬТЕ") or message:rupper():find("УВАЛ") then
@@ -6272,10 +6288,10 @@ function sampev.onServerMessage(color, text)
 					sampSendChat('/fmute ' .. playerID .. ' 1 ПСЖ')
 				end
 			end
-			if text:find("^%[(.-)%] (.-) (.-)%[(.-)%]: (.+)") and color == 766526463 then -- /f /fb /r /rb без тега 
+			if text:find("^%[(.-)%] (.-) (.-)%[(.-)%]: (.+)") and color == 766526463 then
 				local tag, rank, name, playerID, message = string.match(text, "%[(.-)%] (.+) (.-)%[(.-)%]: (.+)")
 				auto_uninvite_handler(tag, name, playerID, message)
-			elseif text:find("^%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: (.+)") and color == 766526463 then -- /r /f с тегом
+			elseif text:find("^%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: (.+)") and color == 766526463 then
 				local tag, tag2, rank, name, playerID, message = string.match(text, "%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: (.+)")
 				auto_uninvite_handler(tag, name, playerID, message)
 			elseif text:find("(.+) заглушил%(а%) игрока (.+) на 1 минут. Причина: ПСЖ") and MODULE.LeadTools.checker then
@@ -6293,9 +6309,7 @@ function sampev.onServerMessage(color, text)
 				end
 			end
 		end
-		
 	end
-
 	if settings.general.auto_accept_docs and text:find('^%[Новое предложение%].+offer') then
 		sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Открываю список предложений от игрока...', message_color)
 		sampSendChat('/offer')
@@ -7299,12 +7313,12 @@ end
 function sampev.onPlayerChatBubble(playerid, color, distance, duration, message)
 	if MODULE.DEBUG then
 		sampAddChatMessage('[ChatBubble] {ffffff}ID ' .. playerid .. ' | Color ' .. color .. ' | Dist ' .. distance .. ' | Duration ' .. duration .. ' | MSG ' .. message, message_color)
-		print('[ChatBubble] {ffffff}ID ' .. playerid .. ' | Color ' .. color .. ' | Dist ' .. distance .. ' | Duration ' .. duration .. ' | MSG ' .. message)
+		print('[ChatBubble] ID ' .. playerid .. ' | Color ' .. color .. ' | Dist ' .. distance .. ' | Duration ' .. duration .. ' | MSG ' .. tostring(message))
 	end
 	if (isMode('police') or isMode('fbi') or isMode('prison')) and settings.mj.anti_screpki then
-		if message:find("(.+) достал скрепки для взлома наручников") then
-			local nick = message:match(' (.+) достал скрепки для взлома наручников')
-			local id = sampGetPlayerIdByNickname(nick)
+		if message and message:find('достал скрепки для взлома наручников', 1, true) then
+			local nick = sampGetPlayerNickname(playerid) or 'Неизвестный'
+			local id = playerid
 			sampAddChatMessage('[Arizona Helper] {ffffff}Внимание! ' .. nick .. '[' .. id .. '] использует скрепки и начинает взламывать наручники!', message_color)
 			play_sound()
 			local result, handle = sampGetCharHandleBySampPlayerId(id)
@@ -7312,12 +7326,12 @@ function sampev.onPlayerChatBubble(playerid, color, distance, duration, message)
 				local x, y, z = getCharCoordinates(handle)
 				local mx, my, mz = getCharCoordinates(PLAYER_PED)
 				if getDistanceBetweenCoords3d(mx, my, mz, x, y, z) <= 1.5 then
-					sampAddChatMessage('[Arizona Helper] {ffffff}Пытаюсь изьять скрепки у этого игрока...', message_color)
+					sampAddChatMessage('[Arizona Helper] {ffffff}Пытаюсь изъять скрепки у этого игрока...', message_color)
 					find_and_use_command('/bot {id}', id)
 				else
 					sampAddChatMessage('[Arizona Helper] {ffffff}Подойдите к игроку ' .. nick .. ' и используйте команду /bot ' .. id, message_color)
 				end
-			elseif (IS_MOBILE and modules.commands.path:find('git')) then -- x64 костыль для монетки
+			else
 				sampAddChatMessage('[Arizona Helper] {ffffff}Подойдите к игроку ' .. nick .. ' и используйте команду /bot ' .. id, message_color)
 			end
 		end
