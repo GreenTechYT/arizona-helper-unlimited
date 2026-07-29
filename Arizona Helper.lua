@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.4.3")
+script_version("1.4.4")
 ----------------------------------------------- INIT ---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
@@ -84,11 +84,15 @@ local effil = require('effil')
 local imgui = require('mimgui')
 local fa = require('fAwesome6_solid')
 local sampev = require('samp.events')
-local dkok, dkjson = pcall(require, "dkjson")
-local vkeys_no_errors, vkeys = pcall(require, 'vkeys')
-local monet_no_errors, moon_monet = pcall(require, 'MoonMonet')
-local hotkey_no_errors, hotkey = pcall(require, 'mimgui_hotkeys')
-local pie_no_errors, pie = pcall(require, IS_MOBILE and 'imgui_piemenu' or 'mimgui_piemenu_mod')
+
+local vkeys_ok, vkeys = pcall(require, 'vkeys')
+local dkjson_ok, dkjson = pcall(require, "dkjson")
+local memory_ok, memory = pcall(require, "memory")
+local sam_ok, sam = pcall(require, "SAMemory")
+local widgets_ok, widgets = pcall(require, 'widgets')
+local monet_ok, moon_monet = pcall(require, 'MoonMonet')
+local hotkey_ok, hotkey = pcall(require, 'mimgui_hotkeys')
+local pie_ok, pie = pcall(require, IS_MOBILE and 'imgui_piemenu' or 'mimgui_piemenu_mod')
 local sizeX, sizeY = getScreenResolution()
 print('Библиотеки успешно подключены!')
 -------------------------------------------- JSON SETTINGS ---------------------------------------
@@ -126,6 +130,7 @@ local default_settings = {
 		auto_uninvite = false,
 		aflip_domkrat = false,
 		scoreboard = true,
+		crosshair = true,
 		updater = false,
 		nmembers = true,
 	},
@@ -231,7 +236,7 @@ local default_settings = {
 	},
 }
 function safe_encode_json(array) 
-	if dkok then
+	if dkjson_ok then
 		local ok, encoded = pcall(dkjson.encode, array, {indent = true})
 		if ok then return encoded end
 	end
@@ -667,6 +672,17 @@ local modules = {
 			colored_ping = true
 		}
 	},
+	crosshair = {
+		name = 'Цветной прицел',
+		path = config_dir .. "/Crosshair.json",
+		data = {
+			standart_color = {0, 255, 255},
+			enemy_color = {255, 0, 0},
+			check_weapon_range = true,
+			show_weapon_range = true,
+			is_legendary_stripe = false,
+		}
+	},
 	buttons = {
 		name = 'Кнопочки',
 		path = config_dir .. "/Buttons.json",
@@ -688,7 +704,7 @@ local modules = {
 	},
 	rpgun = {
 		name = 'RP оружие',
-		path = config_dir .. "/Guns.json",
+		path = config_dir .. "/Weapon.json",
 		data = {
             rp_guns = {
                 {id = 0, name = 'кулаки', enable = true, rpTake = 2},
@@ -868,6 +884,21 @@ function load_module(key)
 		print('Модуль "' .. module.name .. '" загружен')
 	end
 end
+function load_modules()
+	load_module('player')
+	load_module('notes')
+	load_module('weapon')
+	load_module('vehicles')
+	load_module('commands')
+	load_module('departament')
+	if IS_MOBILE then load_module('buttons') end
+	if pie_ok then load_module('piemenu') else settings.general.piemenu = false save_settings() end
+	if memory_ok then load_module('crosshair') else settings.general.crosshair = false save_settings() end
+	if isMode('police') or isMode('fbi') then load_module('smart_uk') load_module('smart_pdd') end
+	if isMode('prison') then load_module('smart_rptp') end
+	if isMode('smi') then load_module('ads_history') end
+end
+load_modules()
 ------------------------------------------- GUI & MODULES ----------------------------------------
 local MODULE = {
 	Initial = {
@@ -1198,11 +1229,25 @@ local MODULE = {
 	Update = {
 		Window = imgui.new.bool(),
 		is_need_update = false,
-		version = "",
-		url = "",
-		info = "",
+		can_show = false,
+		version = "", url = "", info = "",
+		status = "", status_color = "{FFFFFF}", is_emergency = false,
+		downloading = false, download_start = nil,
 		download_file = ""
 	},
+	Crosshair = {
+		Window = imgui.new.bool(),
+		InfoWindow = imgui.new.bool(),
+		check_weapon_range = imgui.new.bool(modules.crosshair.data.check_weapon_range),
+		show_weapon_range = imgui.new.bool(modules.crosshair.data.show_weapon_range),
+		show_weapon_range_color = nil,
+		is_legendary_stripe = imgui.new.bool(modules.crosshair.data.is_legendary_stripe),
+		standart_color = imgui.new.float[3](modules.crosshair.data.standart_color[1] / 255, modules.crosshair.data.standart_color[2] / 255, modules.crosshair.data.standart_color[3] / 255),
+		enemy_color = imgui.new.float[3](modules.crosshair.data.enemy_color[1] / 255, modules.crosshair.data.enemy_color[2] / 255, modules.crosshair.data.enemy_color[3] / 255),
+		last_sight_color = nil,
+		distance = nil,
+		currentWeaponRange = nil,
+	},	
 	Scoreboard = {
 		Window = imgui.new.bool(),
 		inputField = imgui.new.char[256](),
@@ -2145,7 +2190,7 @@ function color_to_float3(u32color)
     local temp = imgui.ColorConvertU32ToFloat4(u32color)
     return temp.z, temp.y, temp.x
 end
-if settings.general.helper_theme == 0 and monet_no_errors then
+if settings.general.helper_theme == 0 and monet_ok then
 	message_color = settings.general.moonmonet_theme_color
 	message_color_hex = '{' ..  rgbToHex(settings.general.moonmonet_theme_color) .. '}'
 	MODULE.Main.msgcolor[0], MODULE.Main.msgcolor[1], MODULE.Main.msgcolor[2] = color_to_float3(settings.general.moonmonet_theme_color)
@@ -2163,7 +2208,7 @@ else
 	save_settings()
 end
 ------------------------------------------- Mimgui PieMenu ---------------------------------------
-if not pie_no_errors then
+if not pie_ok then
     if IS_MOBILE then 
 		local path = worked_dir .. "/lib/imgui_piemenu.lua"
 		if not doesFileExist(path) then
@@ -2799,12 +2844,12 @@ return defaultPieMenu
 			end
 		end
 	end
-	pie_no_errors, pie = pcall(require, IS_MOBILE and 'imgui_piemenu' or 'mimgui_piemenu_mod')
+	pie_ok, pie = pcall(require, IS_MOBILE and 'imgui_piemenu' or 'mimgui_piemenu_mod')
 end
-if not pie_no_errors then print('Библиотека PieMenu не найдена!') end
+if not pie_ok then print('Библиотека PieMenu не найдена!') end
 ------------------------------------------- Mimgui Hotkey ----------------------------------------
 local hotkeys = {}
-if hotkey_no_errors and not isMode('') then
+if hotkey_ok and not isMode('') then
 	hotkey.Text.NoKey = u8'< click and select keys >'
 	hotkey.Text.WaitForKey = u8'< wait keys >'
 	function getNameKeysFrom(keys)
@@ -2812,7 +2857,7 @@ if hotkey_no_errors and not isMode('') then
 		if not result or type(keys) ~= 'table' then return '' end
 		local keysStr = {}
 		for _, keyId in ipairs(keys) do
-			local keyName = vkeys_no_errors and vkeys.id_to_name(keyId) or ''
+			local keyName = vkeys_ok and vkeys.id_to_name(keyId) or ''
 			table.insert(keysStr, keyName)
 		end
 		return table.concat(keysStr, ' + ') or ''
@@ -2967,6 +3012,7 @@ function processWeaponChange(oldGun, nowGun)
 end
 ------------------------------------------------ Variables --------------------------------------- 
 local isUpdateChecked = false
+local font = renderCreateFont('Arial', 15, 1)
 ------------------------------------------------ Functions ---------------------------------------
 function main()
 	local function edgo_lower(s)
@@ -3645,30 +3691,6 @@ function main()
 		end
 	end)
 
-	if settings.mj.auto_doklad_patrool and MODULE.Patrool.active and MODULE.Patrool.patrol_type == 1 then
-		if text:find('[Информация] {ffffff}Выполните доклад о патрулировании в рацию {90EE90}"/r"') then
-			if not MODULE.Patrool.process_doklad then
-				MODULE.Patrool.process_doklad = true
-				lua_thread.create(function()
-					wait(200)
-					MODULE.Binder.state.isActive = true
-					sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
-					wait(1500)
-					sampSendChat('/r Продолжаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. " (" .. MODULE.Binder.tag.get_square() .. ').')
-					wait(1500)
-					if MODULE.Binder.tag.get_car_units() ~= 'Нету' then
-						sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ' в составе юнита ' .. MODULE.Binder.tag.get_car_units() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
-					else
-						sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
-					end
-					MODULE.Binder.state.isActive = false
-					MODULE.Patrool.process_doklad = false
-				end)
-			end
-			return false
-		end
-	end
-
 	lua_thread.create(function()
 		while true do
 			wait(1000)
@@ -3790,11 +3812,15 @@ function main()
 	if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(0) end
 
-	if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then sampToggleScoreboard(false) end
-
+	local start_check_update = os.clock()
 	check_update()
 	if settings.general.updater then
-		while not isUpdateChecked do wait(0) end
+		while not isUpdateChecked do
+			wait(0)
+			if (os.clock() - start_check_update > 5) and not MODULE.Update.Window[0] then
+				isUpdateChecked = true
+			end
+		end
 	end
 
 	check_resources()
@@ -3805,12 +3831,18 @@ function main()
 		MODULE.Initial.Window[0] = true
 		return
 	end
-	
-	load_modules()
+
 	initialize_guns()
 	initialize_commands()
-	if hotkey_no_errors then loadHotkeys() end
+	if hotkey_ok then loadHotkeys() end
 	if IS_MOBILE then render_buttons() end
+
+	if settings.general.piemenu then MODULE.PieMenu.Window[0] = true end
+
+	if jit.arch == 'arm' and memory_ok then
+		memory.setint8(MONET_GTASA_BASE + 0x5E49EE, 0x00, true)
+		memory.setint8(MONET_GTASA_BASE + 0x5E49EE + 1, 0xBF, true)
+	end
 
 	welcome_message()
 	
@@ -3828,6 +3860,54 @@ function main()
 		if MODULE.Post.active then
 			MODULE.Post.time = os.difftime(os.time(), MODULE.Post.start_time)
 		end
+
+		if settings.general.crosshair and memory_ok and isActiveCrosshairMode() then
+			local cam_x, cam_y, cam_z = getActiveCameraCoordinates()
+			local width, height = convertGameScreenCoordsToWindowScreenCoords(IS_MOBILE and 332.4 or 339.5, IS_MOBILE and 194.6 or 179.2)
+			local cross_x, cross_y, cross_z = convertScreenCoordsToWorld3D(width, height, 150)
+			local result, pointer = processLineOfSight(cam_x, cam_y, cam_z, cross_x, cross_y, cross_z, false, false, true, false, false, false, false)
+			if result then
+				local localx, localy, localz = pointer.pos[1], pointer.pos[2], pointer.pos[3]
+				if isLineOfSightClear(cam_x, cam_y, cam_z, localx, localy, localz, true, true, false, true, true) then
+					if pointer.entityType == 3 and pointer.entity ~= getCharPointer(PLAYER_PED) then
+						local has_weapon = modules.weapon and modules.weapon.data and modules.weapon.data.list
+						if modules.crosshair.data.check_weapon_range and has_weapon then
+							local currentWeaponID = getCurrentCharWeapon(PLAYER_PED)
+							local ppx, ppy, ppz = getCharCoordinates(PLAYER_PED)
+							MODULE.Crosshair.distance = getDistanceBetweenCoords3d(ppx, ppy, ppz, localx, localy, localz)
+							local applied = false
+							for _, weapon in ipairs(modules.weapon.data.list) do
+								if weapon.id == currentWeaponID then
+									if weapon.range then
+										MODULE.Crosshair.currentWeaponRange = weapon.range + (modules.crosshair.data.is_legendary_stripe and 8 or 0)
+										if MODULE.Crosshair.distance <= MODULE.Crosshair.currentWeaponRange then
+											changeCrosshairColor(modules.crosshair.data.enemy_color)
+										else
+											changeCrosshairColor(modules.crosshair.data.standart_color)
+										end
+										if modules.crosshair.data.show_weapon_range and font then
+											local color = (MODULE.Crosshair.distance <= MODULE.Crosshair.currentWeaponRange) and 0xFF00FF00 or 0xFFFF0000
+											renderFontDrawText(font, string.format("%.1f / %.1f", MODULE.Crosshair.distance, MODULE.Crosshair.currentWeaponRange), width - 60, height + 55, color)
+										end
+										applied = true
+									end
+									break
+								end
+							end
+							if not applied then changeCrosshairColor(modules.crosshair.data.enemy_color) end
+						else
+							changeCrosshairColor(modules.crosshair.data.enemy_color)
+						end
+					end
+				else
+					changeCrosshairColor(modules.crosshair.data.standart_color)
+				end
+			else
+				changeCrosshairColor(modules.crosshair.data.standart_color)
+			end
+		end
+
+		if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then sampToggleScoreboard(false) end
 
 		if isMode('police') or isMode('fbi') then
 			if MODULE.Patrool.active then
@@ -3912,37 +3992,6 @@ function main()
 	end
 
 end
-function load_modules()
-	load_module('player')
-	load_module('commands')
-	if IS_MOBILE then load_module('buttons') end
-	load_module('departament')
-	load_module('notes')
-	load_module('rpgun')
-	load_module('arz_veh')
-	cache_vehicles()
-	if settings.general.piemenu then
-		if pie_no_errors then 
-			load_module('piemenu')
-			MODULE.PieMenu.Window[0] = true
-		else
-			sampAddChatMessage('[Arizona Helper] {ffffff}Модуль PieMenu отключён: отсутствует необходимая библиотека!', message_color)
-			print('Модуль PieMenu отключён: отсутствует необходимая библиотека!')
-			settings.general.piemenu = false
-			save_settings()
-		end
-	end
-	if isMode('police') or isMode('fbi') then
-		load_module('smart_uk')
-		load_module('smart_pdd')
-	end
-	if isMode('prison') then
-		load_module('smart_rptp')
-	end
-	if isMode('smi') then
-		load_module('ads_history')
-	end
-end
 function welcome_message()
 	if not sampIsLocalPlayerSpawned() then 
 		sampAddChatMessage('[Arizona Helper] {ffffff}Для завершения загрузки хелпера войдите на сервер.', message_color)
@@ -3953,10 +4002,15 @@ function welcome_message()
 	show_notify('info', 'Arizona Helper', "Загрузка хелпера успешно завершена!", 3000)
 	print('Полная загрузка хелпера успешно завершена!')
 
-	if hotkey_no_errors and settings.general.bind_mainmenu then	
+	if hotkey_ok and settings.general.bind_mainmenu then	
 		sampAddChatMessage('[Arizona Helper] {ffffff}Для открытия меню хелпера нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_mainmenu) .. ' {ffffff}или используйте команду ' .. message_color_hex .. '/helper', message_color)
 	else
 		sampAddChatMessage('[Arizona Helper] {ffffff}Для открытия меню хелпера используйте команду ' .. message_color_hex .. '/helper', message_color)
+	end
+
+	if MODULE.Update then
+		MODULE.Update.can_show = true
+		MODULE.Update.show_notice()
 	end
 
 	if IS_MOBILE and modules.player.data.nick ~= '' then
@@ -4059,7 +4113,7 @@ function register_command(chat_cmd, cmd_arg, cmd_text, cmd_waiting)
 						elseif line == "{pause}" then
 							sampAddChatMessage('[Arizona Helper] {ffffff}Команда /' .. chat_cmd .. ' поставлена на паузу!', message_color)
 							if not IS_MOBILE then
-								if hotkey_no_errors and settings.general.bind_action then
+								if hotkey_ok and settings.general.bind_action then
 									sampAddChatMessage('[Arizona Helper] {ffffff}Для продолжения нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_action) .. ' {ffffff}или вызовите курсор открыв чат (T/F6)', message_color)
 								else
 									sampAddChatMessage('[Arizona Helper] {ffffff}Для продолжения вызовите курсор открыв чат (T/F6)', message_color)
@@ -4150,7 +4204,7 @@ function info_stop_command()
 	if IS_MOBILE and settings.general.mobile_stop_button then
 		sampAddChatMessage('[Arizona Helper] {ffffff}Для остановки отыгровки используйте команду ' .. message_color_hex .. '/stop {ffffff}или кнопку в нижней части экрана.', message_color)
 		MODULE.CommandStop.Window[0] = true
-	elseif hotkey_no_errors and settings.general.bind_command_stop then
+	elseif hotkey_ok and settings.general.bind_command_stop then
 		sampAddChatMessage('[Arizona Helper] {ffffff}Для остановки отыгровки используйте команду ' .. message_color_hex .. '/stop {ffffff}или нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_command_stop) .. '{ffffff}.', message_color)
 	else
 		sampAddChatMessage('[Arizona Helper] {ffffff}Для остановки отыгровки используйте команду ' .. message_color_hex .. '/stop{ffffff}.', message_color)
@@ -4743,7 +4797,7 @@ function show_fast_menu(id)
 		MODULE.FastMenu.player_id = tonumber(id)
 		MODULE.FastMenu.Window[0] = true
 	else
-		if hotkey_no_errors and settings.general.bind_fastmenu then
+		if hotkey_ok and settings.general.bind_fastmenu then
 			sampAddChatMessage('[Arizona Helper] {ffffff}Используйте ' .. message_color_hex .. '/hm [ID игрока] {ffffff}или наведитесь на игрока через ' .. message_color_hex .. 'ПКМ + ' .. getNameKeysFrom(settings.general.bind_fastmenu), message_color) 
 		else
 			sampAddChatMessage('[Arizona Helper] {ffffff}Используйте ' .. message_color_hex .. '/hm [ID игрока]', message_color)
@@ -4756,7 +4810,7 @@ function show_leader_fast_menu(id)
 		MODULE.LeaderFastMenu.player_id = tonumber(id)
 		MODULE.LeaderFastMenu.Window[0] = true
 	else
-		if hotkey_no_errors and settings.general.bind_leader_fastmenu then
+		if hotkey_ok and settings.general.bind_leader_fastmenu then
 			sampAddChatMessage('[Arizona Helper] {ffffff}Используйте ' .. message_color_hex .. '/lm [ID игрока] {ffffff}или наведитесь на игрока через ' .. message_color_hex .. 'ПКМ + ' .. getNameKeysFrom(settings.general.bind_leader_fastmenu), message_color) 
 		else
 			sampAddChatMessage('[Arizona Helper] {ffffff}Используйте ' .. message_color_hex .. '/lm [ID игрока]', message_color)
@@ -5448,8 +5502,24 @@ function downloadFileFromUrlToPath(url, path)
 		end)
 	end
 end
-function check_update()
+function MODULE.Update.show_notice()
+	if not MODULE.Update.is_need_update then return end
+	if MODULE.Update.Window[0] then return end
+	sampAddChatMessage(' ', message_color)
+	sampAddChatMessage('[Arizona Helper] {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}!', message_color)
+	sampAddChatMessage('[Arizona Helper] {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
+	if MODULE.Update.is_emergency then
+		sampAddChatMessage('[Arizona Helper] {FF0000}ВНИМАНИЕ: это аварийное обновление, его установка настоятельно рекомендуется!', message_color)
+	end
+	sampAddChatMessage(' ', message_color)
+	MODULE.Update.Window[0] = true
+	play_sound()
+end
+function check_update(manual)
 	print('Проверка на наличие обновлений...')
+	if manual then
+		sampAddChatMessage('[Arizona Helper] {ffffff}Проверка обновлений...', message_color)
+	end
 	asyncHttpRequest(
 		"GET",
 		UPDATE_JSON_URL,
@@ -5457,6 +5527,9 @@ function check_update()
 		function(response)
 			local ok, updateInfo = pcall(function() return decodeJson(response.text) end)
 			if not ok or type(updateInfo) ~= "table" then
+				if manual then
+					sampAddChatMessage('[Arizona Helper] {ffffff}Ошибка проверки обновлений (не удалось обработать ответ).', message_color)
+				end
 				isUpdateChecked = true
 				return
 			end
@@ -5468,16 +5541,9 @@ function check_update()
 			local uStatus      = statusInfo.text
 			local status_color = statusInfo.color
 			local is_emergency = (uStatusKey == "emergency")
-			local show_update  = settings.general.updater or is_emergency
+			local show_update  = settings.general.updater or is_emergency or (manual == true)
 			if uVer ~= "" and uUrl ~= "" and thisScript().version ~= uVer and show_update then
 				print('Доступно обновление! | Локальная: ' .. thisScript().version .. ' | В облаке: ' .. uVer .. ' | Статус: ' .. uStatus)
-				sampAddChatMessage(' ', message_color)
-				sampAddChatMessage('[Arizona Helper] {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. uVer .. '{ffffff}!', message_color)
-				sampAddChatMessage('[Arizona Helper] {ffffff}Статус обновления: ' .. status_color .. uStatus .. '{ffffff}!', message_color)
-				if is_emergency then
-					sampAddChatMessage('[Arizona Helper] {FF0000}ВНИМАНИЕ: это аварийное обновление, его установка настоятельно рекомендуется!', message_color)
-				end
-				sampAddChatMessage(' ', message_color)
 				MODULE.Update.is_need_update = true
 				MODULE.Update.url     = uUrl
 				MODULE.Update.version = uVer
@@ -5485,12 +5551,23 @@ function check_update()
 				MODULE.Update.status       = uStatus
 				MODULE.Update.status_color = status_color
 				MODULE.Update.is_emergency = is_emergency
-				MODULE.Update.Window[0] = true
-				play_sound()
+				if manual or MODULE.Update.can_show then
+					MODULE.Update.show_notice()
+				end
+			else
+				print('Обновление не нужно или уведомления отключены (не аварийное)!')
+				if manual then
+					if uVer ~= "" and thisScript().version == uVer then
+						sampAddChatMessage('[Arizona Helper] {ffffff}У вас установлена последняя версия хелпера (' .. message_color_hex .. uVer .. '{ffffff}).', message_color)
+					end
+				end
 			end
 			isUpdateChecked = true
 		end,
 		function(err)
+			if manual then
+				sampAddChatMessage('[Arizona Helper] {ffffff}Ошибка проверки обновлений: ' .. tostring(err), message_color)
+			end
 			isUpdateChecked = true
 		end
 	)
@@ -5851,9 +5928,11 @@ function delete_helper_data(checker)
 	os.remove(config_dir .. "/PieMenu.json")
 	os.remove(config_dir .. "/Notes.json")
 	os.remove(config_dir .. "/Vehicles.json")
-	os.remove(config_dir .. "/Guns.json")
+	os.remove(config_dir .. "/Weapon.json")
 	os.remove(config_dir .. "/Ads.json")
 	os.remove(config_dir .. "/Update.json")
+	os.remove(config_dir .. "/Crosshair.json")
+	os.remove(config_dir .. "/Scoreboard.json")
 	os.remove(config_dir .. "/SmartUK.json")
 	os.remove(config_dir .. "/SmartPDD.json")
 	os.remove(config_dir .. "/SmartRPTP.json")
@@ -5904,7 +5983,7 @@ if isMode('hospital') then
 						MODULE.HealChat.bool = true
 						MODULE.HealChat.Window[0] = true
 						check_end_time()
-					elseif hotkey_no_errors then
+					elseif hotkey_ok then
 						sampAddChatMessage('[Arizona Helper] {ffffff}Чтобы вылечить игрока ' .. sampGetPlayerNickname(id) .. ' нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_action) .. ' {ffffff}в течении 5-ти секунд!', message_color)
 						show_notify('info', 'Arizona Helper', 'Нажмите ' .. getNameKeysFrom(settings.general.bind_action) .. ' чтобы быстро вылечить игрока', 5000)
 						MODULE.HealChat.player_id = id
@@ -5982,6 +6061,59 @@ if isMode('smi') then
 		sampSendDialogResponse(MODULE.SmiEdit.ad_dialog_id, 1, 0, text)
 		imgui.StrCopy(MODULE.SmiEdit.input_edit_text, '')
 		return true
+	end
+end
+------------------------------------------ Crosshair -------------------------------------------
+local CROSSHAIR_OFFSETS = {
+	x86 = {
+		r = { 0x58E301, 0x58E3DA, 0x58E433, 0x58E47C },
+		g = { 0x58E2F6, 0x58E3D1, 0x58E42A, 0x58E473 },
+		b = { 0x58E2F1, 0x58E3C8, 0x58E425, 0x58E466 },
+		a = { 0x58E2EC, 0x58E3BF, 0x58E420, 0x58E461 }
+	},
+	arm = {
+		r = { 0x437416, 0x437486, 0x437812, 0x437874, 0x4378A2, 0x4378CC },
+		g = { 0x437418, 0x437488, 0x437814, 0x437876, 0x4378A4, 0x4378CE },
+		b = { 0x43741A, 0x43748C, 0x437816, 0x43787A, 0x4378A6, 0x4378D0 },
+		a = { 0x437412, 0x43780E }
+	},
+	arm64 = {
+		r = { 0x51C934, 0x51C9A0, 0x51C9E0, 0x51CA14, 0x51CE28, 0x51CE68, 0x51CE9C, 0x51CED4 },
+		g = { 0x51C938, 0x51C9A4, 0x51C9E4, 0x51CA18, 0x51CE2C, 0x51CE6C, 0x51CEA0, 0x51CED8 },
+		b = { 0x51C93C, 0x51C9A8, 0x51C9E8, 0x51CA1C, 0x51CE30, 0x51CE70, 0x51CEA4, 0x51CEDC },
+		a = { 0x51C940, 0x51C9AC, 0x51C9EC, 0x51CA20, 0x51CE34, 0x51CE74, 0x51CEA8, 0x51CEE0 }
+	}
+}
+function writeUint8(list, base, value)
+	for i = 1, #list do memory.setuint8(base + list[i], value, true) end
+end
+function writeArm64(list, base, value, reg)
+	local opcode = 0x52800000 + bit.lshift(value, 5) + reg
+	for i = 1, #list do memory.setuint32(base + list[i], opcode, true) end
+end
+function changeCrosshairColor(color)
+	if not memory_ok then return end
+	if color ~= MODULE.Crosshair.last_sight_color then
+		MODULE.Crosshair.last_sight_color = color
+		local r, g, b, a = color[1], color[2], color[3], 255
+		local offsets = CROSSHAIR_OFFSETS[jit.arch]
+		if not offsets then return end
+		local base = (type(MONET_GTASA_BASE) == "number") and MONET_GTASA_BASE or 0
+		if jit.arch == 'arm64' then
+			writeArm64(offsets.r, base, r, 1); writeArm64(offsets.g, base, g, 2)
+			writeArm64(offsets.b, base, b, 3); writeArm64(offsets.a, base, a, 4)
+		else
+			writeUint8(offsets.r, base, r); writeUint8(offsets.g, base, g)
+			writeUint8(offsets.b, base, b); writeUint8(offsets.a, base, a)
+		end
+	end
+end
+function isActiveCrosshairMode()
+	if IS_MOBILE then
+		return sam and sam.camera and sam.camera.aCams and sam.camera.aCams[0]
+		       and sam.camera.aCams[0].nMode == 53 or false
+	else
+		return memory_ok and memory.getint16(0xB6F1A8, false) == 53
 	end
 end
 --------------------------------------------- Events ---------------------------------------------
@@ -6124,16 +6256,6 @@ end
 function sampev.onServerMessage(color, text)
 	if MODULE.DEBUG then
 		sampAddChatMessage('[ServerMessage] {ffffff}Color ' .. color .. " | Text " .. text, message_color)
-	end
-	if MODULE.Scoreboard and MODULE.Scoreboard.call_checker then
-		local c = (text or ""):gsub('%{......%}', '')
-		local id_in = c:match('%[(%d+)%]')
-		local num = c:match(':%s*(%d+)%s*$')
-		if id_in and num and tonumber(id_in) == MODULE.Scoreboard.call_checker then
-			sampSendChat("/call " .. num)
-			MODULE.Scoreboard.call_checker = false
-			return false
-		end
 	end
 	if MODULE.Edgo and MODULE.Edgo.try_consume_number(text) then return false end
 	if MODULE.Edgo and MODULE.Edgo._num_suppress_until and os.clock() < MODULE.Edgo._num_suppress_until then
@@ -6725,6 +6847,17 @@ function sampev.onSendCommand(text)
 	end
 end
 function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
+	if MODULE.Scoreboard and MODULE.Scoreboard.call_checker then
+		local t = title or ""
+		if t:find('ТЕЛЕФОННАЯ КНИГА', 1, true) or t:find('Телефонная книга', 1, true) or t:find('телефонная книга', 1, true) then
+			local clean = (text or ""):gsub('%{......%}', '')
+			local num = clean:match('телефона[:%s]+(%d+)') or clean:match('[:%s](%d%d%d+)')
+			MODULE.Scoreboard.call_checker = false
+			sampSendDialogResponse(dialogid, 0, 0, "")
+			if num then sampSendChat('/call ' .. num) end
+			return false
+		end
+	end
 	local H = MODULE.Edgo and MODULE.Edgo.history
 	if H and H.active and not H.finished then
 		local lower = MODULE.Edgo.lower or function(s) return (s or ""):lower() end
@@ -7545,7 +7678,7 @@ imgui.OnInitialize(function()
 	end
 	table.sort(MODULE.Icons.keys)
 
-	if settings.general.helper_theme == 0 and monet_no_errors then
+	if settings.general.helper_theme == 0 and monet_ok then
 		apply_moonmonet_theme()
 	elseif settings.general.helper_theme == 1 then
 		apply_dark_theme()
@@ -8571,7 +8704,7 @@ imgui.OnFrame(
 							else
 								imgui.CenterText(fa.COMPUTER_MOUSE .. u8' СКМ (колёсико)')
 								if imgui.CenterButton(settings.general.piemenu and fa.TOGGLE_ON .. u8(' Отключить') or fa.TOGGLE_OFF .. u8(' Включить')) then
-									if pie_no_errors then
+									if pie_ok then
 										settings.general.piemenu = not settings.general.piemenu
 										MODULE.PieMenu.Window[0] = settings.general.piemenu
 										save_settings()
@@ -8588,7 +8721,7 @@ imgui.OnFrame(
 							imgui.CenterText(u8('Без аргумента'))
 							imgui.SetCursorPosY(308 * settings.general.custom_dpi)
 							if imgui.Button(fa.GEAR .. u8(' Настроить круговое меню ')) then
-								if pie_no_errors then
+								if pie_ok then
 									MODULE.PieMenu.editor.current = modules.piemenu.data
 									imgui.OpenPopup(fa.COMPASS .. u8' Настройка PieMenu ' .. fa.COMPASS)
 								else
@@ -8840,7 +8973,7 @@ imgui.OnFrame(
 								end
 								imgui.NextColumn()
 								if imgui.CenterColumnSmallButton((settings.general.piemenu and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##mobile_piemenu_button') then
-									if pie_no_errors then
+									if pie_ok then
 										settings.general.piemenu = not settings.general.piemenu
 										MODULE.PieMenu.Window[0] = settings.general.piemenu
 										save_settings()
@@ -9005,7 +9138,7 @@ imgui.OnFrame(
 						else
 							if imgui.BeginChild('##999', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
 								imgui.CenterText(fa.KEYBOARD .. u8' Главные бинды для работы хелпера (бинды для RP команд в редакторе команд) ' .. fa.KEYBOARD)
-								if hotkey_no_errors then
+								if hotkey_ok then
 									imgui.Separator()
 									imgui.CenterText(u8'Открытие/закрытие главного меню хелпера (аналог /helper):')
 									local width = imgui.GetWindowWidth()
@@ -9202,7 +9335,7 @@ imgui.OnFrame(
 					imgui.Separator()
 					imgui.Columns(4)
 					imgui.CenterColumnText(fa.BRUSH .. u8(' Цвет'))
-					if monet_no_errors then
+					if monet_ok then
 						function moon_monet_edit()
 							local r,g,b = MODULE.Main.mmcolor[0] * 255, MODULE.Main.mmcolor[1] * 255, MODULE.Main.mmcolor[2] * 255
 							local argb = join_argb(0, r, g, b)
@@ -9251,7 +9384,7 @@ imgui.OnFrame(
 						if imgui.CenterColumnSmallButton(fa.CIRCLE_ARROW_RIGHT .. u8' Применить ' .. fa.CIRCLE_ARROW_LEFT .. '##change_transparent') then
 							settings.general.transparent = MODULE.Main.slider.transparent[0]
 							save_settings()
-							if settings.general.helper_theme == 0 and monet_no_errors then
+							if settings.general.helper_theme == 0 and monet_ok then
 								apply_moonmonet_theme()
 							elseif settings.general.helper_theme == 1 then
 								apply_dark_theme()
@@ -9517,7 +9650,7 @@ imgui.OnFrame(
 			imgui.SameLine()
 			if imgui.Button(fa.KEYBOARD .. u8' Забиндить##binder_bind', imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then
 				if MODULE.Binder.ComboTags[0] == 0 then
-					if hotkey_no_errors then
+					if hotkey_ok then
 						if hotkey.HotKeyIsEdit ~= nil then hotkey.HotKeyIsEdit = nil end
 						imgui.OpenPopup(fa.KEYBOARD .. u8' Бинд для команды /' .. MODULE.Binder.data.change_cmd)
 					else
@@ -9794,6 +9927,7 @@ function drawScoreboardPlayer(id)
 		imgui.SameLine()
 		if imgui.Button(fa.PHONE .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
 			MODULE.Scoreboard.call_checker = id
+			MODULE.Scoreboard.Window[0] = false
 			sampSendChat("/number " .. id)
 		end
 		imgui.NextColumn()
@@ -9956,6 +10090,19 @@ function firs_render_assist_gui()
 		settings.general,
 		"nmembers"
 	)
+	if memory_ok then
+		render_assist_item(
+			"Цветной прицел",
+			"Цветной прицел с двумя режимами: обычный и при наведении на игрока / NPC\nДополнительно может учитывать дальность оружия для проверки попадания\nОтображает дистанцию до цели для оценки возможности стрельбы\nЕсть поддержка легендарной нашивки (+8 к дальности стрельбы)\n\nДля настройки используйте кнопку шестерёнки справа.",
+			settings.general,
+			"crosshair",
+			false,
+			function()
+				MODULE.Crosshair.Window[0] = true
+				MODULE.Main.Window[0] = false
+			end
+		)
+	end
 	local rank_num = modules.player.data.fraction_rank_number or 0
 	if rank_num >= 9 and not isMode('fbi') then
 		render_assist_item(
@@ -10118,7 +10265,7 @@ function render_fractions_functions()
 						"updater",
 						false,
 						nil,
-						check_update
+						function() check_update(true) end
 					)
 					imgui.Separator()
 					imgui.EndChild()
@@ -10767,7 +10914,7 @@ if (not isMode('none')) then
 			imgui.PushItemWidth(250 * settings.general.custom_dpi)
 			imgui.SliderInt('', MODULE.GiveRank.number, 1, (modules.player.data.fraction_rank_number == 9) and 8 or 9)
 			imgui.Separator()
-			local label = ' Выдать ранг' .. ((hotkey_no_errors and settings.general.bind_action) and (' [' .. getNameKeysFrom(settings.general.bind_action) .. ']') or '')
+			local label = ' Выдать ранг' .. ((hotkey_ok and settings.general.bind_action) and (' [' .. getNameKeysFrom(settings.general.bind_action) .. ']') or '')
 			if imgui.Button(fa.USER .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.GiveRank.Window[0] = false
 			end
@@ -12053,7 +12200,7 @@ if isMode('hospital') then
 				MODULE.MedCard.status[0] = 3
 			end
 			imgui.Separator()
-			local label = ' Выдать ' .. ((hotkey_no_errors and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'мед.карту')
+			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'мед.карту')
 			if imgui.Button(fa.ID_CARD_CLIP .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.MedCard.Window[0] = false
 			end
@@ -12070,7 +12217,7 @@ if isMode('hospital') then
 			imgui.PushItemWidth(250 * settings.general.custom_dpi)
 			imgui.SliderInt('', MODULE.Recept.recepts, 1, 5)
 			imgui.Separator()
-			local label = ' Выдать ' .. ((hotkey_no_errors and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'рецепты')
+			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'рецепты')
 			if imgui.Button(fa.CAPSULES .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.Recept.Window[0] = false
 			end
@@ -12087,7 +12234,7 @@ if isMode('hospital') then
 			imgui.PushItemWidth(250 * settings.general.custom_dpi)
 			imgui.SliderInt('', MODULE.Antibiotik.ants, 1, 20)
 			imgui.Separator()
-			local label = ' Выдать ' .. ((hotkey_no_errors and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'антибиотики')
+			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'антибиотики')
 			if imgui.Button(fa.CAPSULES .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.Antibiotik.Window[0] = false
 			end
@@ -12824,8 +12971,14 @@ imgui.OnFrame(
 	function() return MODULE.Update.Window[0] end,
 	function(player)
 		if not IS_MOBILE then change_dpi() end
+		if MODULE.Main and MODULE.Main.Window[0] then MODULE.Main.Window[0] = false end
 		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
-		imgui.SetNextWindowSize(imgui.ImVec2(480 * settings.general.custom_dpi, 300 * settings.general.custom_dpi), imgui.Cond.Always)
+		if MODULE.Update.downloading then
+			imgui.SetNextWindowSize(imgui.ImVec2(460 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), imgui.Cond.Always)
+		else
+			imgui.SetNextWindowSize(imgui.ImVec2(480 * settings.general.custom_dpi, 300 * settings.general.custom_dpi), imgui.Cond.Always)
+		end
+		pcall(function() imgui.SetNextWindowBgAlpha(1.0) end)
 		local title_icon = MODULE.Update.is_emergency and fa.TRIANGLE_EXCLAMATION or fa.CIRCLE_INFO
 		imgui.Begin(title_icon .. u8" Доступно обновление Arizona Helper " .. title_icon .. "##update_window",
 			MODULE.Update.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
@@ -12868,7 +13021,14 @@ imgui.OnFrame(
 		imgui.Separator()
 		if imgui.BeginChild('##update_info', imgui.ImVec2(0, 130 * settings.general.custom_dpi), true) then
 			for line in (MODULE.Update.info or ""):gmatch("[^\r\n]+") do
-				imgui.BulletText(line)
+				if line:find("^%- ") then
+					local sub = line:sub(3)
+					imgui.Indent(18 * settings.general.custom_dpi)
+					imgui.BulletText(sub)
+					imgui.Unindent(18 * settings.general.custom_dpi)
+				else
+					imgui.BulletText(line)
+				end
 			end
 		end
 		imgui.EndChild()
@@ -12883,6 +13043,48 @@ imgui.OnFrame(
 		imgui.SameLine()
 		if imgui.Button(u8' Позже', imgui.ImVec2(bw, 30 * settings.general.custom_dpi)) then
 			MODULE.Update.Window[0] = false
+		end
+		imgui.End()
+	end
+)
+----------------------------------- Crosshair -----------------------------
+imgui.OnFrame(
+	function() return MODULE.Crosshair.Window[0] end,
+	function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+		imgui.SetNextWindowSize(imgui.ImVec2(340 * settings.general.custom_dpi, 125 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+		imgui.Begin(getHelperIcon() .. " Arizona Helper " .. getHelperIcon() .. '##crosshair_menu', MODULE.Crosshair.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		imgui.Text(u8' Цвет прицела по умолчанию (без наведения)')
+		imgui.SameLine()
+		if imgui.ColorEdit3('## STANDART_COLOR', MODULE.Crosshair.standart_color, imgui.ColorEditFlags.NoInputs) then
+			modules.crosshair.data.standart_color = imguiToRgb(MODULE.Crosshair.standart_color)
+			save_module('crosshair')
+		end
+		imgui.Text(u8' Цвет прицела при наведении на игрока / NPC')
+		imgui.SameLine()
+		if imgui.ColorEdit3('## ENEMY_COLOR', MODULE.Crosshair.enemy_color, imgui.ColorEditFlags.NoInputs) then
+			modules.crosshair.data.enemy_color = imguiToRgb(MODULE.Crosshair.enemy_color)
+			save_module('crosshair')
+		end
+		imgui.Separator()
+		if imgui.Checkbox(u8' Использование дальности стрельбы оружия', MODULE.Crosshair.check_weapon_range) then
+			modules.crosshair.data.check_weapon_range = MODULE.Crosshair.check_weapon_range[0]
+			if not MODULE.Crosshair.check_weapon_range[0] then
+				MODULE.Crosshair.show_weapon_range[0] = false
+				MODULE.Crosshair.is_legendary_stripe[0] = false
+				modules.crosshair.data.show_weapon_range = false
+				modules.crosshair.data.is_legendary_stripe = false
+			end
+			save_module('crosshair')
+		end
+		if imgui.Checkbox(u8' Показывать дистанцию и дальность оружия', MODULE.Crosshair.show_weapon_range) then
+			modules.crosshair.data.show_weapon_range = MODULE.Crosshair.show_weapon_range[0]
+			save_module('crosshair')
+		end
+		if imgui.Checkbox(u8' Учитывать лег.нашивку (+8 к макс дальности)', MODULE.Crosshair.is_legendary_stripe) then
+			modules.crosshair.data.is_legendary_stripe = MODULE.Crosshair.is_legendary_stripe[0]
+			save_module('crosshair')
 		end
 		imgui.End()
 	end
@@ -13033,7 +13235,7 @@ imgui.OnFrame(
 		change_dpi()
 		if MODULE.Binder.state.isPause then
 			safery_disable_cursor(player)
-			local label = ' Продолжить' .. (hotkey_no_errors and settings.general.bind_action and ' [' .. getNameKeysFrom(settings.general.bind_action) .. ']' or '')
+			local label = ' Продолжить' .. (hotkey_ok and settings.general.bind_action and ' [' .. getNameKeysFrom(settings.general.bind_action) .. ']' or '')
 			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8(label), imgui.ImVec2(180 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
 				MODULE.Binder.state.isPause = false
 				MODULE.CommandPause.Window[0] = false
@@ -13448,6 +13650,9 @@ function join_argb(a, r, g, b)
     argb = bit.bor(argb, bit.lshift(r, 16))    
     argb = bit.bor(argb, bit.lshift(a, 24))
     return argb
+end
+function imguiToRgb(color)
+	return {math.floor(color[0] * 255 + 0.5), math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5)}
 end
 function explode_argb(argb)
     local a = bit.band(bit.rshift(argb, 24), 0xFF)
