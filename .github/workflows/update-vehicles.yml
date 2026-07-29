@@ -2,12 +2,11 @@ name: Update Vehicles JSON
 
 on:
   schedule:
-    # каждый день в 05:00 UTC (≈08:00 МСК). Измени под себя.
     - cron: '0 5 * * *'
-  workflow_dispatch:   # ручной запуск из вкладки Actions
+  workflow_dispatch:
 
 permissions:
-  contents: write      # даёт GITHUB_TOKEN право пушить в репо
+  contents: write
 
 jobs:
   update-vehicles:
