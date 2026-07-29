@@ -1,0 +1,43 @@
+name: Update Vehicles JSON
+
+on:
+  schedule:
+    # каждый день в 05:00 UTC (≈08:00 МСК). Измени под себя.
+    - cron: '0 5 * * *'
+  workflow_dispatch:   # ручной запуск из вкладки Actions
+
+permissions:
+  contents: write      # даёт GITHUB_TOKEN право пушить в репо
+
+jobs:
+  update-vehicles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Update Arizona vehicles
+        run: python scripts/UpdateVehicles.py
+
+      - name: Update Rodina vehicles
+        run: python scripts/UpdateVehiclesRodina.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add SmartVEH/Vehicles.json SmartVEH/VehiclesRodina.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit — vehicles are up to date."
+          else
+            git commit -m "chore: auto-update vehicles JSON [skip ci]"
+            git push
+          fi
