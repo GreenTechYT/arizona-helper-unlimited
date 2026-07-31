@@ -78,8 +78,12 @@
 ## 📸 Скриншоты
 
 <div align="center">
-  <img src="https://i.imgur.com/bk1zWJY.png" alt="Главное меню" width="420"/>
-  <!-- Добавьте сюда свои скриншоты интерфейса -->
+  <img src="https://i.imgur.com/3R3f3RI.png" alt="Главное меню" width="420"/>
+  <img src="https://i.imgur.com/MdWMWds.png" alt="Команды и RP отыгровки" width="420"/>
+  <img src="https://i.imgur.com/IImHL5Z.png" alt="Функции" width="420"/>
+  <img src="https://i.imgur.com/bqlB7iQ.png" alt="Заметки" width="420"/>
+  <img src="https://i.imgur.com/INwAymQ.png" alt="Настройки" width="420"/>
+  <img src="https://i.imgur.com/Gmt0DGB.png" alt="ЭБГО" width="420"/>
 </div>
 
 ---
