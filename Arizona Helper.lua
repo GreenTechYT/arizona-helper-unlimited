@@ -13630,63 +13630,24 @@ imgui.OnFrame(
 		if opened then
 			if MODULE.Update.downloading then
 				local expected = tonumber(MODULE.Update.size) or 0
-				local dpath    = MODULE.Update.download_path or (thisScript().path .. '.download')
-				local cur = 0
-				local rf = io.open(dpath, 'rb')
-				if rf then cur = rf:seek('end') or 0; rf:close() end
-				local now = os.clock()
-				if cur ~= (MODULE.Update.last_size or -1) then
-					MODULE.Update.last_size   = cur
-					MODULE.Update.last_change = now
-				end
-				local stable_for = now - (MODULE.Update.last_change or now)
-				local fraction
-				if expected > 0 then
-					fraction = cur / expected
-					if fraction > 1 then fraction = 1 elseif fraction < 0 then fraction = 0 end
-				else
-					fraction = (os.clock() % 1.5) / 1.5
-				end
+				local t = os.clock() - (MODULE.Update.download_start_clock or os.clock())
+				local fraction = 1 - 1 / (1 + t / 3.0)
+				if fraction > 0.95 then fraction = 0.95 end
+
 				imgui.Spacing(); imgui.Spacing()
 				imgui.CenterText(fa.DOWNLOAD .. u8(" Скачивание обновления..."))
 				imgui.Spacing()
 				imgui.ProgressBar(fraction, imgui.ImVec2(-1, 22 * dpi))
 				if expected > 0 then
-					imgui.CenterText(u8(string.format('%.0f%%    %.0f / %.0f КБ', fraction * 100, cur / 1024, expected / 1024)))
+					imgui.CenterText(u8(string.format('размер обновления %.0f КБ', expected / 1024)))
 				else
-					imgui.CenterTextDisabled(u8('Загрузка... (размер файла неизвестен)'))
+					imgui.CenterTextDisabled(u8('загрузка...'))
 				end
 				imgui.Spacing()
 				imgui.CenterTextDisabled(u8("Не закрывайте игру до завершения загрузки."))
-				local size_reached  = (expected > 0 and cur >= expected)
-				local fallback_done = (expected == 0 and cur > 0 and stable_for > 3.0)
-				if not MODULE.Update.done and (size_reached or fallback_done) and stable_for > 0.8 then
-					MODULE.Update.done = true
-					local install_ok = pcall(function()
-						local renamed = os.rename(dpath, thisScript().path)
-						if not renamed then
-							local src = io.open(dpath, 'rb'); assert(src, 'нет временного файла')
-							local data = src:read('*a'); src:close()
-							local dst = io.open(thisScript().path, 'wb'); assert(dst, 'нет доступа к файлу скрипта')
-							dst:write(data); dst:close()
-							os.remove(dpath)
-						end
-					end)
+				if MODULE.Update.download_start and os.time() - MODULE.Update.download_start > 60 then
 					MODULE.Update.downloading    = false
 					MODULE.Update.download_start = nil
-					if install_ok then
-						sampAddChatMessage('[Arizona Helper] {ffffff}Обновление загружено и установлено! Перезагрузка...', message_color)
-						reload_script = true
-						thisScript():reload()
-					else
-						pcall(function() os.remove(dpath) end)
-						sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось установить обновление (ошибка записи). Попробуйте снова.', message_color)
-					end
-				end
-				if not MODULE.Update.done and MODULE.Update.download_start and os.time() - MODULE.Update.download_start > 60 then
-					MODULE.Update.downloading    = false
-					MODULE.Update.download_start = nil
-					pcall(function() os.remove(dpath) end)
 					sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось загрузить обновление (таймаут). Попробуйте снова.', message_color)
 				end
 
@@ -13751,14 +13712,11 @@ imgui.OnFrame(
 			imgui.EndChild()
 			imgui.Separator()
 			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Установить обновление', imgui.ImVec2(imgui.GetMiddleButtonX(2), 30 * dpi)) then
-				MODULE.Update.downloading    = true
-				MODULE.Update.download_start = os.time()
-				MODULE.Update.download_path  = thisScript().path .. '.download'
-				MODULE.Update.last_size      = -1
-				MODULE.Update.last_change    = os.clock()
-				MODULE.Update.done           = false
+				MODULE.Update.downloading         = true
+				MODULE.Update.download_start      = os.time()
+				MODULE.Update.download_start_clock = os.clock()
 				download_file = 'helper'
-				downloadFileFromUrlToPath(MODULE.Update.url, MODULE.Update.download_path)
+				downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
 			end
 			imgui.SameLine()
 			if imgui.Button(u8' Позже', imgui.ImVec2(imgui.GetMiddleButtonX(2), 30 * dpi)) then
