@@ -5437,7 +5437,6 @@ function check_update(manual)
 			local uVer  = tostring(updateInfo.version or "")
 			local uUrl  = tostring(updateInfo.url or "")
 			local uText = tostring(updateInfo.info or "Доступно обновление.")
-			local uSize = tonumber(updateInfo.size) or 0
 			local uStatusKey   = tostring(updateInfo.status or ""):lower()
 			local statusInfo   = UPDATE_STATUS[uStatusKey] or { text = "Обновление", color = "{FFFFFF}" }
 			local uStatus      = statusInfo.text
@@ -5450,7 +5449,6 @@ function check_update(manual)
 				MODULE.Update.url     = uUrl
 				MODULE.Update.version = uVer
 				MODULE.Update.info    = uText
-				MODULE.Update.size    = uSize
 				MODULE.Update.status       = uStatus
 				MODULE.Update.status_color = status_color
 				MODULE.Update.is_emergency = is_emergency
@@ -13629,19 +13627,32 @@ imgui.OnFrame(
 		local opened = imgui.BeginPopupModal(popup_id, nil, flags)
 		if opened then
 			if MODULE.Update.downloading then
-				local expected = tonumber(MODULE.Update.size) or 0
-				local t = os.clock() - (MODULE.Update.download_start_clock or os.clock())
-				local fraction = 1 - 1 / (1 + t / 3.0)
-				if fraction > 0.95 then fraction = 0.95 end
-
+				local t = os.clock()
 				imgui.Spacing(); imgui.Spacing()
-				imgui.CenterText(fa.DOWNLOAD .. u8(" Скачивание обновления..."))
+				local pulse = 0.6 + 0.4 * ((math.sin(t * 3.0) + 1.0) * 0.5)
+				imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(pulse, pulse, pulse, 1.0))
+				imgui.CenterText(fa.DOWNLOAD .. u8("  Скачивание обновления"))
+				imgui.PopStyleColor()
 				imgui.Spacing()
-				imgui.ProgressBar(fraction, imgui.ImVec2(-1, 22 * dpi))
-				if expected > 0 then
-					imgui.CenterText(u8(string.format('размер обновления %.0f КБ', expected / 1024)))
-				else
-					imgui.CenterTextDisabled(u8('загрузка...'))
+				local N    = 18
+				local head = math.floor(t * 8) % N
+				local seg_w = imgui.CalcTextSize('#').x
+				local gap = 4 * dpi
+				pcall(function() gap = imgui.GetStyle().ItemSpacing.x end)
+				local total_w = N * seg_w + (N - 1) * gap
+				local start_x = (imgui.GetWindowWidth() - total_w) * 0.5
+				if start_x < 0 then start_x = 0 end
+				imgui.SetCursorPosX(start_x)
+				for i = 0, N - 1 do
+					if i > 0 then imgui.SameLine() end
+					local d = (i - head) % N
+					local b
+					if     d == 0 then b = 1.0
+					elseif d == 1 then b = 0.72
+					elseif d == 2 then b = 0.48
+					elseif d == 3 then b = 0.28
+					else               b = 0.11 end
+					imgui.TextColored(imgui.ImVec4(b, b, b, 1.0), '#')
 				end
 				imgui.Spacing()
 				imgui.CenterTextDisabled(u8("Не закрывайте игру до завершения загрузки."))
@@ -13650,7 +13661,6 @@ imgui.OnFrame(
 					MODULE.Update.download_start = nil
 					sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось загрузить обновление (таймаут). Попробуйте снова.', message_color)
 				end
-
 				imgui.EndPopup()
 				return
 			end
@@ -13712,9 +13722,8 @@ imgui.OnFrame(
 			imgui.EndChild()
 			imgui.Separator()
 			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Установить обновление', imgui.ImVec2(imgui.GetMiddleButtonX(2), 30 * dpi)) then
-				MODULE.Update.downloading         = true
-				MODULE.Update.download_start      = os.time()
-				MODULE.Update.download_start_clock = os.clock()
+				MODULE.Update.downloading = true
+				MODULE.Update.download_start = os.time()
 				download_file = 'helper'
 				downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
 			end
