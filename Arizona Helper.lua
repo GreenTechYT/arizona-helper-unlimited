@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.5.1")
+script_version("1.5.2")
 ----------------------------------------------- INIT ---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
@@ -5310,6 +5310,21 @@ function MODULE.Update.show_notice()
 	MODULE.Update.Window[0] = true
 	play_sound()
 end
+function MODULE.Update.start_install()
+	if not MODULE.Update.is_need_update then return end
+	if MODULE.Update.downloading or MODULE.Update.auto_start_download then return end
+	sampAddChatMessage(' ', message_color)
+	sampAddChatMessage('[Arizona Helper] {ffffff}Обнаружена новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}. Начинаю автоматическую установку...', message_color)
+	sampAddChatMessage('[Arizona Helper] {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
+	if MODULE.Update.is_emergency then
+		sampAddChatMessage('[Arizona Helper] {FF0000}ВНИМАНИЕ: это аварийное обновление, исправляющее критические ошибки!', message_color)
+	end
+	sampAddChatMessage(' ', message_color)
+	MODULE.Update.auto_start_download = true
+	MODULE.Update.popup_opened = false
+	MODULE.Update.Window[0] = true
+	play_sound()
+end
 function parse_news_ver(v)
 	local t = {}
 	for c in tostring(v or ''):gmatch('%d+') do t[#t + 1] = tonumber(c) end
@@ -5452,14 +5467,16 @@ function check_update(manual)
 				MODULE.Update.status       = uStatus
 				MODULE.Update.status_color = status_color
 				MODULE.Update.is_emergency = is_emergency
-				if manual or MODULE.Update.can_show then
+				if settings.general.updater and not manual then
+					MODULE.Update.start_install()
+				elseif manual or MODULE.Update.can_show then
 					MODULE.Update.show_notice()
 				end
 			else
 				print('Обновления не обнаружены')
 				if manual then
 					if uVer ~= "" and thisScript().version == uVer then
-						sampAddChatMessage('[Arizona Helper] {ffffff}У вас установлена последняя версия хелпера (' .. message_color_hex .. uVer .. '{ffffff}).', message_color)
+						sampAddChatMessage('[Arizona Helper] {ffffff}У вас установлена последняя версия хелпера [' .. message_color_hex .. uVer .. '{ffffff}].', message_color)
 					end
 				end
 			end
@@ -6318,7 +6335,7 @@ function sampev.onServerMessage(color, text)
 		if not MODULE.Afind.in_building then
 			MODULE.Afind.in_building = true
 			MODULE.Afind.building_since = os.time()
-			sampAddChatMessage('[Arizona Helper] {ffffff}Игрок ' .. message_color_hex .. MODULE.Afind.target_nick .. ' {ffffff}сейчас находится в здании.', message_color)
+			sampAddChatMessage('[Arizona Helper] {ffffff}Игрок ' .. message_color_hex .. MODULE.Afind.target_nick .. '[' .. tostring(MODULE.Afind.target_id or -1) .. '] {ffffff}сейчас находится в здании.', message_color)
 		end
 		return false
 	end
@@ -8014,7 +8031,7 @@ imgui.OnFrame(
 		imgui.Begin(getHelperIcon() .. " Arizona Helper " .. getHelperIcon() .. "##main", MODULE.Main.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
 		change_dpi()
 		if imgui.BeginTabBar(u8'Привет!') then
-			if imgui.BeginTabItem(fa.HOUSE..u8' Главное меню') then
+			if imgui.BeginTabItem(fa.HOUSE..u8' Главное меню ') then
 				if doesFileExist(config_dir .. '/Resourse/logo.png') then
 					if (not _G.helper_logo) then
 						local path = config_dir .. '/Resourse/logo.png'
@@ -9248,11 +9265,11 @@ imgui.OnFrame(
 				imgui.EndTabItem()
 			end
 			local fraction = isMode('smi') and 'СМИ' or modules.player.data.fraction_tag:sub(1, 5)
-			if imgui.BeginTabItem(fa.GEARS .. u8' Функции ' .. u8(fraction)) then
+			if imgui.BeginTabItem(fa.GEARS .. u8' Функции ' .. u8(fraction) .. ' ') then
 				render_fractions_functions()
 				imgui.EndTabItem()
 			end
-			if imgui.BeginTabItem(fa.FILE_PEN..u8' Заметки') then
+			if imgui.BeginTabItem(fa.FILE_PEN..u8' Заметки ') then
 				imgui.BeginChild('##notes1', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true)
 				imgui.Columns(2)
 				imgui.CenterColumnText(u8"Список ваших заметок и шпаргалок:")
@@ -9443,7 +9460,7 @@ imgui.OnFrame(
 				end
 				imgui.EndTabItem()
 			end
-			if imgui.BeginTabItem(fa.GEAR..u8' Настройки') then
+			if imgui.BeginTabItem(fa.GEAR..u8' Настройки ') then
 				if imgui.BeginChild('##1', imgui.ImVec2(589 * settings.general.custom_dpi, 187 * settings.general.custom_dpi), true) then
 					imgui.CenterText(fa.CIRCLE_INFO .. u8' Дополнительная информация о хелпере ' .. fa.CIRCLE_INFO)
 					imgui.Separator()
@@ -10322,6 +10339,12 @@ function firs_render_assist_gui()
 		"adaptive_cruise",
 		true
 	)
+	render_assist_item(
+		"Автоматические обновления",
+		"Автоматическая установка обновлений при запуске хелпера.\nРучная проверка доступна кнопкой \"Обновить\" в настройках хелпера.",
+		settings.general,
+		"updater"
+	)
 	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 	if imgui.BeginPopupModal(fa.PERSON_CIRCLE_CHECK .. u8' Ранг для авто-инвайта ' .. fa.PERSON_CIRCLE_CHECK, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
 		change_dpi()
@@ -10643,13 +10666,6 @@ function render_fractions_functions()
 						"Оповещает вас, если в зоне прорисовки появился преступник.\nТак-же кидает на него /find и /z (если рядом)",
 						settings.mj,
 						"awanted"
-					)
-					render_assist_item(
-						"Автоматические обновления",
-						"Включает автоматическую проверку обновлений хелпера при загрузке.\nРучная проверка доступна кнопкой \"Обновить\" в настройках хелпера.",
-						settings.general,
-						"updater",
-						false
 					)
 					imgui.Separator()
 					imgui.EndChild()
@@ -11747,7 +11763,7 @@ if not (isMode('ghetto') or isMode('mafia')) then
 		local now = os.time()
 		if now - (MODULE.Afind.last_building_msg or now) >= BUILDING_EXIT_THRESHOLD then
 			MODULE.Afind.in_building = false
-			sampAddChatMessage('[Arizona Helper] {ffffff}Игрок ' .. message_color_hex .. (MODULE.Afind.target_nick or "") .. ' {ffffff}покинул здание, геопозиция установлена.', message_color)
+			sampAddChatMessage('[Arizona Helper] {ffffff}Игрок ' .. message_color_hex .. (MODULE.Afind.target_nick or "") .. '[' .. tostring(MODULE.Afind.target_id or -1) .. '] {ffffff}покинул здание, геопозиция установлена.', message_color)
 		end
 	end)
 	imgui.OnFrame(
@@ -13626,6 +13642,13 @@ imgui.OnFrame(
 		end
 		local opened = imgui.BeginPopupModal(popup_id, nil, flags)
 		if opened then
+			if MODULE.Update.auto_start_download and MODULE.Update.is_need_update and not MODULE.Update.downloading then
+				MODULE.Update.auto_start_download = false
+				MODULE.Update.downloading    = true
+				MODULE.Update.download_start = os.time()
+				download_file = 'helper'
+				downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
+			end
 			if MODULE.Update.downloading then
 				local t = os.clock()
 				imgui.Spacing(); imgui.Spacing()
