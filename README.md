@@ -2,7 +2,7 @@
 
 # 🌵 Arizona Helper Unlimited
 
-<img src="https://i.imgur.com/bk1zWJY.png" alt="Arizona Helper Unlimited" width="620"/>
+<img src="https://i.imgur.com/2qdlr3R.png" alt="Arizona Helper Unlimited" width="1024"/>
 
 ![Версия](https://img.shields.io/badge/версия-1.5.1-blue?style=for-the-badge)
 ![Платформа](https://img.shields.io/badge/платформа-Windows%20%7C%20Android-success?style=for-the-badge)
