@@ -2308,20 +2308,6 @@ MODULE.Binder.tags = {
 			return city[getCityPlayerIsIn(PLAYER_PED)]
 		end
 	},
-	{
-		key = "get_nearest_car",
-		description = "ֱכטזאירטי ע/ס",
-		category = "־בשוו",
-		mode = "all",
-		func = function() return get_near_car() end
-	},
-	{
-		key = "get_drived_car",
-		description = "ֱכטזאירטי ע/ס ס גמהטעוכול",
-		category = "־בשוו",
-		mode = "all",
-		func = function() return get_near_car(true) end
-	},
 	-- ׂ׀ְֽֿׁ־׀ׂ
 	{
 		key = "get_car_units",
