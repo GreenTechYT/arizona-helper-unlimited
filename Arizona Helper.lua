@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.5.1")
+script_version("1.5.2")
 ----------------------------------------------- INIT ---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
@@ -407,6 +407,58 @@ do
 end
 local sizeX, sizeY = getScreenResolution()
 print('Библиотеки успешно подключены!')
+-------------------------------------------- TERMS --------------------------------------------
+local TERMS_TEXT = [[
+1. Общие положения
+1.1. Настоящее соглашение регулирует использование программного обеспечения «Arizona Helper» (далее - «Хелпер»).
+1.2. Хелпер является неофициальной модификацией, созданной независимо и не связанной с администрацией, владельцами или представителями проектов Arizona Role Play, Arizona Online и Rodina Online.
+1.3. Используя Хелпер, вы подтверждаете, что ознакомились с условиями настоящего соглашения и принимаете их в полном объёме.
+1.4. Если вы не согласны с условиями - немедленно прекратите использование Хелпера.
+
+2. Статус программного обеспечения
+2.1. Хелпер предоставляется «как есть» (as is), без каких-либо явных или подразумеваемых гарантий.
+2.2. Автор не гарантирует работоспособность, бесперебойность, совместимость с обновлениями игры/сервера и пригодность для каких-либо целей.
+2.3. Сервер может классифицировать стороннее ПО по своему усмотрению; автор не влияет на политику сервера и не отвечает за неё.
+
+3. Риски и ответственность пользователя
+3.1. Использование Хелпера осуществляется исключительно на ваш страх и риск.
+3.2. Установка и использование стороннего ПО может нарушать правила сервера и повлечь санкции вплоть до блокировки аккаунта.
+3.3. Только вы несёте ответственность за соблюдение правил сервера и применимого законодательства.
+
+4. Отказ от ответственности автора
+4.1. Автор не несёт ответственности за санкции администрации сервера: предупреждения, муты, баны, блокировки аккаунта.
+4.2. Автор не несёт ответственности за потерю игровых ценностей, валюты, имущества, данных, прогресса или доступа к аккаунту.
+4.3. Автор не несёт ответственности за сбои, ошибки, конфликты с другим ПО, повреждение файлов и работоспособность игры.
+4.4. Автор не возмещает прямой, косвенный ущерб, упущенную выгоду или моральный вред.
+4.5. Любые претензии к автору, связанные с использованием Хелпера, считаются заранее необоснованными и отклоняются.
+
+5. Данные и конфиденциальность
+5.1. Настройки и данные персонажа хранятся локально на вашем устройстве.
+5.2. Хелпер не передаёт личные данные третьим лицам.
+5.3. Опциональная аналитика передаёт только обезличенную техническую информацию.
+
+6. Распространение и изменение
+6.1. Разрешается свободное распространение оригинального Хелпера при указании авторства и ссылки на первоисточник.
+6.2. Разрешается внесение изменений в код Хелпера (модификации) исключительно на ваш страх и риск.
+6.3. Автор не отвечает за модифицированные версии и не оказывает по ним поддержку.
+6.4. Запрещается выдавать модификации за оригинал и распространять их от имени автора.
+
+7. Изменение условий
+7.1. Автор вправе изменять условия соглашения и функциональность Хелпера без предварительного уведомления.
+
+8. Заключительные положения
+8.1. Продолжая использование Хелпера, вы подтверждаете согласие с условиями соглашения.
+8.2. При недействительности отдельного пункта остальные сохраняют силу.
+8.3. Если вы не согласны - прекратите использование Хелпера.
+]]
+local function get_terms_text()        return TERMS_TEXT end
+local function render_terms_text()
+	local text_u8 = u8(get_terms_text())
+	for line in text_u8:gmatch('[^\n]+') do
+		if line:match('^%d+%.%s') then imgui.Spacing() end
+		imgui.TextWrapped(line)
+	end
+end
 -------------------------------------------- JSON SETTINGS ---------------------------------------
 local config_dir = worked_dir .. '/Arizona Helper'
 local settings = {}
@@ -421,6 +473,7 @@ local default_settings = {
 		moonmonet_theme_color = 40703,
 		transparent = 75,
 		background_transparent = 10, 
+		members_update_period = 3,
 		fraction_mode = '',
 		bind_mainmenu = '[113]',
 		bind_fastmenu = '[69]',
@@ -447,13 +500,32 @@ local default_settings = {
 		crosshair = true,
 		updater = false,
 		nmembers = true,
+		armory_enable = true,
+		terms_accepted = false,
 	},
     mj = {
 		auto_time = true,
 		anti_screpki = true,
 		auto_doklad_damage = true,
 		auto_change_code_siren = true,
+		wanted_update_period = 10,
+		afind_find_cd = 3,
+		afind_auto_stop = true,
+		afind_stop_radius = 10,
     },
+	armory = {
+	auto_armory = true,
+	auto_locker = false,
+	grace_ms = 350,
+	step_ms  = 550,
+	locker_step_ms = 1600,
+	swat = true, mask = true,
+	bodycam = true, objects = false, heals = false,
+	vest = true, taser = true, baton = true,
+	rifle = true, shotgun = true, smg = true, sniper = false,
+	smoke = true, shield = true, spikes = false,
+	pistol = 'de',
+},
 	md = {
 		auto_doklad_damage = true,
 	},
@@ -533,6 +605,7 @@ local default_settings = {
 	gov = {
 		anti_trivoga = true,
 		custom_zeks = true,
+		zeks_update_period = 10,
 	},
 	ins = {
 		anti_trivoga = true,
@@ -1309,6 +1382,9 @@ local MODULE = {
 		fraction_selector = 0,
 		fraction_selector_text = '',
 	},
+	TermsConfirm = { 
+		Window = imgui.new.bool() 
+	},
 	Main = {
 		Window = imgui.new.bool(),
 		theme = imgui.new.int(tonumber(settings.general.helper_theme)),
@@ -1459,13 +1535,13 @@ local MODULE = {
 		last_nick = "Неизвестный" 
 	},
 	Afind = {
-	active = false,
-	target_id = -1,
-	target_nick = "",
-	in_building = false,
-	building_since = 0,
-	last_building_msg = 0,
-	},
+		active = false,
+		target_id = -1,
+		target_nick = "",
+		in_building = false,
+		building_since = 0,
+		last_building_msg = 0,
+		},
 	Awanted = {
 		queue = {},
 		checked = {},
@@ -1473,7 +1549,10 @@ local MODULE = {
 		last_target = -1,
 		last_target_time = 0,
 		last_reset = os.time(),
-		scan_radius = 50.0
+		scan_radius = 50,
+		scan_delay = 2,
+		target_timeout = 10,
+		reset_interval = 45,
 	},
 	Patrool = {
 		Window = imgui.new.bool(),
@@ -1503,6 +1582,12 @@ local MODULE = {
 		Window = imgui.new.bool(),
 		input = imgui.new.char[256](),
 		player_id = nil
+	},
+	RPDelay = {
+		--
+	},
+	ClickerDelay = {
+		--
 	},
 	-- prison
 	ArmyPatrool = {
@@ -1788,6 +1873,9 @@ MODULE.Edgo.last_rp  = 0
 MODULE.Edgo.PACKET_APP32 = {220, 18, 14, 0, 108,97,117,110,99,104,101,100,65,112,112,124,51,50, 0,0,0,0}
 MODULE.Edgo.pending_number = nil
 MODULE.Edgo._num_token = 0
+MODULE.Edgo.last_unsu   = nil
+MODULE.Edgo.unsu_choice = imgui.new.int(0)
+MODULE.Edgo.unsu_id_buf = imgui.new.char[16]()
 MODULE.Edgo.SKIP_LIST = {
 	"Список собеседований", 
 	"Таксисты", 
@@ -1818,27 +1906,34 @@ MODULE.Edgo.ORGS = {
 	{name="Пожарный департамент", index=34, color="FF4500"},
 }
 MODULE.Edgo.ORG_TAG = {
-	['Полиция ЛС'] = 'ЛСПД', ['Полиция LS'] = 'LSPD',
-	['Полиция ЛВ'] = 'ЛВМПД', ['Полиция LV'] = 'LVMPD',
-	['Полиция СФ'] = 'СФПД', ['Полиция SF'] = 'SFPD',
-	['Полиция ВС'] = 'ВСПД', ['Полиция VC'] = 'VCPD',
-	['Областная полиция'] = 'LSSD', ['FBI'] = 'ФБР', ['ФБР'] = 'ФБР',
-	['Федеральный Исправительный Комплекс'] = 'ФИК', ['Тюрьма строгого режима ЛВ'] = 'ФИК',
-	['Армия SF'] = 'ВНГ', ['Армия LS'] = 'АНГ',
-	['TV студия'] = 'СМИ ЛС', ['TV студия ЛС'] = 'СМИ ЛС', ['TV студия LS'] = 'СМИ ЛС',
-	['TV студия ЛВ'] = 'СМИ ЛВ', ['TV студия LV'] = 'СМИ ЛВ',
-	['TV студия СФ'] = 'СМИ СФ', ['TV студия SF'] = 'СМИ СФ',
-	['TV студия ВС'] = 'СМИ ВС', ['TV студия VC'] = 'СМИ ВС',
-	['Больница ЛС'] = 'ЛСМЦ', ['Больница LS'] = 'ЛСМЦ', ['Больница ЛВ'] = 'ЛВМЦ', ['Больница LV'] = 'ЛВМЦ',
-	['Больница СФ'] = 'СФМЦ', ['Больница SF'] = 'СФМЦ', ['Больница ВС'] = 'ВСМЦ', ['Больница VC'] = 'ВСМЦ',
-	['Больница Jefferson'] = 'ДМЦ', ['Больница Джефферсон'] = 'ДМЦ',
-	['Правительство LS'] = 'Правительство', ['Правительство ЛС'] = 'Правительство', ['Правительство'] = 'Правительство',
-	['Пра-во'] = 'Правительство',
-	['Судья'] = 'Судья', ['Центр лицензирования'] = 'ГЦЛ', ['Центр Лицензирования'] = 'МРЭО',
-	['Пожарный департамент'] = 'ПД', ['Страховая компания'] = 'СТК',
-	['ФСБ'] = 'ФСБ', ['Тюрьма Строгого Режима'] = 'ФСИН',
-	['Полиция округа'] = 'ГИБДД', ['Городская полиция'] = 'ГУВД',
-	['Больница округа'] = 'МУСС', ['Городская больница'] = 'СМП',
+	['Полиция ЛС'] = 'LSPD',
+	['Полиция LV'] = 'LVMPD',
+	['Полиция SF'] = 'SFPD',
+	['Полиция VC'] = 'VCPD',
+	['RCSD'] = 'LSSD', 
+	['Тюрьма Строгого режима LV'] = 'FCC',
+	['Армия SF'] = 'VNG', 
+	['Армия LS'] = 'ANG',
+	['Radio LS'] = 'RLS', 
+	['Radio SF'] = 'RSF', 
+	['Radio LV'] = 'RLV',
+	['Больница LS'] = 'LSMC', 
+	['Больница SF'] = 'SFMC', 
+	['Больница LV'] = 'LVMC',
+	['Больница VC'] = 'VCMC',
+	['Больница Jefferson'] = 'JFMC',
+	['Правительство'] = 'GOV',
+	['Лицензеры'] = 'DTL', 
+	['Центр Лицензирования'] = 'МРЭО',
+	['Пожарный департамент'] = 'FD', 
+	['Страховая компания'] = 'IC',
+	--
+	['ФСБ'] = 'ФСБ', 
+	['Тюрьма Строгого Режима'] = 'ФСИН',
+	['Полиция округа'] = 'ГИБДД', 
+	['Городская полиция'] = 'ГУВД',
+	['Больница округа'] = 'МУСС', 
+	['Городская больница'] = 'СМП',
 	['Новостное агенство'] = 'НА',
 }
 MODULE.AutoInvite = MODULE.AutoInvite or {}
@@ -1873,6 +1968,27 @@ MODULE.Patrool.ImItemsMark = imgui.new['const char*'][#MODULE.Patrool.marks](MOD
 MODULE.Patrool.ImItemsCode = imgui.new['const char*'][#MODULE.Patrool.codes](MODULE.Patrool.codes)
 MODULE.Post.ImItemsCode = imgui.new['const char*'][#MODULE.Post.codes](MODULE.Post.codes)
 MODULE.Binder.ImItems = imgui.new['const char*'][#MODULE.Binder.item_list](MODULE.Binder.item_list)
+local BIND_DAYS = { [0]="Воскресенье", [1]="Понедельник", [2]="Вторник", [3]="Среда", [4]="Четверг", [5]="Пятница", [6]="Суббота" }
+local BIND_MONTHS = { "Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь" }
+local BIND_MONTHS_GEN = { "января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря" }
+local function get_greeting_word()
+	local h = tonumber(os.date('%H'))
+	if h >= 5 and h < 12 then return 'Доброе утро'
+	elseif h >= 12 and h < 18 then return 'Добрый день'
+	elseif h >= 18 and h < 23 then return 'Добрый вечер'
+	else return 'Доброй ночи' end
+end
+local function get_cardinal_word()
+	local dirs = { 'север','северо-восток','восток','юго-восток','юг','юго-запад','запад','северо-запад' }
+	local heading = getCharHeading(PLAYER_PED) or 0
+	local idx = math.floor(((heading % 360) / 45) + 0.5) % 8 + 1
+	return dirs[idx]
+end
+local function cfg_tag(key, fallback)
+	local v = settings.general[key]
+	if v == nil or v == '' then return fallback or '[тэг не задан]' end
+	return v
+end
 MODULE.Binder.tags = {
     {
         key = "my_id",
@@ -1927,6 +2043,24 @@ MODULE.Binder.tags = {
 		end
 	},
 	{
+		key = "my_name",
+		description = "Ваше имя",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			return (modules.player.data.nick:match('^(.-)_') or modules.player.data.nick)
+		end
+	},
+	{
+		key = "my_surname",
+		description = "Ваша фамилия",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			return (modules.player.data.nick:match('_(.+)$') or '')
+		end
+	},
+	{
 		key = "sex",
 		description = "Символ 'а' если женский пол",
 		category = "Игрок",
@@ -1965,6 +2099,12 @@ MODULE.Binder.tags = {
 		func = function() return modules.player.data.fraction_tag end
 	},
 	-- Общие
+	{ 
+		key = "get_greeting", 
+		description = "Приветствие по времени суток", 
+		category = "Общее", 
+		mode = "all",
+		func = function() return get_greeting_word() end },
 	{
 		key = "get_nick({id})",
 		description = "Никнейм игрока из ID",
@@ -1987,6 +2127,88 @@ MODULE.Binder.tags = {
 		func = function() return '' end
 	},
 	{
+		key = "get_cardinal",
+		description = "Сторона света по направлению взгляда",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return get_cardinal_word()
+		end
+	},
+	-- Время/дата
+	{
+		key = "get_dd",
+		description = "День (число)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%d')
+		end
+	},
+	{
+		key = "get_mm",
+		description = "Месяц (число)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%m')
+		end
+	},
+	{
+		key = "get_YYYY",
+		description = "Год (4 цифры)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%Y')
+		end
+	},
+	{
+		key = "get_YY",
+		description = "Год (2 цифры)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%y')
+		end
+	},
+	{
+		key = "get_H",
+		description = "Часы",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%H')
+		end
+	},
+	{
+		key = "get_M",
+		description = "Минуты",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%M')
+		end
+	},
+	{
+		key = "get_S",
+		description = "Секунды",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%S')
+		end
+	},
+	{
+		key = "get_datetime",
+		description = "Дата и время вместе",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%d %m %Y, %H:%M:%S')
+		end
+	},
+	{
 		key = "get_time",
 		description = "Текущее время",
 		category = "Общее",
@@ -1999,6 +2221,51 @@ MODULE.Binder.tags = {
 		category = "Общее",
 		mode = "all",
 		func = function() return os.date("%d.%m.%Y") end
+	},
+	{
+		key = "get_time_hm",
+		description = "Текущее время ЧЧ:ММ",
+		category = "Общее",
+		mode = "all",
+		func = function() return os.date("%H:%M") end
+	},
+	{
+		key = "get_day_week",
+		description = "Сегодняшний день недели",
+		category = "Общее",
+		mode = "all",
+		func = function() return BIND_DAYS[tonumber(os.date("%w"))] or os.date("%A") end
+	},
+	{
+		key = "get_month_name",
+		description = "Текущий месяц (именительный)",
+		category = "Общее",
+		mode = "all",
+		func = function() return BIND_MONTHS[tonumber(os.date("%m"))] or os.date("%B") end
+	},
+	{
+		key = "get_date_human",
+		description = "Дата словами: 06 августа 2026",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			local m = tonumber(os.date("%m"))
+			return os.date("%d ") .. (BIND_MONTHS_GEN[m] or "") .. os.date(" %Y")
+		end
+	},
+	{
+		key = "get_server_number",
+		description = "Номер текущего сервера",
+		category = "Общее",
+		mode = "all",
+		func = function() return getServerNumber() end
+	},
+	{
+		key = "get_server_name",
+		description = "Название текущего сервера",
+		category = "Общее",
+		mode = "all",
+		func = function() return sampGetCurrentServerName() end
 	},
 	{
 		key = "get_rank",
@@ -2119,7 +2386,7 @@ MODULE.Binder.tags = {
 					return (isCarSirenOn(car) and 'Выключи' or 'Врубай') .. ' мигалки!'
 				end
 			else
-				return "Кхм"
+				return "Нету"
 			end
 		end
 	},
@@ -2788,7 +3055,7 @@ end
 function cruise_deactivate(reason)
     local cc = MODULE.CruiseControl
     local was_active = cc.active or cc.pursuit_active or cc.wait_point or cc.driving
- 
+
 	cc.active           = false
     cc.pursuit_active   = false
     cc.pursuit_target_id = -1
@@ -2797,18 +3064,19 @@ function cruise_deactivate(reason)
     cc.stuck_t          = 0
     cc.last_drive_set   = 0
     cc.last_deactivate_time = os.clock()
-    cc.hud_speed      = 0
-    cc.hud_start_dist = 0
-    cc.hud_last_t     = 0
+    cc.hud_speed      	= 0
+    cc.hud_start_dist 	= 0
+    cc.hud_last_t     	= 0
+    cc.escape_phase 	= 0
+    cc.phase_start  	= 0
 
+    if cc.point then cc.last_auto_point = { x = cc.point.x, y = cc.point.y } end
     pcall(clearCharTasks, PLAYER_PED)
     if isCharInAnyCar(PLAYER_PED) then
         local ok, car = pcall(storeCarCharIsInNoSave, PLAYER_PED)
         if ok and car then pcall(taskWarpCharIntoCarAsDriver, PLAYER_PED, car) end
     end
-    if was_active and reason and reason ~= '' then
-        sampAddChatMessage('[Arizona Helper] {ffffff} ' .. reason, message_color)
-    end
+    if was_active and reason and reason ~= '' then sampAddChatMessage('[Arizona Helper] {ffffff} ' .. reason, message_color) end
     return was_active
 end
 ------------------------------------------------ Variables ---------------------------------------
@@ -2965,11 +3233,50 @@ function main()
 			MODULE.Edgo.say('/me загрузил'..p..' образец голоса в ЭБГО и запустил'..p..' идентификацию.')
 		elseif mode == 'voice' then
 			MODULE.Edgo.say('/me загрузил'..p..' в ЭБГО сохранённый образец голоса и запустил'..p..' поиск совпадений по базе.')
+		elseif mode == 'unsu' then
+			MODULE.Edgo.say('/me запросил'..p..' у диспетчера данные о снятии розыска с гражданина и, получив их, запустил'..p..' пробив по базе.')
 		elseif offline then
 			MODULE.Edgo.say('/me вручную ввёл'..p..' в систему имеющиеся данные и запросил'..p..' сверку по архиву ЭБГО.')
 		else
 			MODULE.Edgo.say('/me открыл'..p..' в системе ЭБГО раздел сотрудников организаций и запустил'..p..' поиск по базе.')
 		end
+	end
+	function MODULE.Edgo.start_unsu(arg)
+		if MODULE.Edgo.badge.active or MODULE.Binder.state.isActive then
+			sampAddChatMessage('[Arizona Helper] {ffffff}Пробив уже идёт, дождитесь завершения.', message_color); play_sound(); return
+		end
+		local mode = 'unsu'
+		local d = { online = false, id = -1 }
+		if type(arg) == 'number' then
+			if sampIsPlayerConnected(arg) then d.online = true; d.id = arg end
+		else
+			for id = 0, 999 do
+				if sampIsPlayerConnected(id) and sampGetPlayerNickname(id) == arg then
+					d.online = true; d.id = id; break
+				end
+			end
+		end
+		if not d.online then
+			sampAddChatMessage('[Arizona Helper] {ffffff}Игрок не в сети. Используйте Offline-пробив с ручным вводом данных.', message_color); play_sound()
+			return
+		end
+		local who = sampGetPlayerNickname(d.id) .. '[' .. d.id .. ']'
+		MODULE.Edgo.Window[0] = false
+		MODULE.Binder.state.isActive = true
+		MODULE.Edgo.rp_queue = {}; MODULE.Edgo.cmd_queue = {}; MODULE.Edgo.last_send = 0
+		local b = MODULE.Edgo.badge
+		b.active = true; b.closing = false; b.mode = mode
+		b.target_id = d.id; b.match_nick = sampGetPlayerNickname(d.id); b.display_name = who
+		b.target_color = ("%06X"):format(bit.band(sampGetPlayerColor(d.id), 0xFFFFFF))
+		b.order = nil; b.org_pos = 0
+		b.full_org_name = "..."; b.result_org = "..."
+		b.found = false; b.result = nil
+		b.phone_opened = false
+		b.use_members = edgo_is_fbi()
+		b.last_active_time = os.clock(); b.retry_count = 0; b.phase = 'leaders'
+		sampAddChatMessage('[Arizona Helper] {ffffff}ЭБГО: пробив по снятию розыска ' .. message_color_hex .. who .. '{ffffff}.', message_color)
+		MODULE.Edgo.rp_start(mode, who, false)
+		MODULE.Edgo.send_cmd('/leaders')
 	end
 	function MODULE.Edgo.emit_result(mode, who, r, org_raw)
 		MODULE.Edgo.close_phone()
@@ -3309,8 +3616,8 @@ function main()
 		b.phone_opened = false
 		b.use_members = edgo_is_fbi()
 		b.last_active_time = os.clock(); b.retry_count = 0; b.phase = 'leaders'
-		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} запущен.', message_color)
-		sampAddChatMessage('[Arizona Helper] {ffffff}Происходит поиск организации гражданина ' .. message_color_hex .. who .. '{ffffff}. Может занять некоторое время.', message_color)
+		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '[' .. b.target_id .. ']{ffffff} запущен.', message_color)
+		sampAddChatMessage('[Arizona Helper] {ffffff}Происходит поиск организации гражданина ' .. message_color_hex .. who .. '[' .. b.target_id .. ']{ffffff}. Может занять некоторое время.', message_color)
 		MODULE.Edgo.rp_start(mode, who, false)
 		MODULE.Edgo.send_cmd('/leaders')
 	end
@@ -3348,7 +3655,7 @@ function main()
 		local who = MODULE.Edgo.ru_name(d)
 		MODULE.Edgo.Window[0] = false
 		MODULE.Binder.state.isActive = true
-		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО: история имени для ' .. message_color_hex .. who .. '{ffffff}.', message_color)
+		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО: история имени для ' .. message_color_hex .. who .. '[' .. b.target_id .. ']{ffffff}.', message_color)
 		local H = MODULE.Edgo.history
 		H.active = true; H.finished = false; H.got = nil
 		H.waiting_result = false
@@ -3468,7 +3775,7 @@ function main()
 					if ok and c then bad = not isCarEngineOn(c) end
 				end
 				if bad then
-					cruise_deactivate('потеря контроля над т/с, круиз-контроль отключён.')
+					cruise_deactivate('Потеря контроля над т/с, круиз-контроль отключён.')
 				end
 			end
 		end
@@ -3516,7 +3823,7 @@ function main()
 						wait(delay_ms)
 						if isCharInAnyCar(PLAYER_PED) and isCarUpsidedown(storeCarCharIsInNoSave(PLAYER_PED)) then
 							sampSendChat("/domkrat")
-							sampAddChatMessage('[Arizona Helper] {ffffff}Автофлип: использую домкрат...', message_color)
+							sampAddChatMessage('[Arizona Helper] {ffffff}Использую домкрат...', message_color)
 						end
 						MODULE.AutoFlipDomkrat.cooldown = false
 					end
@@ -3527,7 +3834,7 @@ function main()
 
 	lua_thread.create(function()
 		while true do
-			wait(10)
+			wait(settings.general.clicker_delay)
 			if settings.general.auto_clicker and MODULE.AutoClicker.active then
 				local command = "clickMinigame"
 				local bs = raknetNewBitStream()
@@ -3598,10 +3905,10 @@ function main()
 			end
 		end
 	end)
-
 	lua_thread.create(function()
 		while true do
-			wait(3000)
+			local period = settings.general.members_update_period or 3
+			wait(period * 1000)
 			if MODULE.Members and MODULE.Members.Window[0]
 			   and settings.general.auto_update_members
 			   and MODULE.Members.upd and MODULE.Members.upd.check
@@ -3630,7 +3937,7 @@ function main()
 							if res and doesCharExist(handle) then
 								local px, py, pz = getCharCoordinates(handle)
 								local dist = getDistanceBetweenCoords3d(my_x, my_y, my_z, px, py, pz)
-								if dist <= MODULE.Awanted.scan_radius then
+								if dist <= (settings.mj.scan_radius or 50) then
 									table.insert(MODULE.Awanted.queue, id)
 									MODULE.Awanted.checked[id] = true
 								end
@@ -3643,7 +3950,7 @@ function main()
 				end
 				if MODULE.Awanted.last_target ~= -1
 				   and MODULE.Awanted.last_target_time
-				   and os.time() - MODULE.Awanted.last_target_time > 10 then
+				   and os.time() - MODULE.Awanted.last_target_time > (settings.mj.target_timeout or 10) then
 					MODULE.Awanted.last_target = -1
 				end
 				if #MODULE.Awanted.queue > 0 and not MODULE.Awanted.scanning then
@@ -3653,11 +3960,11 @@ function main()
 						MODULE.Awanted.last_target = target_id
 						MODULE.Awanted.last_target_time = os.time()
 						sampSendChat('/z ' .. target_id)
-						wait(2000)
+						wait((settings.mj.scan_delay or 2) * 1000)
 						MODULE.Awanted.scanning = false
 					end
 				end
-				if os.time() - (MODULE.Awanted.last_reset or 0) >= 45 then
+				if os.time() - (MODULE.Awanted.last_reset or 0) >= (settings.mj.reset_interval or 45) then
 					MODULE.Awanted.checked = {}
 					MODULE.Awanted.last_reset = os.time()
 				end
@@ -3673,7 +3980,7 @@ function main()
 		while true do
 			wait(1000)
 			if settings.mj.auto_update_wanteds and MODULE.Wanted.updwanteds.check and not MODULE.Wanted.checker then
-				local period  = 10
+				local period  = settings.mj.wanted_update_period
 				local max_lvl = isMode('fbi') and 7 or 6
 				local last = MODULE.Wanted.updwanteds.last_time
 				if not last then
@@ -3684,16 +3991,20 @@ function main()
 				if elapsed >= period then
 					MODULE.Wanted.checker = true
 					MODULE.Wanted.new = {}
+					MODULE.Wanted.scan_cancel = false
 					MODULE.Wanted.updwanteds.last_time = os.time()
 					for i = max_lvl, 1, -1 do
+						if MODULE.Wanted.scan_cancel then break end
 						sampSendChat('/wanted ' .. i)
 						wait(1000)
 					end
-					wait((period - max_lvl) * 1000)
 					MODULE.Wanted.checker = false
-					MODULE.Wanted.all = MODULE.Wanted.new
-					if #MODULE.Wanted.new == 0 then
-						MODULE.Wanted.Window[0] = false
+					if not MODULE.Wanted.scan_cancel then
+						wait((period - max_lvl) * 1000)
+						MODULE.Wanted.all = MODULE.Wanted.new
+						if #MODULE.Wanted.new == 0 then
+							MODULE.Wanted.Window[0] = false
+						end
 					end
 				end
 			end
@@ -3853,7 +4164,8 @@ function main()
 			end
         end
         local cc = MODULE.CruiseControl
-        local _speed   = settings.general.cruise_speed   or 28
+        local SPEED_KMH_TO_GAME = 0.375
+        local _speed = (settings.general.cruise_speed or 28) * SPEED_KMH_TO_GAME
         local _ride    = settings.general.cruise_ride    or 0
         local _drive   = settings.general.cruise_drive   or 2
         local _radius  = settings.general.cruise_radius  or 15
@@ -3867,10 +4179,15 @@ function main()
                 if isCarEngineOn(_car) and getDriverOfCar(_car) == PLAYER_PED then
                     local _ok, _bx, _by, _bz = getTargetBlipCoordinates()
                     if _ok and not locateCharInCar2d(PLAYER_PED, _bx, _by, _radius, _radius, false) then
-                        cc.point = {x = _bx, y = _by, z = _bz}
-                        cc.active = true; cc.driving = false; cc.last_drive_set = 0; cc.stuck_t = 0
-                        cc.drive_type = _drive
-                        sampAddChatMessage('[Arizona Helper] {ffffff}Авто-старт к метке на карте.', message_color)
+                        local lap = cc.last_auto_point
+                        if not lap or math.abs(lap.x - _bx) > 1.0 or math.abs(lap.y - _by) > 1.0 then
+                            cc.last_auto_point = { x = _bx, y = _by }
+                            cc.point = {x = _bx, y = _by, z = _bz}
+                            cc.active = true; cc.driving = false; cc.last_drive_set = 0; cc.stuck_t = 0
+                            cc.drive_type = _drive
+                            cc.escape_phase = 0; cc.phase_start = 0; cc._aggr_tried = false
+                            sampAddChatMessage('[Arizona Helper] {ffffff}Авто-старт к метке на карте.', message_color)
+                        end
                     end
                 end
             end
@@ -3887,6 +4204,9 @@ function main()
                     sampSendChat('/me включает в своём т/с адаптивный круиз-контроль и настраивает GPS-навигатор.')
                     wait(1500)
                     sampSendChat('/do На экране загорается надпись "GPS-маршрут успешно проложен, можно ехать".')
+					cc.escape_phase = 0; cc.phase_start = 0; cc._aggr_tried = false
+                    cc.drive_type = settings.general.cruise_drive or 2
+                    cc.active = true
                     cc.active = true
                     wait(2000)
                     sampSendChat('/do ' .. MODULE.Binder.tag.my_ru_nick() .. ' держит руки на руле, круиз-контроль поддерживает скорость т/с.')
@@ -3896,13 +4216,13 @@ function main()
         if cc.active then
             local car = storeCarCharIsInNoSave(PLAYER_PED)
             if not isCharInAnyCar(PLAYER_PED) then
-                cruise_deactivate('вы покинули транспортное средство, движение остановлено.')
+                cruise_deactivate('Вы покинули транспортное средство, движение остановлено.')
             elseif not isCarEngineOn(car) then
-                cruise_deactivate('двигатель заглушён, движение остановлено.')
+                cruise_deactivate('Двигатель заглушён, движение остановлено.')
             elseif cc.pursuit_active then
                 local ok, bx, by, bz = getTargetBlipCoordinates()
                 if not ok then
-                    cruise_deactivate('метка цели потеряна, преследование остановлено.')
+                    cruise_deactivate('Метка цели потеряна, преследование остановлено.')
                 else
                     cc.point = {x = bx, y = by, z = bz}
                     local now = os.clock()
@@ -3917,19 +4237,40 @@ function main()
             else
                 local now = os.clock()
                 local cx, cy, cz = getCarCoordinates(car)
-                if cc.stuck_t == 0 or getDistanceBetweenCoords3d(cx, cy, cz, cc.stuck_x, cc.stuck_y, cc.stuck_z) > 1.0 then
-                    cc.stuck_x, cc.stuck_y, cc.stuck_z = cx, cy, cz; cc.stuck_t = now
-                elseif cc.driving and (now - cc.stuck_t) > _stuck then
-                    if _aggr_on and cc.drive_type ~= 7 then
-                        cc.drive_type = 7; cc.driving = false; cc.stuck_t = now
-                        sampAddChatMessage('[Arizona Helper] {ffffff}Перестраиваю маршрут (плотный трафик).', message_color)
-                    else
-                        cruise_deactivate('не удалось проложить маршрут, движение остановлено.')
+                local moved = getDistanceBetweenCoords3d(cx, cy, cz, cc.stuck_x or 0, cc.stuck_y or 0, cc.stuck_z or 0)
+                if moved > 1.0 then
+                    cc.stuck_x, cc.stuck_y, cc.stuck_z = cx, cy, cz
+                    cc.stuck_t = now
+                    cc.escape_phase = 0
+                end
+                cc.stuck_t = cc.stuck_t or now
+                cc.escape_phase = cc.escape_phase or 0
+                local stuck_for = now - cc.stuck_t
+                local phase_for = now - (cc.phase_start or cc.stuck_t)
+                local in_escape = (cc.escape_phase ~= 0)
+                local use_ride  = _ride
+                local use_speed = (cc.escape_phase == 1) and (_speed * 0.5) or _speed
+                local use_drive = in_escape and 7 or cc.drive_type
+                if cc.driving and stuck_for > _stuck then
+                    if cc.escape_phase == 0 then
+                        cc.escape_phase = 1; cc.phase_start = now; cc.driving = false
+                        sampAddChatMessage('[Arizona Helper] {ffffff}Пытаюсь выбраться из препятствия...', message_color)
+                    elseif cc.escape_phase == 1 and phase_for > 3.0 then
+                        if _aggr_on then
+                            cc.escape_phase = 2; cc.phase_start = now; cc.drive_type = 7; cc.driving = false
+                            sampAddChatMessage('[Arizona Helper] {ffffff}Перестраиваю маршрут (плотный трафик).', message_color)
+                        else
+                            cruise_deactivate('Не удалось проложить маршрут, движение остановлено.')
+                            return
+                        end
+                    elseif cc.escape_phase == 2 and phase_for > _stuck then
+                        cruise_deactivate('Не удалось проложить маршрут, движение остановлено.')
                         return
                     end
                 end
-                if not cc.driving then
-                    taskCarDriveToCoord(PLAYER_PED, car, cc.point.x, cc.point.y, cc.point.z, _speed, _ride, nil, cc.drive_type)
+                local upd_period = math.max(0.5, 1.5 - (_speed - 7) * 0.04)
+                if not cc.driving or (now - (cc.last_drive_set or 0)) > upd_period then
+                    taskCarDriveToCoord(PLAYER_PED, car, cc.point.x, cc.point.y, cc.point.z, use_speed, use_ride, nil, use_drive)
                     cc.driving = true; cc.last_drive_set = now
                 end
             end
@@ -4018,10 +4359,10 @@ function run_command_lines(chat_cmd, cmd_arg, cmd_text, cmd_waiting, args)
 						if not MODULE.Binder.state.isStop then sampAddChatMessage('[Arizona Helper] {ffffff}Продолжаю отыгровку команды /' .. chat_cmd, message_color) end
 					elseif line:find('{wait%((%d+)%)}') then
 						wait(tonumber(string.match(line, '{wait%((%d+)%)}')))
-					elseif line == '{show_medcard_menu}' then ui_action = true; MODULE.MedCard.player_id = tonumber(id); MODULE.MedCard.Window[0] = true; while MODULE.MedCard.Window[0] do wait(0) end
-					elseif line == '{show_recept_menu}' then ui_action = true; MODULE.Recept.player_id = tonumber(id); MODULE.Recept.Window[0] = true; while MODULE.Recept.Window[0] do wait(0) end
-					elseif line == '{show_ant_menu}' then ui_action = true; MODULE.Antibiotik.player_id = tonumber(id); MODULE.Antibiotik.Window[0] = true; while MODULE.Antibiotik.Window[0] do wait(0) end
-					elseif line == '{show_rank_menu}' then ui_action = true; MODULE.GiveRank.player_id = tonumber(id); MODULE.GiveRank.Window[0] = true; while MODULE.GiveRank.Window[0] do wait(0) end
+					elseif line == '{show_medcard_menu}' then ui_action = true; MODULE.MedCard.player_id = tonumber(id); MODULE.MedCard.cancel = false; MODULE.MedCard.Window[0] = true; while MODULE.MedCard.Window[0] do wait(0) end; if MODULE.MedCard.cancel then MODULE.MedCard.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{show_recept_menu}' then ui_action = true; MODULE.Recept.player_id = tonumber(id); MODULE.Recept.cancel = false; MODULE.Recept.Window[0] = true; while MODULE.Recept.Window[0] do wait(0) end; if MODULE.Recept.cancel then MODULE.Recept.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{show_ant_menu}' then ui_action = true; MODULE.Antibiotik.player_id = tonumber(id); MODULE.Antibiotik.cancel = false; MODULE.Antibiotik.Window[0] = true; while MODULE.Antibiotik.Window[0] do wait(0) end; if MODULE.Antibiotik.cancel then MODULE.Antibiotik.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{show_rank_menu}' then ui_action = true; MODULE.GiveRank.player_id = tonumber(id); MODULE.GiveRank.cancel = false; MODULE.GiveRank.Window[0] = true; while MODULE.GiveRank.Window[0] do wait(0) end; if MODULE.GiveRank.cancel then MODULE.GiveRank.cancel = false; MODULE.Binder.state.isStop = true end
 					elseif line == '{lmenu_vc_vize}' then MODULE.LeadTools.vc_vize.player_id = tonumber(id); MODULE.LeadTools.vc_vize.bool = true; sampSendChat("/lmenu")
 					elseif line == '{give_platoon}' then MODULE.LeadTools.platoon.player_id = tonumber(id); MODULE.LeadTools.platoon.check = true; sampSendChat("/platoon")
 					elseif line:find('%{sellrank%((%d+)%)%}') then MODULE.LeadTools.sell_rank.player_id = tonumber(string.match(line, '(%d+)')); MODULE.LeadTools.sell_rank.checker = true; sampSendChat('/lmenu')
@@ -4313,7 +4654,43 @@ function initialize_commands()
 						else sampSendChat(line); local nxt = segs[i + 1]; local nxt_is_wait = nxt and nxt:match("^%{wait%((%d+)%)%}$"); if not nxt_is_wait then wait(waiting_ms) end end
 					end
 				end
-                while still_mine() and sampIsPlayerConnected(my_id) do sampSendChat('/find ' .. my_id); wait(3000) end
+                local function afind_get_distance_to(tid)
+                    if not sampIsPlayerConnected(tid) then return nil end
+                    local mx, my, mz = getCharCoordinates(PLAYER_PED)
+                    for _, h in pairs(getAllChars()) do
+                        if doesCharExist(h) then
+                            local ok_id, hid = sampGetPlayerIdByCharHandle(h)
+                            if ok_id and tonumber(hid) == tid then
+                                local tx, ty, tz = getCharCoordinates(h)
+                                return getDistanceBetweenCoords3d(mx, my, mz, tx, ty, tz)
+                            end
+                        end
+                    end
+                    return nil
+                end
+                while still_mine() and sampIsPlayerConnected(my_id) do
+                    sampSendChat('/find ' .. my_id)
+                    local cd_ms = math.floor((settings.mj.afind_find_cd or 3) * 1000)
+                    if cd_ms < 500 then cd_ms = 500 end
+                    local waited = 0
+                    local approached = false
+                    while waited < cd_ms and still_mine() do
+                        if settings.mj.afind_auto_stop ~= false then
+                            local d = afind_get_distance_to(my_id)
+                            if d and d <= (settings.mj.afind_stop_radius or 10) then
+                                approached = true
+                                break
+                            end
+                        end
+                        wait(100)
+                        waited = waited + 100
+                    end
+                    if approached then
+                        sampAddChatMessage('[Arizona Helper] {ffffff}Вы приблизились к цели ' .. message_color_hex .. (MODULE.Afind.target_nick or '') .. '[' .. tostring(my_id) .. ']{ffffff}. Авто-поиск остановлен.', message_color)
+                        afind_active = false; MODULE.Afind.active = false; MODULE.Afind.in_building = false; afind_target_id = -1
+                        break
+                    end
+                end
                 if afind_target_id == my_id then
                     if afind_active then sampAddChatMessage('[Arizona Helper] {ffffff}Цель отключилась от сервера. Авто-поиск остановлен.', message_color) end
                     afind_active = false; MODULE.Afind.active = false; MODULE.Afind.in_building = false; afind_target_id = -1
@@ -4328,6 +4705,11 @@ function initialize_commands()
             return _orig_sampUnregisterChatCommand(name)
         end
         CUSTOM_CMD_HANDLERS.wanted = function(arg)
+            if MODULE.Wanted.checker then
+                sampAddChatMessage('[Arizona Helper] {ffffff}Команда ' .. message_color_hex .. '/' .. get_custom_cmd('wanted') .. ' {ffffff}заблокирована во время сканирования ' .. message_color_hex .. '/' .. get_custom_cmd('wanteds') .. '{ffffff}. Дождитесь окончания сканирования.', message_color)
+                play_sound()
+                return
+            end
             sampSendChat('/wanted ' .. arg)
             sampAddChatMessage('[Arizona Helper] {ffffff}Рекомендуется использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('wanteds') .. ' {ffffff}для автоматического сканирования всего списка розыска.', message_color)
         end
@@ -4335,15 +4717,20 @@ function initialize_commands()
         CUSTOM_CMD_HANDLERS.wanteds = function(arg)
             if MODULE.Wanted.Window[0] or MODULE.Wanted.updwanteds.stop then
                 MODULE.Wanted.Window[0] = false; MODULE.Wanted.checker = false; MODULE.Wanted.updwanteds.stop = false; MODULE.Wanted.updwanteds.check = false
+                MODULE.Wanted.scan_cancel = true
                 sampAddChatMessage('[Arizona Helper] {ffffff}Меню списка преступников закрыто!', message_color)
             elseif not MODULE.Wanted.checker then
                 lua_thread.create(function()
                     local max_lvl = isMode('fbi') and 7 or 6
                     sampAddChatMessage('[Arizona Helper] {ffffff}Сканирование /wanted, ожидайте ' .. message_color_hex .. max_lvl .. ' {ffffff}секунд...', message_color)
                     show_notify('info', 'Arizona Helper', "Сканирование /wanted...", 2500)
-                    MODULE.Wanted.new = {}; MODULE.Wanted.checker = true
-                    for i = max_lvl, 1, -1 do printStringNow("CHECK WANTED " .. i, 1000); sampSendChat('/wanted ' .. i); wait(1000) end
+                    MODULE.Wanted.new = {}; MODULE.Wanted.checker = true; MODULE.Wanted.scan_cancel = false
+                    for i = max_lvl, 1, -1 do
+                        if MODULE.Wanted.scan_cancel then break end
+                        printStringNow("CHECK WANTED " .. i, 1000); sampSendChat('/wanted ' .. i); wait(1000)
+                    end
                     MODULE.Wanted.checker = false
+                    if MODULE.Wanted.scan_cancel then return end
                     if #MODULE.Wanted.new == 0 then
                         sampAddChatMessage('[Arizona Helper] {ffffff}Сейчас на сервере нету игроков в розыске!', message_color)
                     else
@@ -4397,14 +4784,14 @@ function initialize_commands()
                     MODULE.Zeks.Window[0] = false; MODULE.Zeks.checker = false; MODULE.Zeks.updzeks.stop = false; MODULE.Zeks.updzeks.check = false
                     sampAddChatMessage('[Arizona Helper] {ffffff}Меню списка заключенных закрыто!', message_color)
                 elseif not MODULE.Zeks.checker then
-                    sampAddChatMessage('[Arizona Helper] {ffffff}Сканирование /zeks...', message_color)
-                    show_notify('info', 'Arizona Helper', "Сканирование /zeks...", 2500)
+                    sampAddChatMessage('[Arizona Helper] {ffffff}Сканирование /' .. get_custom_cmd('zeks') .. '...', message_color)
+                    show_notify('info', 'Arizona Helper', "Сканирование /' .. get_custom_cmd('zeks') .. '...", 2500)
                     MODULE.Zeks.new = {}; MODULE.Zeks.checker = true; sampSendChat('/zeks')
                 else
                     sampAddChatMessage('[Arizona Helper] {ffffff}Дождитесь завершения сканирования!', message_color); play_sound()
                 end
             else
-                sampAddChatMessage('[Arizona Helper] {ffffff}Вы можете включить кастомное меню /zeks с авто-обновлением в ' .. message_color_hex .. '/helper - Функции Право', message_color)
+                sampAddChatMessage('[Arizona Helper] {ffffff}Вы можете включить кастомное меню /' .. get_custom_cmd('zeks') .. ' с авто-обновлением в ' .. message_color_hex .. '/helper - Функции Право', message_color)
                 sampSendChat('/zeks')
             end
         end
@@ -5238,19 +5625,19 @@ function downloadFileFromUrlToPath(url, path)
 			thisScript():reload()
 		elseif download_file == 'smart_uk' then
 			sampAddChatMessage('[Arizona Helper] {ffffff}Загрузка системы умной выдачи розыска для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
-			sampAddChatMessage('[Arizona Helper] {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/sum [ID игрока]', message_color)
+			sampAddChatMessage('[Arizona Helper] {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('sum') .. ' [ID игрока]', message_color)
 			MODULE.Main.Window[0] = false
 			play_sound()
 			load_module('smart_uk')
 		elseif download_file == 'smart_pdd' then
 			sampAddChatMessage('[Arizona Helper] {ffffff}Загрузка системы умной выдачи штрафов для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
-			sampAddChatMessage('[Arizona Helper] {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/tsm [ID игрока]', message_color)
+			sampAddChatMessage('[Arizona Helper] {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('tsm') .. ' [ID игрока]', message_color)
 			MODULE.Main.Window[0] = false
 			play_sound()
 			load_module('smart_pdd')
 		elseif download_file == 'smart_rptp' then
 			sampAddChatMessage('[Arizona Helper] {ffffff}Загрузка системы умного срока для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
-			sampAddChatMessage('[Arizona Helper] {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/pum [ID игрока]', message_color)
+			sampAddChatMessage('[Arizona Helper] {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('pum') .. ' [ID игрока]', message_color)
 			MODULE.Main.Window[0] = false
 			play_sound()
 			load_module('smart_rptp')
@@ -5457,8 +5844,7 @@ function check_update(manual)
 			local uStatus      = statusInfo.text
 			local status_color = statusInfo.color
 			local is_emergency = (uStatusKey == "emergency")
-			local show_update  = settings.general.updater or is_emergency or (manual == true)
-			if uVer ~= "" and uUrl ~= "" and thisScript().version ~= uVer and show_update then
+			if uVer ~= "" and uUrl ~= "" and thisScript().version ~= uVer then
 				print('Доступно обновление! | Локальная: ' .. thisScript().version .. ' | В облаке: ' .. uVer .. ' | Статус: ' .. uStatus)
 				MODULE.Update.is_need_update = true
 				MODULE.Update.url     = uUrl
@@ -6212,9 +6598,9 @@ function sampev.onServerMessage(color, text)
 	end
 	local debris_triggers = {
 		{
+			key = 'pickup',
 			pattern = 'Вы подобрали обломок, теперь вам нужно отнести его и',
 			msg = 'Вы подобрали завал, теперь вам нужно отнести его в общую кучу!',
-			delay = 0,
 			rps = {
 				'/me нагнул{r} к лежащему обломку, примерил{p} хват и рывком вздёрнул{p} его с земли.',
 				'/me упёр{p} ладони в края обломка и, напрягши руки, оторвал{p} его от щебня.',
@@ -6222,8 +6608,8 @@ function sampev.onServerMessage(color, text)
 				'/me обхватил{p} обломок поудобнее и, упершись ногами, взвалил{p} его на плечо.',
 				'/me подцепил{p} обломок снизу и, выпрямив спину, прижал{p} его к груди.',
 				'/me раскачал{p} обломок из стороны в сторону и резким движением вырвал{p} его из завала.',
-				'/me наклонил{r} над обломком, ухватил{p} его обеими руками и с натугой поставил{p} вертикально.',
-				'/me упёр{p} ногу в груду щебня, схватил{p} обломок и, выдохнув, рывком поднял{p} его.',
+				'/me наклонил{p} над обломком, ухватил{p} его обеими руками и с натугой поставил{p} вертикально.',
+				'/me упер{p} ногу в груду щебня, схватил{p} обломок и, выдохнув, рывком поднял{p} его.',
 				'/me примерил{p} обломок на вес, перехватил{p} его покрепче и вздёрнул{p} с земли.',
 				'/me просунул{p} руки под обломок и, упершись коленом, с усилием взвалил{p} его на себя.',
 				'/me заш{g} сбоку, поддел{p} обломок пальцами и рывком оторвал{p} его от земли.',
@@ -6231,9 +6617,9 @@ function sampev.onServerMessage(color, text)
 			}
 		},
 		{
+			key = 'drop', 
 			pattern = 'Вы выбросили завал.',
 			msg = 'Вы положили завал в общую кучу, теперь отправляйтесь к следующему завалу.',
-			delay = 1200,
 			rps = {
 				'/me с размаху метнул{p} обломок вперёд, и тот с грохотом врезался в груду завалов.',
 				'/me толкнул{p} обломок от себя обеими руками, отправив его с треском на кучу.',
@@ -6250,9 +6636,9 @@ function sampev.onServerMessage(color, text)
 			}
 		},
 		{
+			key = 'place', 
 			pattern = 'Вы положили обломок',
 			msg = 'Вы положили завал в общую кучу, теперь отправляйтесь к следующему завалу.',
-			delay = 1200,
 			rps = {
 				'/me осторожно опустил{p} обломок на кучу, подбирая место поустойчивее.',
 				'/me пристроил{p} обломок в углубление между кусками завала и медленно отпустил{p} его.',
@@ -6291,6 +6677,24 @@ function sampev.onServerMessage(color, text)
 			end
 		end
 	end
+
+	if isMode('police') or isMode('fbi') then
+		local clean = text:gsub('{%x%x%x%x%x%x}',''):gsub('{%x%x%x%x%x%x%x%x}',''):gsub('{%x%x%x}','')
+		local officer = clean:match('([%w_]+_%w+) очистил розыск')
+			or clean:match('([%w_]+_%w+) снял розыск')
+		local target, tid = clean:match('розыск ([%w_]+_%w+)%[(%d+)%]')
+		if officer and officer ~= MODULE.Binder.tag.my_nick() then
+			MODULE.Edgo.last_unsu = { officer = officer, target = target,
+				tid = tid and tonumber(tid) or nil, time = os.time() }
+			show_notify('warning', 'Снятие розыска',
+				officer..' -> '..(target or '?')..(tid and ('['..tid..']') or ''), 4000)
+			play_sound()
+			sampAddChatMessage('[Arizona Helper] {FF6347}Внимание: розыск снят! {ffffff}'..officer
+				..' снял '..(target or '?')..(tid and ('['..tid..']') or '')
+				..'.{FF6347} Возможна коррупция.', message_color)
+		end
+	end
+
 	if settings.mj.auto_doklad_arrest then
 		if text:find('^>> Вы посадили игрока ([%w_]+) в тюрьму на (%d+) минут') then
 			local nick, jail_time = text:match('^>> Вы посадили игрока ([%w_]+) в тюрьму на (%d+) минут')
@@ -6338,6 +6742,29 @@ function sampev.onServerMessage(color, text)
 			sampAddChatMessage('[Arizona Helper] {ffffff}Игрок ' .. message_color_hex .. MODULE.Afind.target_nick .. '[' .. tostring(MODULE.Afind.target_id or -1) .. '] {ffffff}сейчас находится в здании.', message_color)
 		end
 		return false
+	end
+	if MODULE.Armory and (MODULE.Armory.suppress_until or 0) > os.time() then
+		for _, p in ipairs({
+			'Вы успешно переоделись в форму S.W.A.T.',
+			'Вы успешно надели маску',
+			'Время действия маски',
+			'Откройте инвентарь',
+			'Вы успешно получили',
+			'Вы взяли ',
+			'Вы уже взяли предмет',
+			'Брать одно и тоже оружие можно раз в',
+			'Брать щит можно раз в',
+			'Брать бодикамеру можно раз в',
+			'У вас уже есть тазер',
+			'надел бронежилет',
+			'У вас отобрали служебные предметы',
+			'У Вас есть щит',
+			'чтобы выбросить щит',
+			'переодевается в рабочую одежду',
+			'Вы переоделись в рабочую одежду',
+		}) do
+			if text:find(p, 1, true) then return false end
+		end
 	end
 	if settings.mj.awanted and MODULE.Awanted.last_target ~= -1 then
 		if text:find('Чтобы закрепить игрока, у него должен быть розыск')
@@ -6480,7 +6907,7 @@ function sampev.onServerMessage(color, text)
 						:gsub('{p}', is_f and "а" or "")
 						:gsub('{g}', is_f and "ла" or "ёл")
 						:gsub('{r}', is_f and "ась" or "ся")
-					local d = t.delay
+					local d = (settings.mj.rp_delay or {})[t.key]
 					lua_thread.create(function()
 						if d > 0 then wait(d) end
 						sampSendChat(line)
@@ -6846,25 +7273,45 @@ function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
 	if MODULE.Edgo and MODULE.Edgo.badge and MODULE.Edgo.badge.active then
 		return MODULE.Edgo.handle_dialog(dialogid, style, title, text)
 	end
+	if settings.general.armory_enable then
+		local ttl = (title or ""):upper()
+		local txt = (text or "")
+		if ttl:find("СКЛАД ОРГАНИЗАЦИИ", 1, true)
+		   or txt:find("взять со склада", 1, true)
+		   or txt:find("Вы действительно хотите взять", 1, true) then
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+	end
 	if settings.mj.auto_case_documentation then
 		local function strip_colors(s)
-			return (s or ""):gsub("{%x%x%x%x%x%x%x%x}", ""):gsub("{%x%x%x%x%x%x}", ""):gsub("{%x%x%x}", ""):gsub("\r", "")
+			return (s or ""):gsub("{%x%x%x%x%x%x}", ""):gsub("{%x%x%x%x%x%x%x%x}", ""):gsub("{%x%x%x}", ""):gsub("\r", "")
+		end
+		if dialogid == 26951 then
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
 		end
 		local title_clean = strip_colors(title or ""):gsub("%s+", " "):upper()
 		local is_time_dialog   = title_clean:find("ДАТА И ВРЕМЯ УБИЙСТВА", 1, true) or dialogid == 26949 or dialogid == 26953
 		local is_weapon_dialog = title_clean:find("ОРУДИЕ УБИЙСТВА", 1, true)       or dialogid == 26950 or dialogid == 26954
 		local clean = strip_colors(text)
 		if is_time_dialog then
-			local time_val = clean:match("Дата и время:%s*([^\n\r]+)")
-			if time_val then time_val = time_val:match("^%s*(.-)%s*$") end
+			local time_val
+			for line in clean:gmatch("[^\n]+") do
+				local m = line:match("Дата и время:%s*(.+)")
+				if m then time_val = m:match("^%s*(.-)%s*$"); break end
+			end
 			if time_val and time_val ~= "" and time_val:lower() ~= "неизвестно" then
 				sampSendDialogResponse(dialogid, 1, 0, time_val)
 				sampAddChatMessage('[Arizona Helper] {ffffff}Авто-расследование: время убийства заполнено.', message_color)
 				return false
 			end
 		elseif is_weapon_dialog then
-			local weapon_val = clean:match("Орудие убийства:%s*([^\n\r]+)")
-			if weapon_val then weapon_val = weapon_val:match("^%s*(.-)%s*$") end
+			local weapon_val
+			for line in clean:gmatch("[^\n]+") do
+				local m = line:match("Орудие убийства:%s*(.+)")
+				if m then weapon_val = m:match("^%s*(.-)%s*$"); break end
+			end
 			if weapon_val and weapon_val ~= "" and weapon_val:lower() ~= "неизвестно" then
 				sampSendDialogResponse(dialogid, 1, 0, weapon_val)
 				sampAddChatMessage('[Arizona Helper] {ffffff}Авто-расследование: орудие убийства заполнено.', message_color)
@@ -7208,7 +7655,7 @@ function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
 			if #MODULE.Zeks.new == 0 then
 				sampAddChatMessage('[Arizona Helper] {ffffff}Сейчас на сервере нету заключенных игроков!', message_color)
 			else
-				sampAddChatMessage('[Arizona Helper] {ffffff}Сканирование /zeks окончено! Найдено заключенных игроков: ' .. message_color_hex .. #MODULE.Zeks.new, message_color)
+				sampAddChatMessage('[Arizona Helper] {ffffff}Сканирование /' .. get_custom_cmd('zeks') .. ' окончено! Найдено заключенных игроков: ' .. message_color_hex .. #MODULE.Zeks.new, message_color)
 				MODULE.Zeks.all = MODULE.Zeks.new
 				MODULE.Zeks.updzeks.stop = false
 				MODULE.Zeks.updzeks.time = 0
@@ -7253,7 +7700,7 @@ function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
 	end
 	
 	if isMode('police') or isMode('fbi') then
-		if text:find('Ник') and text:find('Уровень розыска') and text:find('Расстояние') and MODULE.Wanted.checker then
+		if text:find('Ник') and text:find('Уровень розыска') and text:find('Расстояние') and MODULE.Wanted.checker then 
 			local text = string.gsub(text, '%{......}', '')
 			text = string.gsub(text, 'Ник%s+Уровень розыска%s+Расстояние\n', '')
 			for line in string.gmatch(text, '[^\n]+') do
@@ -7262,7 +7709,16 @@ function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
 					if dist:find('в интерьере') then
 						dist = 'В инте'
 					end
-					table.insert(MODULE.Wanted.new, {nick = nick, id = id, lvl = lvl, dist = dist})
+					local dup = false
+					for _, entry in ipairs(MODULE.Wanted.new) do
+						if entry.id == id and entry.lvl == lvl then
+							dup = true
+							break
+						end
+					end
+					if not dup then
+						table.insert(MODULE.Wanted.new, {nick = nick, id = id, lvl = lvl, dist = dist})
+					end
 				end
 			end
 			sampSendDialogResponse(dialogid, 0, 0, 0)
@@ -7465,6 +7921,34 @@ function sampev.onTogglePlayerControllable(controllable)
 end
 addEventHandler('onSendPacket', function(id, bs, priority, reliability, orderingChannel)
 	if id == 220 then
+		-- local id = raknetBitStreamReadInt8(bs)
+        -- local cmd = raknetBitStreamReadInt8(bs)
+		-- if MODULE.DEBUG then
+			-- local function dumpFullBitStream(bs)
+			-- 	local bitsLeft = raknetBitStreamGetNumberOfUnreadBits(bs)
+			-- 	if not bitsLeft then
+			-- 		print("dumpFullBitStream: raknetBitStreamGetNumberOfUnreadBits ошибка!")
+			-- 		return
+			-- 	end
+			-- 	local bytesLeft = math.floor(bitsLeft / 8)
+			-- 	if bytesLeft == 0 then
+			-- 		print("dumpFullBitStream: нету доступных байтов для чтения")
+			-- 		return
+			-- 	end
+			-- 	local bytes = {}
+			-- 	for i = 1, bytesLeft do
+			-- 		bytes[i] = raknetBitStreamReadInt8(bs)
+			-- 	end
+			-- 	local hexStrParts = {}
+			-- 	for i, b in ipairs(bytes) do
+			-- 		hexStrParts[i] = string.format("%02X", b)
+			-- 	end
+			-- 	return(table.concat(hexStrParts, " "))
+			-- end
+			-- local dump = dumpFullBitStream(bs)
+			-- sampAddChatMessage('[ReceivePacket] {ffffff}' .. dump, message_color)
+			-- print("[ReceivePacket] " .. dump)
+		-- end
 		local idd = raknetBitStreamReadInt8(bs)
 		local packettype = raknetBitStreamReadInt8(bs)
 		if IS_MOBILE then
@@ -7499,56 +7983,28 @@ end)
 addEventHandler('onReceivePacket', function(id, bs)
 	if id == 220 then
 		local id = raknetBitStreamReadInt8(bs)
-        local cmd = raknetBitStreamReadInt8(bs)
-		-- if MODULE.DEBUG then
-			-- local function dumpFullBitStream(bs)
-			-- 	local bitsLeft = raknetBitStreamGetNumberOfUnreadBits(bs)
-			-- 	if not bitsLeft then
-			-- 		print("dumpFullBitStream: raknetBitStreamGetNumberOfUnreadBits ошибка!")
-			-- 		return
-			-- 	end
-			-- 	local bytesLeft = math.floor(bitsLeft / 8)
-			-- 	if bytesLeft == 0 then
-			-- 		print("dumpFullBitStream: нету доступных байтов для чтения")
-			-- 		return
-			-- 	end
-			-- 	local bytes = {}
-			-- 	for i = 1, bytesLeft do
-			-- 		bytes[i] = raknetBitStreamReadInt8(bs)
-			-- 	end
-			-- 	local hexStrParts = {}
-			-- 	for i, b in ipairs(bytes) do
-			-- 		hexStrParts[i] = string.format("%02X", b)
-			-- 	end
-			-- 	return(table.concat(hexStrParts, " "))
-			-- end
-			-- local dump = dumpFullBitStream(bs)
-			-- sampAddChatMessage('[ReceivePacket] {ffffff}' .. dump, message_color)
-			-- print("[ReceivePacket] " .. dump)
-		-- end
+		local cmd = raknetBitStreamReadInt8(bs)
+
 		if cmd == 153 then
-            local carId = raknetBitStreamReadInt16(bs)
-            raknetBitStreamIgnoreBits(bs, 8)
-            local numberlen = raknetBitStreamReadInt8(bs)
-            local plate_number = raknetBitStreamReadString(bs, numberlen)
-            local typelen = raknetBitStreamReadInt8(bs)
-            local numType = raknetBitStreamReadString(bs, typelen)
-            modules.vehicles.cache[carId] = {
-                carID = carId or 0,
-                number = plate_number or "",
-                region = numType or "",
-            }
-        end
-		if IS_MOBILE then 
+			local carId = raknetBitStreamReadInt16(bs)
+			raknetBitStreamIgnoreBits(bs, 8)
+			local numberlen = raknetBitStreamReadInt8(bs)
+			local plate_number = raknetBitStreamReadString(bs, numberlen)
+			local typelen = raknetBitStreamReadInt8(bs)
+			local numType = raknetBitStreamReadString(bs, typelen)
+			modules.vehicles.cache[carId] = { carID = carId or 0, number = plate_number or "", region = numType or "" }
+		end
+
+		if IS_MOBILE then
 			if cmd == 84 then
 				local unk1 = raknetBitStreamReadInt8(bs)
 				local unk2 = raknetBitStreamReadInt8(bs)
 				local len = raknetBitStreamReadInt16(bs)
 				local encoded = raknetBitStreamReadInt8(bs)
-				local string = encoded == 0 and raknetBitStreamReadString(bs, len) or raknetBitStreamDecodeString(bs, len + encoded)
+				local str = encoded == 0 and raknetBitStreamReadString(bs, len) or raknetBitStreamDecodeString(bs, len + encoded)
 				if MODULE.DEBUG then
-					sampAddChatMessage('[ReceivePacket] {ffffff}' .. string, message_color)
-					print("[ReceivePacket] " .. string)
+					sampAddChatMessage('[ReceivePacket] {ffffff}' .. str, message_color)
+					print("[ReceivePacket] " .. str)
 				end
 			end
 		else
@@ -7556,30 +8012,34 @@ addEventHandler('onReceivePacket', function(id, bs)
 				raknetBitStreamIgnoreBits(bs, 32)
 				local length = raknetBitStreamReadInt16(bs)
 				local encoded = raknetBitStreamReadInt8(bs)
-				local cmd = (encoded ~= 0) and raknetBitStreamDecodeString(bs, length + encoded) or raknetBitStreamReadString(bs, length)
+				local cef_str = (encoded ~= 0) and raknetBitStreamDecodeString(bs, length + encoded) or raknetBitStreamReadString(bs, length)
+
+				if MODULE.DEBUG then
+					sampAddChatMessage('[ReceivePacket] {ffffff}' .. cef_str, message_color)
+					print("[ReceivePacket] " .. cef_str)
+				end
+
+				if MODULE.Armory then
+					local ev, pl = cef_str:match("^window%.executeEvent%('([^']+)',%s*`?(.-)`?%)%;?$")
+					if ev then MODULE.Armory.on_cef(ev, pl) end
+				end
+
 				if settings.general.auto_clicker then
-					local event_name, event_data = cmd:match("^window%.executeEvent%('(.-)', [`'](%b[])[`']%);$")
+					local event_name, event_data = cef_str:match("^window%.executeEvent%('(.-)', [`'](%b[])[`']%);$")
 					if event_name == "event.setActiveView" then
 						MODULE.AutoClicker.active = false
 						local data = decodeJson(event_data)
 						if type(data) == "table" then
 							for _, view in ipairs(data) do
-								if view == "Clicker" then
-									MODULE.AutoClicker.active = true
-									break
-								end
+								if view == "Clicker" then MODULE.AutoClicker.active = true; break end
 							end
 						end
 					end
 				end
-				if MODULE.DEBUG then
-					sampAddChatMessage('[ReceivePacket] {ffffff}' .. cmd, message_color)
-					print("[ReceivePacket] " .. cmd)
-				end
 
-				if (cmd:find('findGame') and cmd:find(' документов","Найдите ')) then
+				if (cef_str:find('findGame') and cef_str:find(' документов","Найдите ')) then
 					if ((not isMode('ins')) or (isMode('ins') and settings.ins.hint_in_sort)) then
-						local find = cmd:match('%[.+%[(.+)%]%]')
+						local find = cef_str:match('%[.+%[(.+)%]%]')
 						local nums = {}
 						for n in find:gmatch("%d+") do table.insert(nums, tonumber(n)) end
 						table.sort(nums)
@@ -7707,30 +8167,8 @@ imgui.OnFrame(
 				change_dpi()
 				imgui.CenterText(u8'Пользовательское соглашение и политика конфиденциальности')
 				imgui.Separator()
-				if imgui.BeginChild('##terms_text', imgui.ImVec2(520 * settings.general.custom_dpi, 270 * settings.general.custom_dpi), true) then
-					imgui.TextWrapped(u8([[
-						1. Общие положения
-						1.1. Настоящее соглашение регулирует использование программного обеспечения «Arizona Helper» (далее - «Хелпер»).
-						1.2. Хелпер является неофициальной модификацией и не связан с администрацией проекта Arizona Role Play.
-						1.3. Используя Хелпер, вы подтверждаете, что ознакомлены с условиями настоящего соглашения и принимаете их в полном объёме.
-
-						2. Риски и ответственность
-						2.1. Использование Хелпера осуществляется исключительно на ваш страх и риск.
-						2.2. Установка и использование стороннего программного обеспечения может нарушать правила сервера и привести к блокировке вашего игрового аккаунта.
-						2.3. Автор Хелпера не несёт ответственности за любые санкции со стороны администрации сервера, потерю игровых ценностей, данных или иные последствия использования Хелпера.
-
-						3. Данные и конфиденциальность
-						3.1. Хелпер хранит настройки и данные персонажа (никнейм, организация, должность) локально на вашем устройстве.
-						3.2. Хелпер не передаёт ваши личные данные третьим лицам.
-						3.3. Опциональная функция аналитики (при её включении) передаёт только обезличенную техническую информацию (версия Хелпера, номер сервера, тип устройства).
-
-						4. Изменение условий
-						4.1. Автор оставляет за собой право изменять условия соглашения и функциональность Хелпера без предварительного уведомления.
-
-						5. Заключительные положения
-						5.1. Продолжая использование Хелпера, вы подтверждаете согласие с условиями настоящего соглашения.
-						5.2. Если вы не согласны с условиями, вы должны прекратить использование Хелпера.
-						]]))
+				if imgui.BeginChild('##terms_text', imgui.ImVec2(520 * settings.general.custom_dpi, 320 * settings.general.custom_dpi), true) then
+					render_terms_text()
 					imgui.EndChild()
 				end
 				imgui.Separator()
@@ -8023,12 +8461,22 @@ local function background_dim_color(alpha_override)
     return imgui.ImVec4(0.06, 0.06, 0.08, alpha)
 end
 --------------------------------------------- MAIN GUI --------------------------------------------
+local function is_registered_user()
+	return (modules.player.data.nick and modules.player.data.nick ~= '') and true or false
+end
 imgui.OnFrame(
-    function() return MODULE.Main.Window[0] end,
-    function(player)
+	function()
+		if MODULE.Main.Window[0] and is_registered_user() and not settings.general.terms_accepted then
+			MODULE.Main.Window[0] = false
+			MODULE.TermsConfirm.Window[0] = true
+			return false
+		end
+		return MODULE.Main.Window[0]
+	end,
+	function(player)
 		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
 		imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 430 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
-		imgui.Begin(getHelperIcon() .. " Arizona Helper " .. getHelperIcon() .. "##main", MODULE.Main.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+		imgui.Begin(getHelperIcon() .. " Arizona Helper Unlimited " .. getHelperIcon() .. "##main", MODULE.Main.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
 		change_dpi()
 		if imgui.BeginTabBar(u8'Привет!') then
 			if imgui.BeginTabItem(fa.HOUSE..u8' Главное меню ') then
@@ -8302,9 +8750,11 @@ imgui.OnFrame(
 									local st = imgui.GetStyle()
 									local pad = st.FramePadding.x
 									local icon_toggle = item.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF
+									local is_afind = (item.key == 'afind')
 									local bw1 = imgui.CalcTextSize(icon_toggle).x + pad * 2
 									local bw2 = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + pad * 2
-									local total = bw1 + bw2 + st.ItemSpacing.x
+									local bw3 = is_afind and (imgui.CalcTextSize(fa.GEAR).x + pad * 2) or 0
+									local total = bw1 + bw2 + bw3 + st.ItemSpacing.x * (is_afind and 2 or 1)
 									local x0 = imgui.GetCursorPosX()
 									local cw = imgui.GetColumnWidth()
 									local start_x = x0 + (cw - total) * 0.5
@@ -8341,6 +8791,23 @@ imgui.OnFrame(
 										imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование стандартной команды ' .. fa.PEN_TO_SQUARE .. '##cc_edit_popup_' .. index)
 									end
 									if imgui.IsItemHovered() then imgui.SetTooltip(u8("Изменение команды /" .. item.cmd)) end
+									if is_afind then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_afind_set_' .. index) then
+											MODULE.AfindSettings = MODULE.AfindSettings or {}
+											if not MODULE.AfindSettings.cd_slider then
+												MODULE.AfindSettings.cd_slider = imgui.new.float(settings.mj.afind_find_cd or 3)
+												MODULE.AfindSettings.auto_stop = imgui.new.bool(settings.mj.afind_auto_stop ~= false)
+												MODULE.AfindSettings.radius_slider = imgui.new.float(settings.mj.afind_stop_radius or 10)
+											else
+												MODULE.AfindSettings.cd_slider[0] = settings.mj.afind_find_cd or 3
+												MODULE.AfindSettings.auto_stop[0] = settings.mj.afind_auto_stop ~= false
+												MODULE.AfindSettings.radius_slider[0] = settings.mj.afind_stop_radius or 10
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /afind ' .. fa.GEAR .. '##cc_afind_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки авто-поиска /afind")) end
+									end
 									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 									imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 425 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
 									if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование стандартной команды ' .. fa.PEN_TO_SQUARE .. '##cc_edit_popup_' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
@@ -8471,6 +8938,45 @@ imgui.OnFrame(
 									imgui.Columns(1)
 									imgui.Separator()
 								end
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /afind ' .. fa.GEAR .. '##cc_afind_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.AfindSettings and MODULE.AfindSettings.cd_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД между /find (сек):'))
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Как часто отправлять /find при авто-поиске.\nМеньше - чаще обновление позиции, но выше нагрузка.'))
+									end
+									imgui.SliderFloat('##afind_set_cd', MODULE.AfindSettings.cd_slider, 1, 10, '%.1f')
+									imgui.Separator()
+									imgui.Checkbox(u8' Авто-остановка при приближении к цели##afind_set_autostop', MODULE.AfindSettings.auto_stop)
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Автоматически останавливать авто-поиск,\nкогда вы подошли к цели на заданный радиус.'))
+									end
+									if MODULE.AfindSettings.auto_stop[0] then
+										imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8(' Радиус остановки (м):'))
+										if imgui.IsItemHovered() then
+											imgui.SetTooltip(u8('На каком расстоянии от цели авто-поиск будет остановлен.'))
+										end
+										imgui.SliderFloat('##afind_set_radius', MODULE.AfindSettings.radius_slider, 5, 100, '%.0f')
+									end
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##afind_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##afind_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.mj.afind_find_cd = MODULE.AfindSettings.cd_slider[0]
+										settings.mj.afind_auto_stop = MODULE.AfindSettings.auto_stop[0]
+										settings.mj.afind_stop_radius = MODULE.AfindSettings.radius_slider[0]
+										save_settings()
+										sampAddChatMessage('[Arizona Helper] {ffffff}Настройки /afind сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
 							end
 							imgui.EndChild()
 						end
@@ -8709,7 +9215,6 @@ imgui.OnFrame(
 									imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование команды ' .. fa.PEN_TO_SQUARE .. '##binder_edit_popup_' .. index)
 								end
 								if imgui.IsItemHovered() then imgui.SetTooltip(u8"Изменение команды /"..command.cmd) end
-								-- POPUP: редактирование RP-команды (рядом с карандашом)
 								render_binder_editor('##binder_edit_popup_' .. index)
 								imgui.SameLine()
 								if imgui.SmallButton(fa.TRASH_CAN .. '##' .. index) then
@@ -8751,7 +9256,6 @@ imgui.OnFrame(
 							MODULE.Binder.waiting_slider = imgui.new.float(1.5)
 							imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование команды ' .. fa.PEN_TO_SQUARE .. '##binder_create_popup')
 						end
-						-- POPUP: создание новой RP-команды (после кнопки "Создать")
 						render_binder_editor('##binder_create_popup')
 					end
 					if imgui.BeginTabItem(fa.BARS..u8' RP-команды') then
@@ -9642,6 +10146,32 @@ imgui.OnFrame(
     end
 )
 imgui.OnFrame(
+	function() return MODULE.TermsConfirm.Window[0] end,
+	function()
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(fa.BOOK .. u8' Пользовательское соглашение ' .. fa.BOOK .. '##terms_reg', MODULE.TermsConfirm.Window,
+			imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		imgui.CenterText(u8'Пользовательское соглашение и политика конфиденциальности')
+		imgui.Separator()
+		if imgui.BeginChild('##terms_reg_text', imgui.ImVec2(520 * settings.general.custom_dpi, 320 * settings.general.custom_dpi), true) then
+			render_terms_text()
+			imgui.EndChild()
+		end
+		imgui.Separator()
+		if imgui.Button(fa.FLAG_CHECKERED .. u8' Принять', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+			settings.general.terms_accepted = true
+			save_settings()
+			MODULE.TermsConfirm.Window[0] = false
+		end
+		imgui.SameLine()
+		if imgui.Button(fa.CIRCLE_XMARK .. u8' Отказаться', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+			MODULE.TermsConfirm.Window[0] = false
+		end
+		imgui.End()
+	end
+)
+imgui.OnFrame(
     function() return MODULE.Note.Window[0] end,
     function(player)
         imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
@@ -9673,10 +10203,7 @@ imgui.OnFrame(
 			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
 			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
 			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
-			imgui.Begin('##dim_edgo', nil,
-				imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
-				imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
-				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.Begin('##dim_edgo', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
 			imgui.End()
 			imgui.PopStyleColor()
 			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
@@ -9684,8 +10211,7 @@ imgui.OnFrame(
 		end
 		settings.windows_pos.edgo_menu = settings.windows_pos.edgo_menu or { x = sizeX / 2 - 180, y = sizeY / 2 - 160 }
 		imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.edgo_menu.x, settings.windows_pos.edgo_menu.y), imgui.Cond.FirstUseEver)
-		imgui.Begin(getHelperIcon() .. u8" ЭБГО / EDGO " .. getHelperIcon() .. '##edgo_menu', MODULE.Edgo.Window,
-			imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+		imgui.Begin(getHelperIcon() .. u8" ЭБГО / EDGO " .. getHelperIcon() .. '##edgo_menu', MODULE.Edgo.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
 		change_dpi()
 		player.HideCursor = false
 		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
@@ -9720,6 +10246,33 @@ imgui.OnFrame(
 		if imgui.Button(fa.STAR .. u8' Пробив по бейджику##edgo_b', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_badge() end
 		if imgui.Button(fa.USER .. u8' Пробив по боди-камере##edgo_bc', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_bodycam() end
 		if imgui.Button(fa.BUILDING_SHIELD .. u8' Пробив по голосу /d##edgo_vd', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_voiced() end
+		if imgui.Button(fa.TRIANGLE_EXCLAMATION .. u8' Пробив по снятию розыска##edgo_unsu', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then
+			imgui.OpenPopup('##edgo_unsu_popup')
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		if imgui.BeginPopupModal('##edgo_unsu_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
+			change_dpi()
+			imgui.Text(u8'Цель пробива (снявший розыск):')
+			imgui.RadioButtonIntPtr(u8' Последний из чата: ' .. (MODULE.Edgo.last_unsu and MODULE.Edgo.last_unsu.officer or u8'Нету'), MODULE.Edgo.unsu_choice, 0)
+			imgui.RadioButtonIntPtr(u8' Ввести ID вручную', MODULE.Edgo.unsu_choice, 1)
+			if MODULE.Edgo.unsu_choice[0] == 1 then
+				imgui.PushItemWidth(W); imgui.InputTextWithHint('##unsu_id', u8'ID', MODULE.Edgo.unsu_id_buf, 16); imgui.PopItemWidth()
+			end
+			imgui.Separator()
+			if imgui.Button(fa.WALKIE_TALKIE .. u8' Пробить', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then
+				if MODULE.Edgo.unsu_choice[0] == 0 then
+					if MODULE.Edgo.last_unsu then MODULE.Edgo.start_unsu(MODULE.Edgo.last_unsu.officer) end
+				else
+					local id = tonumber(u8:decode(ffi.string(MODULE.Edgo.unsu_id_buf)))
+					if id then MODULE.Edgo.start_unsu(id) end
+				end
+				imgui.CloseCurrentPopup()
+			end
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then
+				imgui.CloseCurrentPopup()
+			end
+			imgui.EndPopup()
+		end
 		local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
 		if posX ~= settings.windows_pos.edgo_menu.x or posY ~= settings.windows_pos.edgo_menu.y then
 			settings.windows_pos.edgo_menu = { x = posX, y = posY }; save_settings()
@@ -9827,7 +10380,7 @@ imgui.OnFrame(
             else
                 cc.wait_point = true
                 if not has_marker then
-                    sampAddChatMessage('[Arizona Helper] {ffffff}Поставьте метку на карту — маршрут запустится автоматически.', message_color)
+                    sampAddChatMessage('[Arizona Helper] {ffffff}Поставьте метку на карту - маршрут запустится автоматически.', message_color)
                 end
             end
         end
@@ -9879,10 +10432,10 @@ imgui.OnFrame(
         end
         imgui.Separator()
         imgui.Text((fa.GEAR or fa.CIRCLE_INFO) .. u8' Настройки вождения:')
-        imgui.Text(u8'Скорость')
-        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Условные единицы скорости игры (не км/ч)') end
+		imgui.Text(u8'Скорость (км/ч)')
+		if imgui.IsItemHovered() then imgui.SetTooltip(u8'Целевая скорость в км/ч') end
         imgui.PushItemWidth(W)
-        if imgui.SliderFloat('##cruise_speed', MODULE.Cruise.speed_slider, 10, 60, '%.0f') then
+        if imgui.SliderFloat('##cruise_speed', MODULE.Cruise.speed_slider, 10, 120, '%.0f') then
             settings.general.cruise_speed = math.floor(MODULE.Cruise.speed_slider[0]); save_settings()
         end
         imgui.Text(u8'Радиус прибытия')
@@ -9963,9 +10516,12 @@ imgui.OnFrame(
             imgui.SetNextWindowSizeConstraints(imgui.ImVec2(W, 0), imgui.ImVec2(W, sizeY - 20 * dpi))
         end)
         imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.cruise_hud.x, settings.windows_pos.cruise_hud.y), imgui.Cond.FirstUseEver)
-        imgui.Begin((fa.GAUGE or fa.CIRCLE_INFO) .. u8' CRUISE HUD##cruise_hud', nil,
+        imgui.Begin((fa.GAUGE or fa.CIRCLE_INFO) .. u8' CRUISE-CONTROL##cruise_hud', nil,
             imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
-        change_dpi()
+		change_dpi()
+		if not (MODULE.Cruise and MODULE.Cruise.Window[0]) then
+			player.HideCursor = true
+		end
         local in_car = isCharInAnyCar(PLAYER_PED)
         local car    = in_car and storeCarCharIsInNoSave(PLAYER_PED) or nil
         local cx, cy, cz = 0, 0, 0
@@ -10013,17 +10569,12 @@ imgui.OnFrame(
             hdr_text = moving and u8'В ПУТИ' or u8'МАРШРУТ'
             hdr_col  = moving and imgui.ImVec4(0.35, 1.0, 0.45, 1.0) or imgui.ImVec4(0.75, 0.85, 1.0, 1.0)
         end
+        local hdr_str = hdr_icon .. ' ' .. hdr_text
         imgui.PushStyleColor(imgui.Col.Text, hdr_col)
-        imgui.Text(hdr_icon .. ' ' .. hdr_text)
+        local _tw = imgui.CalcTextSize(hdr_str).x
+        imgui.SetCursorPosX((imgui.GetWindowWidth() - _tw) * 0.5)
+        imgui.Text(hdr_str)
         imgui.PopStyleColor()
-        imgui.SameLine()
-        imgui.SetCursorPosX(imgui.GetWindowWidth() - 20 * dpi)
-        if imgui.SmallButton(fa.CIRCLE_XMARK .. '##cruise_hud_hide') then
-            settings.general.cruise_hud = false
-            if MODULE.Cruise and MODULE.Cruise._hud_cb then MODULE.Cruise._hud_cb[0] = false end
-            save_settings()
-        end
-        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Скрыть HUD') end
         imgui.Separator()
         imgui.Columns(2, '##cruise_hud_cols', false)
         imgui.SetColumnWidth(-1, 92 * dpi)
@@ -10036,12 +10587,18 @@ imgui.OnFrame(
         end
         if imgui.IsItemHovered() then imgui.SetTooltip(pursuit and u8'Преследуемый игрок' or u8'Координаты метки на карте') end
         imgui.NextColumn()
+        imgui.Text((fa.GAUGE or fa.CIRCLE_INFO) .. u8' Скорость')
+        imgui.NextColumn()
+        local HUD_MS_TO_KMH = 3.6
+        imgui.TextColored(imgui.ImVec4(1.0, 1.0, 1.0, 1.0), u8(string.format('%.0f км/ч', (cc.hud_speed or 0) * HUD_MS_TO_KMH)))
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Текущая скорость по факту смещения т/с (приблизительно в км/ч)') end
+        imgui.NextColumn()
         imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8' Расстояние')
         imgui.NextColumn()
         local dist_col = pursuit and imgui.ImVec4(1.0, 0.55, 0.3, 1.0) or imgui.ImVec4(0.3, 1.0, 0.45, 1.0)
         imgui.TextColored(dist_col, u8(string.format('%.0f м', dist)))
         imgui.NextColumn()
-        imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8' Осталось')
+        imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8' В пути')
         imgui.NextColumn()
         if pursuit then
             imgui.TextDisabled(u8'--')
@@ -10061,7 +10618,7 @@ imgui.OnFrame(
         imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.85, 0.20, 0.20, 1.0))
         imgui.PushStyleColor(imgui.Col.ButtonActive,  imgui.ImVec4(0.55, 0.08, 0.08, 1.0))
         if imgui.Button((fa.CIRCLE_STOP or fa.CIRCLE_XMARK) .. u8'  Остановить круиз', imgui.ImVec2(-1, 24 * dpi)) then
-            cruise_deactivate('остановлено из HUD.')
+            cruise_deactivate('Остановлено из HUD.')
         end
         imgui.PopStyleColor()
         imgui.PopStyleColor()
@@ -10277,19 +10834,53 @@ function firs_render_assist_gui()
 	if not isMode('none') then
 		render_assist_item(
 			"Обновление списка /members",
-			"Автоматически обновляет список сотрудников в /members каждые 3 секунды.",
+			"Автоматически обновляет список сотрудников в /members каждые " .. (settings.general.members_update_period or 3) .. " секунд.\n\nДля настройки интервала используйте шестерёнку справа.",
 			settings.general,
-			"auto_update_members"
+			"auto_update_members",
+			false,
+			function()
+				if not MODULE.Members.update_period_slider then
+					MODULE.Members.update_period_slider = imgui.new.int(settings.general.members_update_period or 3)
+				else
+					MODULE.Members.update_period_slider[0] = settings.general.members_update_period or 3
+				end
+				imgui.OpenPopup(fa.GEAR .. u8' Интервал обновления списка сотрудников ' .. fa.GEAR)
+			end
 		)
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		if imgui.BeginPopupModal(fa.GEAR .. u8' Интервал обновления списка сотрудников ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+			change_dpi()
+			imgui.PushItemWidth(300 * settings.general.custom_dpi)
+			imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-обновления (сек):'))
+			if imgui.IsItemHovered() then
+				imgui.SetTooltip(u8('Как часто автоматически отправлять /members.\nМинимум 3с — при меньшем интервал ограничит анти-флуд окно.'))
+			end
+			imgui.SliderInt('##members_update_period', MODULE.Members.update_period_slider, 1, 60)
+			imgui.PopItemWidth()
+			imgui.Separator()
+			imgui.Text(u8('Текущая задержка: ') .. (settings.general.members_update_period or 3) .. u8(' сек.'))
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				imgui.CloseCurrentPopup()
+			end
+			imgui.SameLine()
+			if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				settings.general.members_update_period = MODULE.Members.update_period_slider[0]
+				save_settings()
+				sampAddChatMessage('[Arizona Helper] {ffffff}Интервал обновления списка сотрудников сохранён.', message_color)
+				imgui.CloseCurrentPopup()
+			end
+			imgui.EndPopup()
+		end
 		render_assist_item(
-			"Авто-доклады /post",
-			"Автоматически отправляет доклад в рацию каждые 5 минут на посту.\n(вы должны начать /post чтобы данная функция работала)",
+			"Авто-доклады /" .. get_custom_cmd('post'),
+			"Автоматически отправляет доклад в рацию каждые 5 минут на посту.\n(вы должны начать /" .. get_custom_cmd('post') .. " чтобы данная функция работала)",
 			settings.general,
 			"auto_doklad_post"
 		)
 	end
 	render_assist_item(
-		"Кастомный ScoreBoard",
+		"Кастомный TAB",
 		"Заменяет оригинальный аризоновский ScoreBoard (TAB) на Mimgui версию.\nАктивация на ПК через TAB, на мобайле дабл-клик по иконке оружия.",
 		settings.general,
 		"scoreboard"
@@ -10328,8 +10919,7 @@ function firs_render_assist_gui()
 			"Увал сотрудников по ПСЖ [9/10]",
 			"Автоматическое увольнение сотрудников, которые просят увал ПСЖ в /r /rb /f /fb\nПример ситуации как это работает:\n1) Игрок пишет в /r Увольте меня по псж\n2) Cкрипт отвечает: /rb Nick_Name, отправьте /rb +++ чтобы уволиться ПСЖ!\n3) Игрок отправляет /rb +++ и скрипт его увольняет по ПСЖ\n\nP.S. Если игрок флудит просьбами об увале, скрипт САМ его уволит, без +++\nP.S.S. Данная функция работает только если вы одеты в рабочую форму.",
 			settings.general,
-			"auto_uninvite",
-			true
+			"auto_uninvite"
 		)
 	end
 	render_assist_item(
@@ -10344,6 +10934,13 @@ function firs_render_assist_gui()
 		"Автоматическая установка обновлений при запуске хелпера.\nРучная проверка доступна кнопкой \"Обновить\" в настройках хелпера.",
 		settings.general,
 		"updater"
+	)
+	render_assist_item(
+		"Авто-снаряжение",
+		"После открытия меню оружейной/раздевалки автоматически берёт выбранное снаряжение.\nДля настройки используйте шестерёнку справа.",
+		settings.general, "armory_enable", 
+		true,
+		function() imgui.OpenPopup((fa.SHIELD_HALVED or fa.GUN) .. u8' Авто-снаряжение ' .. (fa.SHIELD_HALVED or fa.GUN)) end
 	)
 	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 	if imgui.BeginPopupModal(fa.PERSON_CIRCLE_CHECK .. u8' Ранг для авто-инвайта ' .. fa.PERSON_CIRCLE_CHECK, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
@@ -10452,12 +11049,12 @@ function firs_render_assist_gui()
 				modules.crosshair.data.distance_color_out = imguiToRgb(MODULE.Crosshair.distance_color_out)
 				save_module('crosshair')
 			end
-			imgui.Text(u8' Шрифт надписи (название):')
+			imgui.Text(u8' Шрифт надписи:')
 			imgui.SameLine()
 			imgui.PushItemWidth(220 * settings.general.custom_dpi)
 			imgui.InputText('##crosshair_font_name', MODULE.Crosshair.font_name_buf, 64)
 			imgui.PopItemWidth()
-			imgui.Text(u8' Размер шрифта надписи:')
+			imgui.Text(u8' Размер шрифта:')
 			imgui.SameLine()
 			imgui.PushItemWidth(120 * settings.general.custom_dpi)
 			imgui.SliderInt('##crosshair_font_size', MODULE.Crosshair.font_size, 8, 40)
@@ -10592,6 +11189,71 @@ function firs_render_assist_gui()
 		end
 		imgui.EndPopup()
 	end
+	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+	if imgui.BeginPopupModal((fa.SHIELD_HALVED or fa.GUN) .. u8' Авто-снаряжение ' .. (fa.SHIELD_HALVED or fa.GUN), _,
+		imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+		change_dpi()
+		settings.general.armory = settings.general.armory or {
+			auto_armory = true, auto_locker = false, grace_ms = 350, step_ms = 550,
+			swat = true, mask = true, bodycam = true, objects = false, heals = false,
+			vest = true, taser = true, baton = true, rifle = true, shotgun = true,
+			smg = true, sniper = false, smoke = true, shield = true, spikes = false, pistol = 'de',
+		}
+		local c = settings.general.armory
+		MODULE.Armory._b = MODULE.Armory._b or {}
+		if not MODULE.Armory._pistol_buf then MODULE.Armory._pistol_buf = imgui.new.int(c.pistol == 'stun' and 1 or 0) end
+		local function cb(key, label, tip)
+			if not MODULE.Armory._b[key] then MODULE.Armory._b[key] = imgui.new.bool(c[key] and true or false) end
+			imgui.Checkbox(label .. '##arm_' .. key, MODULE.Armory._b[key])
+			c[key] = MODULE.Armory._b[key][0]
+			if tip and imgui.IsItemHovered() then imgui.SetTooltip(u8(tip)) end
+		end
+		local colW = 150 * settings.general.custom_dpi
+		local colH = 205 * settings.general.custom_dpi
+
+		if imgui.BeginChild('##arm_col1', imgui.ImVec2(colW, colH), false) then
+			imgui.Text((fa.USER or fa.CIRCLE_INFO) .. u8' Раздевалка')
+			cb('auto_locker', u8'Авто-вход', 'Авто в раздевалке. По умолчанию ВЫКЛ.')
+			cb('mask', u8'Маска МО', 'Только при форме S.W.A.T.')
+			cb('swat', u8'Форма S.W.A.T.')
+			cb('bodycam', u8'Боди-камера')
+			cb('objects', u8'Набор объектов')
+			cb('heals', u8'Рабочая аптечка')
+		end
+		imgui.EndChild()
+		imgui.SameLine()
+		if imgui.BeginChild('##arm_col2', imgui.ImVec2(colW, colH), false) then
+			imgui.Text((fa.GUN or fa.CIRCLE_INFO) .. u8' Оружие')
+			cb('auto_armory', u8'Авто-взятие', 'Брать оружие при открытии оружейной.')
+			cb('vest', u8'Бронежилет')
+			imgui.Text(u8'Пистолет:')
+			if imgui.RadioButtonIntPtr(u8' DE ', MODULE.Armory._pistol_buf, 0) then c.pistol = 'de' end
+			imgui.SameLine()
+			if imgui.RadioButtonIntPtr(u8' Оглуш. ', MODULE.Armory._pistol_buf, 1) then c.pistol = 'stun' end
+			cb('taser', u8'Тазер')
+			cb('baton', u8'Дубинка')
+			cb('rifle', u8'Автомат M4')
+		end
+		imgui.EndChild()
+		imgui.SameLine()
+		if imgui.BeginChild('##arm_col3', imgui.ImVec2(colW, colH), false) then
+			imgui.Text((fa.BOX or fa.CIRCLE_INFO) .. u8' Снаряжение')
+			cb('shotgun', u8'Дробовик')
+			cb('smg', u8'MP5')
+			cb('sniper', u8'Снайперка')
+			cb('smoke', u8'Дымовые')
+			cb('shield', u8'Щит')
+			cb('spikes', u8'Шипы')
+		end
+		imgui.EndChild()
+		imgui.Separator()
+		if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+			save_settings()
+			sampAddChatMessage('[Arizona Helper] {ffffff}Настройки авто-снаряжения сохранены.', message_color)
+			imgui.CloseCurrentPopup()
+		end
+		imgui.EndPopup()
+	end
 end
 function render_fractions_functions() 
 	if (isMode('police') or isMode('fbi')) then 
@@ -10624,8 +11286,8 @@ function render_fractions_functions()
 						"auto_doklad_damage"
 					)
 					render_assist_item(
-						"Авто-доклады /patrool",
-						"Автоматически отправляет доклад в рацию каждые 5 минут в патруле.\n(вы должны начать /patrool чтобы функция работала)",
+						"Авто-доклады /" .. get_custom_cmd('patrool'),
+						"Автоматически отправляет доклад в рацию каждые 5 минут в патруле.\n(вы должны начать /" .. get_custom_cmd('tsm') .. " чтобы функция работала)",
 						settings.mj,
 						"auto_doklad_patrool"
 					)
@@ -10636,11 +11298,45 @@ function render_fractions_functions()
 						"auto_doklad_arrest"
 					)
 					render_assist_item(
-						"Обновление списка /wanteds",
-						"Автоматически обновляет список /wanteds каждые 10 секунд.",
+						"Обновление списка /" .. get_custom_cmd('wanteds') .. "",
+						"Автоматически обновляет список /" .. get_custom_cmd('wanteds') .. " каждые " .. (settings.mj.wanted_update_period or 10) .. " секунд.\n\nДля настройки интервала используйте шестерёнку справа.",
 						settings.mj,
-						"auto_update_wanteds"
+						"auto_update_wanteds",
+						false,
+						function()
+							if not MODULE.Wanted.update_period_slider then
+								MODULE.Wanted.update_period_slider = imgui.new.int(settings.mj.wanted_update_period or 10)
+							else
+								MODULE.Wanted.update_period_slider[0] = settings.mj.wanted_update_period or 10
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Интервал обновления списка преступников ' .. fa.GEAR)
+						end
 					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Интервал обновления списка преступников ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-обновления (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Как часто сканировать список /wanted.\nМинимум 10с, т.к. сканирование занимает до 7 команд по 1с.'))
+						end
+						imgui.SliderInt('##wanted_update_period', MODULE.Wanted.update_period_slider, 10, 60)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						imgui.Text(u8('Текущая задержка: ') .. (settings.mj.wanted_update_period or 10) .. u8(' сек.'))
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.mj.wanted_update_period = MODULE.Wanted.update_period_slider[0]
+							save_settings()
+							sampAddChatMessage('[Arizona Helper] {ffffff}Интервал обновления списка преступников сохранён.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
 					render_assist_item(
 						"Заполнение расследований",
 						"Автоматически заполняет практически все данные в диалогах расследования убийств.",
@@ -10650,23 +11346,163 @@ function render_fractions_functions()
 					)
 					render_assist_item(
 						"Кликер на ГРП",
-						"Автокликер в менюшках на Случайных Ситуациях (разбор завалов).",
+						"Автокликер в менюшках на Случайных Ситуациях (разбор завалов).\n\nДля настройки задержки между кликами используйте шестерёнку справа.",
 						settings.general,
 						"auto_clicker",
-						true
+						true,
+						function()
+							if not MODULE.ClickerDelay.slider then
+								MODULE.ClickerDelay.slider = imgui.new.int(settings.general.clicker_delay or 10)
+							else
+								MODULE.ClickerDelay.slider[0] = settings.general.clicker_delay or 10
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Настройка КД кликера ' .. fa.GEAR)
+						end
 					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка КД кликера ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Задержка между кликами (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Интервал между авто-кликами в мини-играх ГРП.\nМеньше - быстрее (выше риск флуда/детекта), больше - медленнее.')) end
+						imgui.SliderInt('##clicker_delay', MODULE.ClickerDelay.slider, 10, 2000)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.general.clicker_delay = MODULE.ClickerDelay.slider[0]
+							save_settings()
+							sampAddChatMessage('[Arizona Helper] {ffffff}КД кликера сохранён.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
 					render_assist_item(
 						"Авто-отыгровки RP на ГРП",
-						"Автоматические RP отыгровки на Случайных Ситуациях (системных ГРП).\nВместо вас будет отыгрывать действия с завалами для получения RP point",
+						"Автоматические RP отыгровки на Случайных Ситуациях (системных ГРП).\nВместо вас будет отыгрывать действия с завалами для получения RP point\n\nДля настройки КД каждого паттерна используйте шестерёнку справа.",
 						settings.mj,
-						"auto_rp_situation"
+						"auto_rp_situation",
+						false,
+						function()
+							settings.mj.rp_delay = settings.mj.rp_delay or { pickup = 0, drop = 1200, place = 1200 }
+							if not MODULE.RPDelay.pickup_slider then
+								MODULE.RPDelay.pickup_slider = imgui.new.int(settings.mj.rp_delay.pickup or 0)
+								MODULE.RPDelay.drop_slider   = imgui.new.int(settings.mj.rp_delay.drop or 1200)
+								MODULE.RPDelay.place_slider  = imgui.new.int(settings.mj.rp_delay.place or 1200)
+							else
+								MODULE.RPDelay.pickup_slider[0] = settings.mj.rp_delay.pickup or 0
+								MODULE.RPDelay.drop_slider[0]   = settings.mj.rp_delay.drop or 1200
+								MODULE.RPDelay.place_slider[0]  = settings.mj.rp_delay.place or 1200
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Настройка КД авто-отыгровок RP ' .. fa.GEAR)
+						end
 					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка КД авто-отыгровок RP ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД после подбора обломка (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Задержка перед RP-отыгровкой после "Вы подобрали обломок".')) end
+						imgui.SliderInt('##rp_delay_pickup', MODULE.RPDelay.pickup_slider, 0, 5000)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД после выброса завала (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Задержка перед RP-отыгровкой после "Вы выбросили завал".')) end
+						imgui.SliderInt('##rp_delay_drop', MODULE.RPDelay.drop_slider, 0, 5000)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД после установки обломка (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Задержка перед RP-отыгровкой после "Вы положили обломок".')) end
+						imgui.SliderInt('##rp_delay_place', MODULE.RPDelay.place_slider, 0, 5000)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.mj.rp_delay = {
+								pickup = MODULE.RPDelay.pickup_slider[0],
+								drop   = MODULE.RPDelay.drop_slider[0],
+								place  = MODULE.RPDelay.place_slider[0],
+							}
+							save_settings()
+							sampAddChatMessage('[Arizona Helper] {ffffff}КД авто-отыгровок RP сохранены.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
 					render_assist_item(
 						"AutoWANTED",
 						"Оповещает вас, если в зоне прорисовки появился преступник.\nТак-же кидает на него /find и /z (если рядом)",
 						settings.mj,
-						"awanted"
+						"awanted",
+						false,
+						function()
+							if not MODULE.Awanted.scan_radius_slider then
+								MODULE.Awanted.scan_radius_slider      = imgui.new.float(settings.mj.scan_radius or 50)
+								MODULE.Awanted.scan_delay_slider       = imgui.new.int(settings.mj.scan_delay or 2)
+								MODULE.Awanted.target_timeout_slider   = imgui.new.int(settings.mj.target_timeout or 10)
+								MODULE.Awanted.reset_interval_slider   = imgui.new.int(settings.mj.reset_interval or 45)
+							else
+								MODULE.Awanted.scan_radius_slider[0]    = settings.mj.scan_radius or 50
+								MODULE.Awanted.scan_delay_slider[0]     = settings.mj.scan_delay or 2
+								MODULE.Awanted.target_timeout_slider[0] = settings.mj.target_timeout or 10
+								MODULE.Awanted.reset_interval_slider[0] = settings.mj.reset_interval or 45
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Настройка AutoWANTED ' .. fa.GEAR)
+						end
 					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка AutoWANTED ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushTextWrapPos(imgui.GetCursorPosX() + 320 * settings.general.custom_dpi)
+						imgui.Separator()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8(' Радиус сканирования (метры):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Расстояние от вас, в пределах которого ищутся преступники.\nБольше радиус - шире зона поиска, но выше нагрузка.'))
+						end
+						if imgui.SliderFloat('##awanted_radius', MODULE.Awanted.scan_radius_slider, 10, 200, '%.0f') then
+							settings.mj.scan_radius = MODULE.Awanted.scan_radius_slider[0]
+						end
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Задержка после /z (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Сколько секунд ждать после отправки /z на игрока перед следующим действием.\nУвеличьте, если сервер не успевает отвечать.'))
+						end
+						if imgui.SliderInt('##awanted_delay', MODULE.Awanted.scan_delay_slider, 1, 10) then
+							settings.mj.scan_delay = MODULE.Awanted.scan_delay_slider[0]
+						end
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Таймаут цели (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Через сколько секунд игрок считается обработанным и может быть проверен снова,\nесли первая попытка не дала результата (не успел прийти ответ сервера).'))
+						end
+						if imgui.SliderInt('##awanted_timeout', MODULE.Awanted.target_timeout_slider, 5, 30) then
+							settings.mj.target_timeout = MODULE.Awanted.target_timeout_slider[0]
+						end
+						imgui.Text((fa.CLOCK_ROTATE_LEFT or fa.CIRCLE_INFO) .. u8(' Интервал сброса проверенных (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Через сколько секунд список уже проверенных игроков очищается,\nчтобы тех же игроков можно было просканировать повторно.'))
+						end
+						if imgui.SliderInt('##awanted_reset', MODULE.Awanted.reset_interval_slider, 15, 120) then
+							settings.mj.reset_interval = MODULE.Awanted.reset_interval_slider[0]
+						end
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.mj.scan_radius    = MODULE.Awanted.scan_radius_slider[0]
+							settings.mj.scan_delay     = MODULE.Awanted.scan_delay_slider[0]
+							settings.mj.target_timeout = MODULE.Awanted.target_timeout_slider[0]
+							settings.mj.reset_interval = MODULE.Awanted.reset_interval_slider[0]
+							save_settings()
+							sampAddChatMessage('[Arizona Helper] {ffffff}Настройки AutoWANTED сохранены.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
 					imgui.Separator()
 					imgui.EndChild()
 				end
@@ -10680,7 +11516,7 @@ function render_fractions_functions()
 					'системы умного розыска',
 					modules.smart_uk.data,
 					function() save_module("smart_uk") end,
-					'Используйте: /sum [ID игрока]',
+					'Используйте: /' .. get_custom_cmd('sum') .. ' [ID игрока]',
 					modules.smart_uk.path,
 					'smart_uk',
 					'умный розыск'
@@ -10695,7 +11531,7 @@ function render_fractions_functions()
 					'системы умных штрафов', 
 					modules.smart_pdd.data, 
 					function() save_module("smart_pdd") end, 
-					'Используйте: /tsm [ID игрока]', 
+					'Используйте: /' .. get_custom_cmd('tsm') .. ' [ID игрока]', 
 					modules.smart_pdd.path,
 					'smart_pdd',
 					'умные штрафы'
@@ -11093,18 +11929,48 @@ function render_fractions_functions()
 				"anti_trivoga"
 			)
 			render_assist_item(
-				"Кастомная менюшка /zeks",
-				"Выводит список заключенных на экран, чтобы не открывать каждый раз /zeks",
+				"Кастомная менюшка /" .. get_custom_cmd('zeks'),
+				"Выводит список заключенных на экран, чтобы не открывать каждый раз /" .. get_custom_cmd('zeks'),
 				settings.gov,
 				"custom_zeks"
 			)
 			render_assist_item(
-				"Автообновление менюшки /zeks",
-				"Автоматически (раз в 10 секунд) обновляет список менюшки /zeks",
+				"Автообновление менюшки /" .. get_custom_cmd('zeks'),
+				"Автоматически (раз в " .. (settings.gov.zeks_update_period or 10) .. " секунд) обновляет список менюшки /" .. get_custom_cmd('zeks') .. "\n\nДля настройки интервала используйте шестерёнку справа.",
 				settings.gov,
 				"auto_update_zeks",
-				true
+				false,
+				function()
+					if not MODULE.Zeks.update_period_slider then
+						MODULE.Zeks.update_period_slider = imgui.new.int(settings.gov.zeks_update_period or 10)
+					else
+						MODULE.Zeks.update_period_slider[0] = settings.gov.zeks_update_period or 10
+					end
+					imgui.OpenPopup(fa.GEAR .. u8' Интервал обновления списка заключенных ' .. fa.GEAR)
+				end
 			)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+			if imgui.BeginPopupModal(fa.GEAR .. u8' Интервал обновления списка заключенных ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+				change_dpi()
+				imgui.PushItemWidth(300 * settings.general.custom_dpi)
+				imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-обновления (сек):'))
+				imgui.SliderInt('##zeks_update_period', MODULE.Zeks.update_period_slider, 5, 60)
+				imgui.PopItemWidth()
+				imgui.Separator()
+				imgui.Text(u8('Текущая задержка: ') .. (settings.gov.zeks_update_period or 10) .. u8(' сек.'))
+				imgui.Separator()
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					imgui.CloseCurrentPopup()
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					settings.gov.zeks_update_period = MODULE.Zeks.update_period_slider[0]
+					save_settings()
+					sampAddChatMessage('[Arizona Helper] {ffffff}Интервал обновления списка заключенных сохранён.', message_color)
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
 			imgui.Separator()
 			imgui.EndChild()
 		end
@@ -11358,14 +12224,20 @@ if (not isMode('none')) then
 				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
 				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
 			end
-			imgui.Begin(getHelperIcon().." Arizona Helper " .. getHelperIcon() .. "##rank", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			imgui.Begin(getHelperIcon().." Arizona Helper Unlimited " .. getHelperIcon() .. "##rank", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
 			change_dpi()
 			imgui.CenterText(u8'Выберите ранг для '.. u8(sampGetPlayerNickname(MODULE.GiveRank.player_id)) .. ':')
 			imgui.PushItemWidth(250 * settings.general.custom_dpi)
 			imgui.SliderInt('', MODULE.GiveRank.number, 1, (modules.player.data.fraction_rank_number == 9) and 8 or 9)
 			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.GiveRank.cancel = true
+				MODULE.GiveRank.Window[0] = false
+			end
+			imgui.SameLine()
 			local label = ' Выдать ранг' .. ((hotkey_ok and settings.general.bind_action) and (' [' .. getNameKeysFrom(settings.general.bind_action) .. ']') or '')
-			if imgui.Button(fa.USER .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+			if imgui.Button(fa.USER .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.GiveRank.cancel = false
 				MODULE.GiveRank.Window[0] = false
 			end
 			imgui.End()
@@ -11737,7 +12609,7 @@ if not (isMode('ghetto') or isMode('mafia')) then
 			imgui.SetNextWindowPos(
 				imgui.ImVec2(settings.windows_pos.afind_building.x, settings.windows_pos.afind_building.y),
 				imgui.Cond.FirstUseEver)
-			imgui.Begin(getHelperIcon() .. u8" Arizona Helper " .. getHelperIcon() .. '##afind_building_menu', _,
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##afind_building_menu', _,
 				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize)
 			change_dpi()
 			safery_disable_cursor(player)
@@ -11795,7 +12667,7 @@ if not (isMode('ghetto') or isMode('mafia')) then
 				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
 		end
 			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.patrool_menu.x, settings.windows_pos.patrool_menu.y), imgui.Cond.FirstUseEver)
-			imgui.Begin(getHelperIcon() .. u8" Arizona Helper " .. getHelperIcon() .. '##post_info_menu', MODULE.Post.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize )
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##post_info_menu', MODULE.Post.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize )
 			change_dpi()
 			safery_disable_cursor(player)
 			if MODULE.Post.active then
@@ -12300,7 +13172,7 @@ if isMode('police') or isMode('fbi') then
 				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
 			end	
 			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.patrool_menu.x, settings.windows_pos.patrool_menu.y), imgui.Cond.FirstUseEver)
-			imgui.Begin(getHelperIcon() .. u8" Arizona Helper " .. getHelperIcon() .. '##patrool_info_menu', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize )
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##patrool_info_menu', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize )
 			change_dpi()
 			safery_disable_cursor(player)
 			if MODULE.Patrool.active then
@@ -12515,7 +13387,7 @@ if isMode('police') or isMode('fbi') then
 			if settings.mj.auto_update_wanteds then
 				imgui.Text(u8('Обновление списка преступников будет через ')
 					.. string.format("%02d", math.max(0,
-						10 - (os.time() - (MODULE.Wanted.updwanteds.last_time or os.time()))))
+						(settings.mj.wanted_update_period) - (os.time() - (MODULE.Wanted.updwanteds.last_time or os.time()))))
 					.. u8(' секунд'))
 				imgui.Separator()
 			else
@@ -12704,7 +13576,7 @@ if isMode('hospital') then
 		function() return MODULE.MedCard.Window[0] end,
 		function(player)
 			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-			imgui.Begin(fa.HOSPITAL.." Arizona Helper " .. fa.HOSPITAL .. "##medcard", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##medcard", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
 			change_dpi()
 			imgui.CenterText(u8'Срок действия мед.карты:')
 			if imgui.RadioButtonIntPtr(u8" 7 дней ##0",MODULE.MedCard.days,0) then
@@ -12734,6 +13606,11 @@ if isMode('hospital') then
 				MODULE.MedCard.status[0] = 3
 			end
 			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.MedCard.cancel = true
+				MODULE.MedCard.Window[0] = false
+			end
+			imgui.SameLine()
 			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'мед.карту')
 			if imgui.Button(fa.ID_CARD_CLIP .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.MedCard.Window[0] = false
@@ -12745,12 +13622,17 @@ if isMode('hospital') then
 		function() return MODULE.Recept.Window[0] end,
 		function(player)
 			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-			imgui.Begin(fa.HOSPITAL.." Arizona Helper " .. fa.HOSPITAL .. "##recept", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##recept", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
 			change_dpi()
 			imgui.CenterText(u8'Количество рецептов для выдачи:')
 			imgui.PushItemWidth(250 * settings.general.custom_dpi)
 			imgui.SliderInt('', MODULE.Recept.recepts, 1, 5)
 			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Recept.cancel = true
+				MODULE.Recept.Window[0] = false
+			end
+			imgui.SameLine()
 			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'рецепты')
 			if imgui.Button(fa.CAPSULES .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.Recept.Window[0] = false
@@ -12762,12 +13644,17 @@ if isMode('hospital') then
 		function() return MODULE.Antibiotik.Window[0] end,
 		function(player)
 			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-			imgui.Begin(fa.HOSPITAL.." Arizona Helper " .. fa.HOSPITAL .. "##ant", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##ant", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
 			change_dpi()
 			imgui.CenterText(u8'Количество антибиотиков для выдачи:')
 			imgui.PushItemWidth(250 * settings.general.custom_dpi)
 			imgui.SliderInt('', MODULE.Antibiotik.ants, 1, 20)
 			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Antibiotik.cancel = true
+				MODULE.Antibiotik.Window[0] = false
+			end
+			imgui.SameLine()
 			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'антибиотики')
 			if imgui.Button(fa.CAPSULES .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
 				MODULE.Antibiotik.Window[0] = false
@@ -12779,7 +13666,7 @@ if isMode('hospital') then
 		function() return MODULE.HealChat.Window[0] end,
 		function(player)
 			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 8.5, sizeY / 1.9), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-			imgui.Begin(fa.HOSPITAL.." Arizona Helper " .. fa.HOSPITAL .. "##fast_heal", MODULE.HealChat.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoTitleBar +  imgui.WindowFlags.AlwaysAutoResize )
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##fast_heal", MODULE.HealChat.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoTitleBar +  imgui.WindowFlags.AlwaysAutoResize )
 			change_dpi()
 			if imgui.Button(fa.KIT_MEDICAL..u8' Вылечить '.. u8(sampGetPlayerNickname(MODULE.HealChat.player_id))) then
 				find_and_use_command("/heal {id}", MODULE.HealChat.player_id)
@@ -12798,7 +13685,7 @@ if isMode('smi') then
 			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
 			local size_window_y = settings.smi.ads_buttons and 301.5 or 137
 			imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, size_window_y * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
-			imgui.Begin(getHelperIcon() .. u8" Arizona Helper " .. getHelperIcon() .. '##MODULE.SmiEdit.Window', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar )
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##MODULE.SmiEdit.Window', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar )
 			change_dpi()
 			imgui.Text(fa.CIRCLE_INFO .. u8" Объявление подал игрок: " .. u8(MODULE.SmiEdit.ad_from) .. '[' .. sampGetPlayerIdByNickname(MODULE.SmiEdit.ad_from) .. ']')
 			imgui.Text(fa.CIRCLE_INFO .. u8" Текст: " .. (u8(MODULE.SmiEdit.ad_message)))
@@ -13195,16 +14082,14 @@ if isMode('gov') then
 			end
 			safery_disable_cursor(player)
 			if settings.gov.auto_update_zeks then
-				local text_time_wait = tostring(10 - tonumber(MODULE.Zeks.updzeks.time))
-				if tonumber(text_time_wait) < 10 then
-					text_time_wait = '0' .. text_time_wait
-				end
-				imgui.Text(u8('Автоматическое обновление списка заключенных будет через ') .. tostring(text_time_wait) .. u8(' секунд'))
+				local period = settings.gov.zeks_update_period
+				local text_time_wait = string.format("%02d", math.max(0, period - (tonumber(MODULE.Zeks.updzeks.time) or 0)))
+				imgui.Text(u8('Автоматическое обновление списка заключенных будет через ') .. text_time_wait .. u8(' секунд'))
 				imgui.Separator()
 			else
 				if imgui.Button(u8'Обновить список заключенных', imgui.ImVec2(450 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
 					MODULE.Zeks.Window[0] = false
-					sampAddChatMessage('[Arizona Helper] {ffffff}Вы можете включить авто-обновление списка /zeks в /helper - Функции ' .. modules.player.data.fraction_tag .. '!', message_color)
+					sampAddChatMessage('[Arizona Helper] {ffffff}Вы можете включить авто-обновление списка /' .. get_custom_cmd('zeks') .. ' в /helper - Функции ' .. modules.player.data.fraction_tag .. '!', message_color)
 					sampProcessChatInput('/zeks')
 				end
 				imgui.Separator()
@@ -13612,6 +14497,164 @@ imgui.OnFrame(
 		imgui.End()
 	end
 )
+------------------------------------------------ ARMORY AUTO-EQUIP -------------------------------
+MODULE.Armory = {
+	items = {}, menu = nil, queue = {}, next_at = 0,
+	want_build = false, pending_close = false,
+	expect_armory = false, last_run = 0, suppress_until = 0,
+	await_change = false,
+	in_form = false, in_swat = false,
+}
+local A = MODULE.Armory
+local function cfg() return settings.general.armory or {} end
+local function cd_ok()
+	return os.time() - (A.last_run or 0) >= (cfg().cooldown_sec or 60)
+end
+local function start_run_stamp()
+	A.last_run = os.time()
+	A.suppress_until = os.time() + 30
+end
+local function log(msg) if MODULE.DEBUG then print('[ARMORY] ' .. msg) end end
+local ARM_PATTERNS = {
+	vest={'Бронежилет'}, de={'Eagle'}, stun={'Оглушающий'},
+	taser={'азер'}, baton={'Дубинк'}, rifle={'M4','Автомат'},
+	shotgun={'Дробовик'}, smg={'MP5'}, sniper={'Снайперск','Винтовк'},
+	smoke={'Дымов'}, shield={'Щит'}, spikes={'шип'},
+}
+local LCK = {
+	swat={'SWAT'}, mask={'Маска МО'}, bodycam={'одикамер','Боди'},
+	objects={'Набор объектов','объектов'}, ammo={'боеприпас'}, heals = {'Рабочая аптечка'},
+}
+local function find_id(patterns)
+	for _, it in ipairs(A.items) do
+		for _, p in ipairs(patterns) do
+			if it.title and it.title:find(p, 1, true) then return it.id end
+		end
+	end
+	return nil
+end
+local function push(q, key, tbl)
+	local id = find_id(tbl[key])
+	if id then q[#q+1] = id end
+end
+local function finish_build()
+	local t = {}
+	for _, i in ipairs(A.queue) do t[#t+1] = tostring(i) end
+	log('build ' .. tostring(A.menu) .. ' queue: ' .. table.concat(t, ','))
+end
+function A.on_cef(event, payload)
+	log('on_cef: ' .. tostring(event))
+	if not settings.general.armory_enable then return end
+	if event == 'event.notify.initialize' then
+		local c = cfg()
+		if type(payload) == 'string' then
+			if payload:find('гражданскую', 1, true) then A.in_form = false; A.in_swat = false
+			elseif payload:find('рабочую', 1, true) then A.in_form = true; A.in_swat = false
+			elseif payload:find('S.W.A.T', 1, true) then A.in_form = true; A.in_swat = true
+			elseif payload:find('отобрали служебные', 1, true) then A.in_swat = false
+			end
+		end
+		if A.await_change and type(payload) == 'string' then
+			if payload:find('гражданскую', 1, true) then
+				A.await_change = false
+				lua_thread.create(function() wait(300) A._send_select(0) end)
+			elseif payload:find('рабочую', 1, true) then
+				A.await_change = false
+			end
+		end
+		if c.mask and type(payload) == 'string' and payload:find('S.W.A.T', 1, true) then
+			lua_thread.create(function() wait(400) sampSendChat('/mask') end)
+		end
+		return
+	end
+	if event == 'event.mountain.testDrive.initializeText' then
+		local ok, dec = pcall(decodeJson, payload)
+		local title = ok and type(dec)=='table' and dec[1] and dec[1].title or ''
+		local c = cfg()
+		if title:find('Раздевалка', 1, true) then
+			if not (A.menu=='armory' and #A.queue>0) then
+				A.menu = 'locker'
+				A.want_build = (c.auto_locker or c.auto_armory) and cd_ok()
+			end
+		elseif title:find('Оружейная', 1, true) then
+			A.menu = 'armory'
+			local cont = A.expect_armory; A.expect_armory = false
+			A.want_build = c.auto_armory and (cont or cd_ok())
+		else
+			A.menu = nil; A.want_build = false
+		end
+		A.next_at = os.clock()*1000 + (c.grace_ms or 350)
+		return
+	end
+	if event == 'event.mountain.testDrive.addVehicles' then
+		local ok, dec = pcall(decodeJson, payload)
+		local arr = ok and type(dec)=='table' and dec or nil
+		if arr and type(arr[1])=='table' then arr = arr[1] end
+		A.items = (type(arr)=='table') and arr or {}
+		if A.want_build and A.menu then
+			A.want_build = false
+			if A.menu=='locker' then A:build_locker() else A:build_armory() end
+		end
+		return
+	end
+	if event == 'cef.modals.showModal' and type(payload)=='string' and payload:find('взять со склада',1,true) then
+		lua_thread.create(function() wait(200); setVirtualKeyDown(0x0D,true); wait(100); setVirtualKeyDown(0x0D,false) end)
+	end
+end
+function A:build_locker()
+	local c, q = cfg(), {}
+	if c.auto_locker and (c.swat or c.mask) and not A.in_form then q[#q+1] = 'CHANGE' end
+	if c.auto_locker and c.swat and not A.in_swat then push(q,'swat',LCK) end
+	if c.mask and c.swat and not A.in_swat then push(q,'mask',LCK) end
+	if c.bodycam then push(q,'bodycam',LCK) end
+	if c.objects then push(q,'objects',LCK) end
+	if c.heals then push(q,'heals',LCK) end
+	if c.auto_armory then push(q,'ammo',LCK); A.expect_armory = true end
+	A.queue = q
+	if #q > 0 then start_run_stamp() end
+	finish_build()
+end
+function A:build_armory()
+	local c, q = cfg(), {}
+	if c.vest then push(q,'vest',ARM_PATTERNS) end
+	if c.pistol=='stun' then push(q,'stun',ARM_PATTERNS) else push(q,'de',ARM_PATTERNS) end
+	for _, k in ipairs({'taser','baton','rifle','shotgun','smg','sniper','smoke','shield','spikes'}) do
+		if c[k] then push(q,k,ARM_PATTERNS) end
+	end
+	A.queue = q
+	A.pending_close = #q > 0
+	if #q > 0 then start_run_stamp() end
+	finish_build()
+end
+lua_thread.create(function()
+	while true do
+		wait(80)
+		if settings.general.armory_enable and #A.queue > 0 and os.clock()*1000 >= A.next_at then
+			local id = table.remove(A.queue, 1)
+			if id == 'CHANGE' then
+				A._send_select(0); A.await_change = true
+				A.next_at = os.clock()*1000 + 2500
+			else
+				A._send_select(id)
+				local step
+				if A.menu == 'locker' then
+					step = math.max(1600, cfg().locker_step_ms or 1600)
+				else
+					step = math.max(1000, cfg().step_ms or 550)
+				end
+				A.next_at = os.clock()*1000 + step
+				if #A.queue == 0 and A.menu == 'armory' and A.pending_close then
+					A.pending_close = false
+					lua_thread.create(function() wait(1200) emulationCEF('mountain.testDrive.close') end)
+				end
+			end
+		end
+	end
+end)
+function A._send_select(id)
+	log('emulationCEF selectVehicle|' .. tostring(id))
+	emulationCEF('mountain.testDrive.selectVehicle|' .. tostring(id))
+end
 ----------------------------------- UPDATE GUI -----------------------------
 imgui.OnFrame(
 	function() return MODULE.Update.Window[0] or MODULE.Update.popup_opened end,
@@ -13766,7 +14809,7 @@ imgui.OnFrame(
     function() return MODULE.CommandStop.Window[0] end,
     function(player)
 		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY - 50 * settings.general.custom_dpi), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-		imgui.Begin(getHelperIcon() .. " Arizona Helper " .. getHelperIcon() .. "##MODULE.CommandStop.Window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		imgui.Begin(getHelperIcon() .. " Arizona Helper Unlimited " .. getHelperIcon() .. "##MODULE.CommandStop.Window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
 		change_dpi()
 		if IS_MOBILE and MODULE.Binder.state.isActive then
 			if imgui.Button(fa.CIRCLE_STOP..u8' Остановить отыгровку') then
@@ -13783,7 +14826,7 @@ imgui.OnFrame(
     function() return MODULE.CommandPause.Window[0] end,
     function(player)
 		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY - 50 * settings.general.custom_dpi), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
-		imgui.Begin(getHelperIcon() .." Arizona Helper " .. getHelperIcon() .. "##MODULE.CommandPause.Window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		imgui.Begin(getHelperIcon() .." Arizona Helper Unlimited " .. getHelperIcon() .. "##MODULE.CommandPause.Window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
 		change_dpi()
 		if MODULE.Binder.state.isPause then
 			safery_disable_cursor(player)
@@ -14351,56 +15394,6 @@ function asyncHttpRequest(method, url, args, resolve, reject)
             wait(0)
         end
     end)
-end
--------------------------------------------- Analytichs ----------------------------------------
-function getHWID()
-	if IS_MOBILE then
-		local success, id = pcall(function()
-			local envu = require("android.jnienv-util")
-			envu.LooperPrepare()
-			local activity = require("android.jni-raw").activity
-			local contentResolver = envu.CallObjectMethod(
-				activity,
-				"getContentResolver",
-				"()Landroid/content/ContentResolver;"
-			)
-			local ANDROID_ID = envu.GetStaticObjectField(
-				"android/provider/Settings$Secure",
-				"ANDROID_ID",
-				"Ljava/lang/String;"
-			)
-			local jstr = envu.CallStaticObjectMethod(
-				"android/provider/Settings$Secure",
-				"getString",
-				"(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;",
-				contentResolver,
-				ANDROID_ID
-			)
-			local android_id = envu.FromJString(jstr)
-			return android_id
-		end)
-		if success then return id end
-	else
-		local success, id = pcall(function()
-			ffi.cdef[[
-				int __stdcall GetVolumeInformationA(
-						const char* lpRootPathName,
-						char* lpVolumeNameBuffer,
-						uint32_t nVolumeNameSize,
-						uint32_t* lpVolumeSerialNumber,
-						uint32_t* lpMaximumComponentLength,
-						uint32_t* lpFileSystemFlags,
-						char* lpFileSystemNameBuffer,
-						uint32_t nFileSystemNameSize
-				);
-				]]
-			local serial = ffi.new("unsigned long[1]", 0)
-			ffi.C.GetVolumeInformationA(nil, nil, 0, serial, nil, nil, nil, 0)
-			return serial[0]
-		end)
-		if success then return string.format("%08X", id) end
-	end
-	return 'Unknown'
 end
 ------------------------------------------ PC KEY ACTIONS --------------------------------------
 if not IS_MOBILE then
