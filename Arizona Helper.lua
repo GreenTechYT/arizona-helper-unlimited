@@ -10938,7 +10938,8 @@ function firs_render_assist_gui()
 	render_assist_item(
 		"Авто-снаряжение",
 		"После открытия меню оружейной/раздевалки автоматически берёт выбранное снаряжение.\nДля настройки используйте шестерёнку справа.",
-		settings.general, "armory_enable", 
+		settings.general, 
+		"armory_enable", 
 		true,
 		function() imgui.OpenPopup((fa.SHIELD_HALVED or fa.GUN) .. u8' Авто-снаряжение ' .. (fa.SHIELD_HALVED or fa.GUN)) end
 	)
