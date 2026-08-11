@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.5.2")
+script_version("1.5.3")
 ----------------------------------------------- INIT ---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
@@ -484,7 +484,7 @@ local default_settings = {
 		mobile_fastmenu_button = true,
 		mobile_stop_button = true,
 		ping = true,
-		rp_guns = false,
+		rp_weapon = false,
 		rp_chat = false,
 		accent_enable = true,
 		auto_accept_docs = true,
@@ -1129,7 +1129,7 @@ local modules = {
 		name = 'Оружие',
 		path = config_dir .. "/Weapon.json",
 		data = {
-            rp_guns = {
+            rp_weapon = {
                 {id = 0, name = 'кулаки', enable = true, rpTake = 2},
 				{id = 1, name = 'кастеты', enable = false, rpTake = 2},
 				{id = 2, name = 'клюшку для гольфа', enable = false, rpTake = 1},
@@ -1541,6 +1541,8 @@ local MODULE = {
 		in_building = false,
 		building_since = 0,
 		last_building_msg = 0,
+		last_area = nil,
+        last_coords = nil,
 		},
 	Awanted = {
 		queue = {},
@@ -2310,51 +2312,63 @@ MODULE.Binder.tags = {
 	},
 	-- ТРАНСПОРТ
 	{
+		key = "get_nearest_car",
+		description = "Ближайший т/с",
+		category = "Транспорт",
+		mode = "all",
+		func = function() return get_near_car() end
+	},
+	{
+		key = "get_drived_car",
+		description = "Ближайший т/с с водителем",
+		category = "Транспорт",
+		mode = "all",
+		func = function() return get_near_car(true) end
+	},
+	{
 		key = "get_car_units",
 		description = "Напарники в вашем т/с",
 		category = "Транспорт",
 		mode = "all",
 		func = function()
-			if isCharInAnyCar(PLAYER_PED) then
-				local car = storeCarCharIsInNoSave(PLAYER_PED)
-				local success, passengers = getNumberOfPassengers(car)
-				if IS_MOBILE and success and passengers == nil then
-					passengers = success
-				end
-				if success and passengers and tonumber(passengers) > 0 then
-					local my_passengers = {}
-					for k, v in ipairs(getAllChars()) do
-						local res, id = sampGetPlayerIdByCharHandle(v)
-						if res and id ~= select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)) then
-							if isCharInAnyCar(v) then
-								if car == storeCarCharIsInNoSave(v) then
-									table.insert(my_passengers, id)
-								end
+			if not doesCharExist(PLAYER_PED) or not isCharInAnyCar(PLAYER_PED) then return 'Нету' end
+			local ok_car, car = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+			if not ok_car or not car then return 'Нету' end
+			local ok_n, a, b = pcall(getNumberOfPassengers, car)
+			if not ok_n then return 'Нету' end
+			local count = tonumber(b or a) or 0
+			if count <= 0 then return 'Нету' end
+			local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			local my_passengers = {}
+			local ok_all, all = pcall(getAllChars)
+			if not ok_all or type(all) ~= 'table' then return 'Нету' end
+			for _, v in ipairs(all) do
+				if doesCharExist(v) then
+					local res, id = sampGetPlayerIdByCharHandle(v)
+					if res and id and id ~= my_id and sampIsPlayerConnected(id) then
+						if isCharInAnyCar(v) then
+							local ok_vc, vc = pcall(storeCarCharIsInNoSave, v)
+							if ok_vc and vc == car then
+								table.insert(my_passengers, id)
 							end
 						end
 					end
-					if #my_passengers ~= 0 then
-						local units = ''
-						for _, idd in ipairs(my_passengers) do
-							local nickname = sampGetPlayerNickname(idd)
-							local first_letter = nickname:sub(1, 1)
-							local last_name = nickname:match(".*_(.*)")
-							if last_name then
-								units = units .. first_letter .. "." .. last_name .. ' '
-							else
-								units = units .. nickname .. ' '
-							end
-						end
-						return units
-					else
-						return 'Нету'
-					end
-				else
-					return 'Нету'
 				end
-			else
-				return 'Нету'
 			end
+			if #my_passengers == 0 then return 'Нету' end
+			local units = ''
+			for _, idd in ipairs(my_passengers) do
+				local nickname = sampGetPlayerNickname(idd)
+				if nickname then
+					local last_name = nickname:match(".*_(.*)")
+					if last_name then
+						units = units .. nickname:sub(1, 1) .. "." .. last_name .. ' '
+					else
+						units = units .. nickname .. ' '
+					end
+				end
+			end
+			return units ~= '' and units or 'Нету'
 		end
 	},
 	{
@@ -2362,17 +2376,16 @@ MODULE.Binder.tags = {
 		description = "Переключить мигалки",
 		category = "Транспорт",
 		mode = "all",
+		no_preview = true,
 		func = function()
-			if isCharInAnyCar(PLAYER_PED) then
-				local car = storeCarCharIsInNoSave(PLAYER_PED)
-				if getDriverOfCar(car) == PLAYER_PED then
-					switchCarSiren(car, not isCarSirenOn(car))
-					return '/me ' .. (isCarSirenOn(car) and 'включает' or 'выключает') .. ' мигалки'
-				else
-					return (isCarSirenOn(car) and 'Выключи' or 'Врубай') .. ' мигалки!'
-				end
+			if not doesCharExist(PLAYER_PED) or not isCharInAnyCar(PLAYER_PED) then return "Нету" end
+			local ok_car, car = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+			if not ok_car or not car then return "Нету" end
+			if getDriverOfCar(car) == PLAYER_PED then
+				switchCarSiren(car, not isCarSirenOn(car))
+				return '/me ' .. (isCarSirenOn(car) and 'включает' or 'выключает') .. ' мигалки'
 			else
-				return "Нету"
+				return (isCarSirenOn(car) and 'Выключи' or 'Врубай') .. ' мигалки!'
 			end
 		end
 	},
@@ -2959,13 +2972,13 @@ if hotkey_ok and not isMode('') then
 		if msg == 0x0005 then hotkey.ActiveKeys = {} end
 	end)
 end
----------------------------------------------- RP GUNS  ------------------------------------------
-function initialize_guns()
+---------------------------------------------- RP WEAPON  ------------------------------------------
+function initialize_weapon()
 	local isFemale = (modules.player.data.sex == "Женщина")
 	local data = modules.weapon.data
 	data.byId = {}
     data.gunActions = {on = {}, off = {}, partOn = {}, partOff = {}}
-    for i, weapon in pairs(data.rp_guns) do
+    for i, weapon in pairs(data.rp_weapon) do
         local rpTakeType = data.rpTakeNames[weapon.rpTake]
 		local id = weapon.id
 		data.byId[id] = weapon
@@ -2999,16 +3012,16 @@ end
 function handleNewWeapon(weaponId)
     sampAddChatMessage('[Arizona Helper] {ffffff}Обнаружено новое оружие с ID ' .. message_color_hex .. weaponId .. '{ffffff}. Ему автоматически назначено имя "оружие" и расположение "спина"', message_color)
     sampAddChatMessage('[Arizona Helper] {ffffff}Изменить название или расположение оружия можно через настройки функций', message_color)
-    table.insert(modules.weapon.data.rp_guns, {id = weaponId, name = "оружие", enable = true, rpTake = 1})
+    table.insert(modules.weapon.data.rp_weapon, {id = weaponId, name = "оружие", enable = true, rpTake = 1})
 	save_module('weapon')
-    initialize_guns()
+    initialize_weapon()
 end
 function processWeaponChange(oldGun, nowGun)
 	if not isExistsWeapon(oldGun) then handleNewWeapon(oldGun) end
 	if not isExistsWeapon(nowGun) then handleNewWeapon(nowGun) end
     if not modules.weapon.data.gunActions.off[oldGun] or not modules.weapon.data.gunActions.on[nowGun] then
         sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Инициализация оружия...', message_color)
-		initialize_guns()
+		initialize_weapon()
 		return
     end
     local actions = modules.weapon.data.gunActions
@@ -3260,7 +3273,7 @@ function main()
 		b.phone_opened = false
 		b.use_members = edgo_is_fbi()
 		b.last_active_time = os.clock(); b.retry_count = 0; b.phase = 'leaders'
-		sampAddChatMessage('[Arizona Helper] {ffffff}ЭБГО: пробив по снятию розыска ' .. message_color_hex .. who .. '{ffffff}.', message_color)
+		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} запущен.', message_color)
 		MODULE.Edgo.rp_start(mode, who, false)
 		MODULE.Edgo.send_cmd('/leaders')
 	end
@@ -3641,8 +3654,7 @@ function main()
 		local who = MODULE.Edgo.ru_name(d)
 		MODULE.Edgo.Window[0] = false
 		MODULE.Binder.state.isActive = true
-		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО: история имени для ' .. message_color_hex .. who .. '[' .. b.target_id .. ']{ffffff}.', message_color)
-		local H = MODULE.Edgo.history
+		sampAddChatMessage('[Arizona Helper] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '[' .. tostring(d.id or -1) .. ']{ffffff} запущен.', message_color)		local H = MODULE.Edgo.history
 		H.active = true; H.finished = false; H.got = nil
 		H.waiting_result = false
 		H.token = token; H.display_name = who
@@ -4019,8 +4031,9 @@ function main()
 		return
 	end
 
-	initialize_guns()
 	initialize_commands()
+	initialize_vehicles()
+	initialize_weapon()
 
 	if hotkey_ok then loadHotkeys() end
 	if IS_MOBILE then render_buttons() end
@@ -4141,7 +4154,7 @@ function main()
 		-- 	end
 		-- end
 
-		if settings.general.rp_guns then
+		if settings.general.rp_weapon then
 			local current = getCurrentCharWeapon(PLAYER_PED)
 			if modules.weapon.data.nowGun ~= current then
 				modules.weapon.data.oldGun = modules.weapon.data.nowGun
@@ -4498,7 +4511,7 @@ function initialize_commands()
     CUSTOM_CMD_HANDLERS.debug = function()
         MODULE.DEBUG = not MODULE.DEBUG
         sampAddChatMessage('[Arizona Helper] {ffffff}Отслеживание серверных данных ' .. (MODULE.DEBUG and 'включено.' or 'выключено.'), message_color)
-    end
+	end
     if is_custom_cmd_enabled('debug') then sampRegisterChatCommand(get_custom_cmd('debug'), CUSTOM_CMD_HANDLERS.debug) end
 
     if not isMode('none') then
@@ -4668,7 +4681,14 @@ function initialize_commands()
                                 break
                             end
                         end
-                        wait(100)
+                        if not MODULE.Afind.in_building and (waited % 500 == 0) then
+                            local ok, tx, ty, tz = pcall(sampGetPlayerCoordinates, my_id)
+                            if ok and tx and ty and tz then
+                                MODULE.Afind.last_coords = { x = tx, y = ty, z = tz }
+                                MODULE.Afind.last_area = get_area(tx, ty, tz)
+                            end
+                        end
+						wait(100)
                         waited = waited + 100
                     end
                     if approached then
@@ -5127,60 +5147,89 @@ local car_colors = {
 	[244] = "коричневого", [245] = "хвойного", [246] = "голубого", [247] = "синего", [248] = "бордового", [249] = "бордового", [250] = "серого", [251] = "серого", [252] = "чёрного", 
 	[253] = "серого", [254] = "коричневого", [255] = "синего"
 }
+local _veh_warn_next = 0
 function get_vehicle_name(id)
-	local map = modules.vehicles.byId
-	if map and map[id] then
-		return map[id]
-	end
-	sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось получить модель т/c ' .. id .. " ID, обновляю конфиг транспорта...", message_color)
-	download_file = 'vehicles'
-	downloadFileFromUrlToPath('https://github.com/GreenTechYT/arizona-helper-unlimited/SmartVEH/Vehicles' .. 
-	((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), modules.vehicles.path)
-	return 'транспортного средства'
+    local map = modules.vehicles.byId
+    if map and map[id] then
+        return map[id]
+    end
+    local now = os.time()
+    if now >= _veh_warn_next then
+        _veh_warn_next = now + 60
+        sampAddChatMessage('[Arizona Helper] {ffffff}Не удалось получить модель т/c ' .. id .. ' ID, обновляю конфиг транспорта...', message_color)
+        if not download_file then
+            download_file = 'vehicles'
+            local server = tonumber(getServerNumber()) or 0
+            local url = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/SmartVEH/Vehicles' .. (server > 300 and 'Rodina.json' or '.json') downloadFileFromUrlToPath(url, modules.vehicles.path)
+        end
+    end
+    return 'транспортного средства'
 end
 function get_near_car(only_with_driver)
-	local closest_car = nil
-	local closest_distance = 50
-	local my_pos = {getCharCoordinates(PLAYER_PED)}
-	local my_car = nil
-
-	if isCharInAnyCar(PLAYER_PED) then my_car = storeCarCharIsInNoSave(PLAYER_PED) end
-
-	for _, vehicle in ipairs(getAllVehicles()) do
-		if vehicle ~= my_car then
-			if (not only_with_driver) or doesCharExist(getDriverOfCar(vehicle)) then
-				local vehicle_pos = {getCarCoordinates(vehicle)}
-				local distance = getDistanceBetweenCoords3d(my_pos[1], my_pos[2], my_pos[3], vehicle_pos[1], vehicle_pos[2], vehicle_pos[3])
-				if distance < closest_distance then
-					closest_distance = distance
-					closest_car = vehicle
-				end
-			end
-		end
-	end
-
-	if not closest_car then return 'транспортного средства' end
-
-	local clr1 = getCarColours(closest_car)
-	local CarColorName = clr1 and (' ' .. car_colors[clr1] .. ' цвета') or ''
-	
-	local plateText = ''
-	for _, plate in pairs(modules.vehicles.cache) do
-		local result, veh = sampGetCarHandleBySampVehicleId(plate.carID)
-		if result and veh == closest_car then
-			plateText = ' c номерами ' .. plate.number
-			break
-		end
-	end
-
-	return (get_vehicle_name(getCarModel(closest_car)) .. CarColorName .. plateText)
+    if not sampIsLocalPlayerSpawned() then return 'транспортного средства' end
+    local ok_pos, mx, my, mz = pcall(getCharCoordinates, PLAYER_PED)
+    if not ok_pos or not mx then return 'транспортного средства' end
+    local my_car = nil
+    if isCharInAnyCar(PLAYER_PED) then my_car = storeCarCharIsInNoSave(PLAYER_PED) end
+    local closest_car = nil
+    local closest_distance = 50
+    local ok_all, all = pcall(getAllVehicles)
+    if not ok_all or type(all) ~= 'table' then return 'транспортного средства' end
+    for _, vehicle in ipairs(all) do
+        if vehicle and vehicle ~= my_car and doesVehicleExist(vehicle) then
+            local dominated = false
+            if only_with_driver then
+                local ok_d, driver = pcall(getDriverOfCar, vehicle)
+                if not ok_d or not driver or not doesCharExist(driver) then
+                    dominated = true
+                end
+            end
+            if not dominated then
+                local ok_vc, vx, vy, vz = pcall(getCarCoordinates, vehicle)
+                if ok_vc and vx and vy and vz then
+                    local distance = getDistanceBetweenCoords3d(mx, my, mz, vx, vy, vz)
+                    if distance < closest_distance then
+                        closest_distance = distance
+                        closest_car = vehicle
+                    end
+                end
+            end
+        end
+    end
+    if not closest_car then return 'транспортного средства' end
+    local CarColorName = ''
+    local ok_c, clr1 = pcall(getCarColours, closest_car)
+    if ok_c and clr1 and car_colors[clr1] then
+        CarColorName = ' ' .. car_colors[clr1] .. ' цвета'
+    end
+    local plateText = ''
+    if type(modules.vehicles.cache) == 'table' then
+        for _, plate in pairs(modules.vehicles.cache) do
+            local result, veh = sampGetCarHandleBySampVehicleId(plate.carID)
+            if result and veh == closest_car then
+                plateText = ' c номерами ' .. (plate.number or '?')
+                break
+            end
+        end
+    end
+    return (get_vehicle_name(getCarModel(closest_car)) .. CarColorName .. plateText)
 end
-function cache_vehicles()
+function initialize_vehicles()
+    modules.vehicles.byId = modules.vehicles.byId or {}
+	local seen = {}
 	for _, v in ipairs(modules.vehicles.data) do
-		if v.model_id then
+		if v.model_id and v.name and not seen[v.model_id] then
 			modules.vehicles.byId[v.model_id] = v.name
+			seen[v.model_id] = true
 		end
 	end
+    if modules.vehicles._update_triggered then return end
+    modules.vehicles._update_triggered = true
+    modules.vehicles._silent_update = true
+    local server = tonumber(getServerNumber()) or 0
+    local url = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/SmartVEH/Vehicles' .. (server > 300 and 'Rodina.json' or '.json')
+    download_file = 'vehicles'
+    downloadFileFromUrlToPath(url, modules.vehicles.path)
 end
 function get_area(x, y, z)
 	local streets = {
@@ -5628,10 +5677,12 @@ function downloadFileFromUrlToPath(url, path)
 			play_sound()
 			load_module('smart_rptp')
 		elseif download_file == 'vehicles' then
-			sampAddChatMessage('[Arizona Helper] {ffffff}Загрузка всех кастомных т/с успешно заверешена!',  message_color)
-			play_sound()
-			load_module('vehicles')
-			cache_vehicles()
+			if not modules.vehicles._silent_update then
+				sampAddChatMessage('[Arizona Helper] {ffffff}Загрузка всех кастомных т/с успешно завершена!',  message_color)
+				play_sound()
+			end
+			modules.vehicles._silent_update = false
+			initialize_vehicles()
 		elseif download_file == 'notify' then
 			if doesFileExist(config_dir .. "/Resourse/notify.mp3") then
 				print('Звук оповещений успешно загружен!')
@@ -6413,10 +6464,15 @@ function changeCrosshairColor(color)
 end
 function isActiveCrosshairMode()
 	if IS_MOBILE then
-		return sam and sam.camera and sam.camera.aCams and sam.camera.aCams[0]
-		       and sam.camera.aCams[0].nMode == 53 or false
+		if not (sam and sam.camera and sam.camera.aCams and sam.camera.aCams[0]) then
+			return false
+		end
+		return sam.camera.aCams[0].nMode == 53
 	else
-		return memory_ok and memory.getint16(0xB6F1A8, false) == 53
+		if not memory_ok then
+			return false
+		end
+		return memory.getint16(0xB6F1A8, false) == 53
 	end
 end
 --------------------------------------------- Events ---------------------------------------------
@@ -6445,49 +6501,15 @@ function visualCEF(str, is_encoded)
 	raknetDeleteBitStream(bs)
 end
 function show_notify(type, title, text, time)
-	if IS_MOBILE then
-		--[[
-		if type == 'info' then
-			type = 3
-		elseif type == 'error' then
-			type = 2
-		elseif type == 'success' then
-			type = 1
-		end
-		local bs = raknetNewBitStream()
-		raknetBitStreamWriteInt8(bs, 62)
-		raknetBitStreamWriteInt8(bs, 6)
-		raknetBitStreamWriteBool(bs, true)
-		raknetEmulPacketReceiveBitStream(220, bs)
-		raknetDeleteBitStream(bs)
-		local json = encodeJson({
-			styleInt = type,
-			title = title,
-			text = text,
-			duration = time
-		})
-		local interfaceid = 6
-		local subid = 0
-		local bs = raknetNewBitStream()
-		raknetBitStreamWriteInt8(bs, 84)
-		raknetBitStreamWriteInt8(bs, interfaceid)
-		raknetBitStreamWriteInt8(bs, subid)
-		raknetBitStreamWriteInt32(bs, #json)
-		raknetBitStreamWriteString(bs, json)
-		raknetEmulPacketReceiveBitStream(220, bs)
-		raknetDeleteBitStream(bs)
-		]]
-	else
-		local function escape_js(s)
-			return s:gsub("\\", "\\\\"):gsub('"', '\\"')
-		end
-		local safe_type = escape_js(type)
-		local safe_title = escape_js(title)
-		local safe_text = escape_js(text)
-		local safe_time = tostring(time)
-		local str = ('window.executeEvent("event.notify.initialize", "[\\"%s\\", \\"%s\\", \\"%s\\", \\"%s\\"]");'):format(safe_type, safe_title, safe_text, safe_time)
-		visualCEF(str, true)
-	end
+    local function escape_js(s)
+        return s:gsub("\\", "\\\\"):gsub('"', '\\"')
+    end
+    local safe_type = escape_js(type)
+    local safe_title = escape_js(title)
+    local safe_text = escape_js(text)
+    local safe_time = tostring(time)
+    local str = ('window.executeEvent("event.notify.initialize", "[\\"%s\\", \\"%s\\", \\"%s\\", \\"%s\\"]");'):format(safe_type, safe_title, safe_text, safe_time)
+    visualCEF(str, true)
 end
 function sampev.onShowTextDraw(id, data)
 	if MODULE.DEBUG then
@@ -7906,65 +7928,39 @@ function sampev.onTogglePlayerControllable(controllable)
 	end
 end
 addEventHandler('onSendPacket', function(id, bs, priority, reliability, orderingChannel)
-	if id == 220 then
-		-- local id = raknetBitStreamReadInt8(bs)
-        -- local cmd = raknetBitStreamReadInt8(bs)
-		-- if MODULE.DEBUG then
-			-- local function dumpFullBitStream(bs)
-			-- 	local bitsLeft = raknetBitStreamGetNumberOfUnreadBits(bs)
-			-- 	if not bitsLeft then
-			-- 		print("dumpFullBitStream: raknetBitStreamGetNumberOfUnreadBits ошибка!")
-			-- 		return
-			-- 	end
-			-- 	local bytesLeft = math.floor(bitsLeft / 8)
-			-- 	if bytesLeft == 0 then
-			-- 		print("dumpFullBitStream: нету доступных байтов для чтения")
-			-- 		return
-			-- 	end
-			-- 	local bytes = {}
-			-- 	for i = 1, bytesLeft do
-			-- 		bytes[i] = raknetBitStreamReadInt8(bs)
-			-- 	end
-			-- 	local hexStrParts = {}
-			-- 	for i, b in ipairs(bytes) do
-			-- 		hexStrParts[i] = string.format("%02X", b)
-			-- 	end
-			-- 	return(table.concat(hexStrParts, " "))
-			-- end
-			-- local dump = dumpFullBitStream(bs)
-			-- sampAddChatMessage('[ReceivePacket] {ffffff}' .. dump, message_color)
-			-- print("[ReceivePacket] " .. dump)
-		-- end
-		local idd = raknetBitStreamReadInt8(bs)
-		local packettype = raknetBitStreamReadInt8(bs)
-		if IS_MOBILE then
-			local subtype = raknetBitStreamReadInt8(bs)
-			if packettype == 66 or packettype == 63 then
-				if MODULE.DEBUG then
-					local unr = raknetBitStreamGetNumberOfUnreadBits(bs)
-					local unrs = {}
-					for i = 1, 8, 1 do
-						table.insert(unrs, raknetBitStreamReadInt8(bs))
-					end
-					print('[SendPacket] 220 ' .. packettype .. ' ' .. subtype .. ' | Unread bits ' .. unr .. ' : ' .. table.concat(unrs, ' '))
-					sampAddChatMessage('[SendPacket] 220 ' .. packettype .. ' ' .. subtype .. ' | Unread bits ' .. unr .. ' : ' .. table.concat(unrs, ' '), message_color)
-				end
-				if settings.general.scoreboard and packettype == 66 and subtype == 56 then
-					MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
-					return false
-				end
-			end
-		else
-			local strlen = raknetBitStreamReadInt16(bs)
-			local str = raknetBitStreamReadString(bs, strlen)
-			if packettype ~= 0 and packettype ~= 1 and #str > 2 then
-				if MODULE.DEBUG then
-					sampAddChatMessage('[SendPacket] {ffffff}' .. str, message_color)
-					print("[SendPacket] " .. str)
-				end
-			end
-		end
-	end
+    if id ~= 220 then return end
+    local ok, idd, packettype = pcall(function() return raknetBitStreamReadInt8(bs), raknetBitStreamReadInt8(bs) end)
+    if not ok or packettype == nil then return end
+    if IS_MOBILE then
+        local ok_sub, subtype = pcall(raknetBitStreamReadInt8, bs)
+        if not ok_sub then return end
+        if packettype == 66 or packettype == 63 then
+            if MODULE.DEBUG then
+                local unr = raknetBitStreamGetNumberOfUnreadBits(bs) or 0
+                local unrs = {}
+                for i = 1, 8 do
+                    local ok_b, b = pcall(raknetBitStreamReadInt8, bs)
+                    if ok_b then table.insert(unrs, b) end
+                end
+                local info = string.format('[SendPacket] 220 %d %d | Unread bits %d : %s', packettype, subtype, unr, table.concat(unrs, ' '))
+                print(info)
+                sampAddChatMessage(info, message_color)
+            end
+            if settings.general.scoreboard and packettype == 66 and subtype == 56 then
+                MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+                return false
+            end
+        end
+    else
+        local ok_str, strlen, str = pcall(function() local l = raknetBitStreamReadInt16(bs) return l, raknetBitStreamReadString(bs, l) end)
+        if not ok_str then return end
+        if packettype ~= 0 and packettype ~= 1 and str and #str > 2 then
+            if MODULE.DEBUG then
+                sampAddChatMessage('[SendPacket] {ffffff}' .. str, message_color)
+                print("[SendPacket] " .. str)
+            end
+        end
+    end
 end)
 addEventHandler('onReceivePacket', function(id, bs)
 	if id == 220 then
@@ -8852,7 +8848,7 @@ imgui.OnFrame(
 												imgui.Columns(3, "cc_tags_columns", true)
 												imgui.Text(u8"Тег"); imgui.NextColumn(); imgui.Text(u8"Описание тега"); imgui.NextColumn(); imgui.Text(u8"Результат использования тега"); imgui.NextColumn()
 												imgui.Columns(1); imgui.Separator()
-												imgui.BulletText(u8("Взаимодействие с биндером")); imgui.Separator()
+												imgui.BulletText(u8("Биндер")); imgui.Separator()
 												imgui.Columns(3, "cc_tags_columns", true)
 												if imgui.Selectable("{pause}") then insert_to_cursor("{pause}", edit.input_text); imgui.CloseCurrentPopup() end
 												imgui.NextColumn(); imgui.Text(u8('Поставить команду на паузу')); imgui.NextColumn(); imgui.Text(u8('Менюшка паузы команды')); imgui.NextColumn()
@@ -8866,7 +8862,10 @@ imgui.OnFrame(
 													if imgui.Selectable("{" .. tag.key .. "}") then insert_to_cursor("{" .. tag.key .. "}", edit.input_text); imgui.CloseCurrentPopup() end
 													imgui.NextColumn(); imgui.Text(u8(tag.description)); imgui.NextColumn()
 													local example = ""
-													if tag.func then local ok, result = pcall(tag.func); if ok and result then example = tostring(result) end end
+													if tag.func and not tag.no_preview then
+														local ok, result = pcall(tag.func)
+														if ok and result then example = tostring(result) end
+													end
 													imgui.Text(u8(example)); imgui.NextColumn()
 												end
 												imgui.Columns(1); imgui.EndChild()
@@ -9037,7 +9036,10 @@ imgui.OnFrame(
 											if imgui.Selectable("{" .. tag.key .. "}") then insert_to_cursor("{" .. tag.key .. "}", MODULE.Binder.input_text); imgui.CloseCurrentPopup() end
 											imgui.NextColumn(); imgui.Text(u8(tag.description)); imgui.NextColumn()
 											local example = ""
-											if tag.func then local ok, result = pcall(tag.func); if ok and result then example = tostring(result) end end
+											if tag.func and not tag.no_preview then
+												local ok, result = pcall(tag.func)
+												if ok and result then example = tostring(result) end
+											end
 											imgui.Text(u8(example)); imgui.NextColumn()
 										end
 										imgui.Columns(1); imgui.EndChild()
@@ -10778,7 +10780,7 @@ function firs_render_assist_gui()
 		"RP отыгровка оружия",
 		"При использовании или скролле оружия, в чате будут RP отыгровки.\n\nДля настройки используйте кнопку шестерёнки справа.",
 		settings.general,
-		"rp_guns",
+		"rp_weapon",
 		false,
 		function()
 			imgui.OpenPopup(fa.GUN .. u8' RP отыгровка оружия в чате ' .. fa.GUN)
@@ -11076,13 +11078,13 @@ function firs_render_assist_gui()
 		imgui.InputTextWithHint(u8'##inputsearch_weapon_name', u8('Вводите чтобы искать оружие по его ID или названию...'), MODULE.RPWeapon.input_search, 256)
 		imgui.SameLine()
 		if imgui.Button(u8("Включить всё")) then
-			for index, value in ipairs(modules.weapon.data.rp_guns) do value.enable = true end
-			initialize_guns()
+			for index, value in ipairs(modules.weapon.data.rp_weapon) do value.enable = true end
+			initialize_weapon()
 			save_module('weapon')
 		end
 		imgui.SameLine()
 		if imgui.Button(u8("Отключить всё")) then
-			for index, value in ipairs(modules.weapon.data.rp_guns) do value.enable = false end
+			for index, value in ipairs(modules.weapon.data.rp_weapon) do value.enable = false end
 			save_module('weapon')
 		end
 		imgui.PopItemWidth()
@@ -11099,7 +11101,7 @@ function firs_render_assist_gui()
 			imgui.Columns(1)
 			imgui.Separator()
 			local decoded_input = u8:decode(ffi.string(MODULE.RPWeapon.input_search))
-			for index, value in ipairs(modules.weapon.data.rp_guns) do
+			for index, value in ipairs(modules.weapon.data.rp_weapon) do
 				if decoded_input == '' or (value.name and value.name:upper():find(decoded_input:upper())) or value.id == tonumber(decoded_input) then
 					imgui.Columns(3)
 					if value.enable then
@@ -11131,7 +11133,7 @@ function firs_render_assist_gui()
 						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
 							value.name = u8:decode(ffi.string(_G.weapon_input))
 							save_module('weapon')
-							initialize_guns()
+							initialize_weapon()
 							_G.weapon_input = nil
 							imgui.CloseCurrentPopup()
 						end
@@ -11159,7 +11161,7 @@ function firs_render_assist_gui()
 						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
 							value.rpTake = MODULE.RPWeapon.ComboTags[0] + 1
 							save_module('weapon')
-							initialize_guns()
+							initialize_weapon()
 							imgui.CloseCurrentPopup()
 						end
 						imgui.EndPopup()
@@ -12607,6 +12609,9 @@ if not (isMode('ghetto') or isMode('mafia')) then
 			imgui.Text(fa.USER .. u8(' Цель: ') .. u8((MODULE.Afind.target_nick or "") .. ' [' .. tostring(MODULE.Afind.target_id or -1) .. ']'))
 			imgui.Text(fa.BUILDING_SHIELD .. u8(' Статус: ') .. u8('находится в здании'))
 			imgui.Text(fa.CLOCK .. u8(' В здании уже: ') .. secs .. ' ' .. u8(word))
+			if MODULE.Afind.last_area then
+				imgui.Text(fa.MAP_LOCATION_DOT .. u8(' Место выхода: ') .. u8(MODULE.Afind.last_area))
+			end
 			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
 			if posX ~= settings.windows_pos.afind_building.x or posY ~= settings.windows_pos.afind_building.y then
 				settings.windows_pos.afind_building = { x = posX, y = posY }
