@@ -6150,6 +6150,9 @@ function check_update(manual)
 		local targetInfo = is_beta and MODULE.Update.beta_info or MODULE.Update.stable_info
 		local statusKey  = tostring((is_beta and u.beta_status) or u.stable_status or u.status or ""):lower()
 		local statusInfo = UPDATE_STATUS[statusKey] or { text = "Обновление", color = "{FFFFFF}" }
+		if is_beta then
+			statusInfo = { text = "Бета", color = "{B026FF}" }
+		end
 		if targetVer ~= "" and uUrl ~= "" and compare_versions(myVer, targetVer) < 0 then
 			print('Доступно обновление! | Локальная: ' .. myVer .. ' | В облаке: ' .. targetVer .. ' | Канал: ' .. (is_beta and 'бета' or 'стабильный'))
 			MODULE.Update.is_need_update = true
@@ -8350,7 +8353,7 @@ end)
 imgui.OnFrame(
     function() return MODULE.Initial.Window[0] end,
     function(player)
-		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+        imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
         imgui.Begin(fa.GEARS .. u8' Первичная настройка хелпера ' .. fa.GEARS, MODULE.Initial.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
         change_dpi()
 		if MODULE.Initial.step == 0 then
@@ -10967,9 +10970,25 @@ imgui.OnFrame(
 								asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(resp)
 									local ok2, info2 = pcall(function() return decodeJson(resp.text or '') end)
 									if ok2 and type(info2) == 'table' and info2.url then
-										download_file = 'helper'; downloadFileFromUrlToPath(info2.url, thisScript().path)
-									else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось получить ссылку на версию.', message_color) end
-								end, function(err) sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка запроса версии.', message_color) end)
+										MODULE.Update.url     = info2.url
+										MODULE.Update.version = tostring(info2.beta_version or '')
+										MODULE.Update.info    = tostring(info2.beta_info or '')
+										MODULE.Update.is_need_update = true
+										MODULE.Update.is_emergency = false
+										local statusKey  = tostring(info2.beta_status or ''):lower()
+										local statusInfo = UPDATE_STATUS[statusKey] or { text = "Бета", color = "{FFFFFF}" }
+										MODULE.Update.status = statusInfo.text
+										MODULE.Update.status_color = statusInfo.color
+										MODULE.Update.auto_start_download = true
+										MODULE.Update.popup_opened = false
+										MODULE.Update.Window[0] = true
+										play_sound()
+									else
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось получить ссылку на версию.', message_color)
+									end
+								end, function(err)
+									sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка запроса версии.', message_color)
+								end)
 							end
 							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Установить последнюю сборку с GitHub') end
 							imgui.SameLine()
@@ -16580,25 +16599,34 @@ end
 ------------------------------------------[ PC KEY ACTIONS ]--------------------------------------
 if not IS_MOBILE then
 	function onWindowMessage(msg, wparam, lparam)
+		local function consume_safe()
+			if type(consumeWindowMessage) == 'function' then
+				pcall(consumeWindowMessage, true, false)
+			end
+		end
 		if msg == 0x100 and settings.general.scoreboard then
 			if wparam == VK_TAB and not isKeyDown(VK_TAB) then
 				MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
-				consumeWindowMessage(true, false)
+				consume_safe()
 			end
 		end
 		if msg == 0x101 then
 			if (wparam == VK_ESCAPE and MODULE.Main.Window[0]) then
-				consumeWindowMessage(true, false)
+				consume_safe()
 				MODULE.Main.Window[0] = false
 			end
 			if (wparam == VK_ESCAPE and MODULE.Scoreboard.Window[0]) then
-				consumeWindowMessage(true, false)
+				consume_safe()
 				MODULE.Scoreboard.Window[0] = false
 			end
 			if (wparam == 13 and MODULE.SmiEdit.Window[0]) then
-				consumeWindowMessage(true, false)
-				local text = u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text))
-				if try_send_ad(text) then MODULE.SmiEdit.Window[0] = false end
+				consume_safe()
+				if MODULE.SmiEdit.input_edit_text then
+					local ok, text = pcall(function()
+						return u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text))
+					end)
+					if ok and text and try_send_ad(text) then MODULE.SmiEdit.Window[0] = false end
+				end
 			end
 		end
 	end
