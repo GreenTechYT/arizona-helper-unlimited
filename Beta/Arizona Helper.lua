@@ -5994,42 +5994,51 @@ function count_lines_in_text(text, max_length)
 	end
 	return tonumber(#lines)
 end
+local DOWNLOAD_HANDLERS = {
+	helper = function()
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка новой версии хелпера успешно завершена! Перезагрузка..', message_color)
+		reload_script = true
+		thisScript():reload()
+	end,
+	smart_uk = function()
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи розыска для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() .. '] {ffffff}завершена успешно!', message_color)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('sum') .. ' [ID игрока]', message_color)
+		MODULE.Main.Window[0] = false
+		play_sound()
+		load_module('smart_uk')
+	end,
+	smart_pdd = function()
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи штрафов для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() .. '] {ffffff}завершена успешно!', message_color)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('tsm') .. ' [ID игрока]', message_color)
+		MODULE.Main.Window[0] = false
+		play_sound()
+		load_module('smart_pdd')
+	end,
+	smart_rptp = function()
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умного срока для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() .. '] {ffffff}завершена успешно!', message_color)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('pum') .. ' [ID игрока]', message_color)
+		MODULE.Main.Window[0] = false
+		play_sound()
+		load_module('smart_rptp')
+	end,
+	vehicles = function()
+		if not modules.vehicles._silent_update then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка всех кастомных т/с успешно завершена!', message_color)
+			play_sound()
+		end
+		modules.vehicles._silent_update = false
+		initialize_vehicles()
+	end,
+	notify = function()
+		if doesFileExist(config_dir .. "/Resourse/notify.mp3") then
+			print('Звук оповещений успешно загружен!')
+		end
+	end,
+}
 function downloadFileFromUrlToPath(url, path)
 	local function on_finish_download()
-		if download_file == 'helper' then
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка новой версии хелпера успешно завершена! Перезагрузка..',  message_color)
-			reload_script = true
-			thisScript():reload()
-		elseif download_file == 'smart_uk' then
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи розыска для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('sum') .. ' [ID игрока]', message_color)
-			MODULE.Main.Window[0] = false
-			play_sound()
-			load_module('smart_uk')
-		elseif download_file == 'smart_pdd' then
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи штрафов для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('tsm') .. ' [ID игрока]', message_color)
-			MODULE.Main.Window[0] = false
-			play_sound()
-			load_module('smart_pdd')
-		elseif download_file == 'smart_rptp' then
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умного срока для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('pum') .. ' [ID игрока]', message_color)
-			MODULE.Main.Window[0] = false
-			play_sound()
-			load_module('smart_rptp')
-		elseif download_file == 'vehicles' then
-			if not modules.vehicles._silent_update then
-				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка всех кастомных т/с успешно завершена!',  message_color)
-				play_sound()
-			end
-			modules.vehicles._silent_update = false
-			initialize_vehicles()
-		elseif download_file == 'notify' then
-			if doesFileExist(config_dir .. "/Resourse/notify.mp3") then
-				print('Звук оповещений успешно загружен!')
-			end
-		end
+		local handler = DOWNLOAD_HANDLERS[download_file]
+		if handler then handler() end
 		download_file = ''
 	end
 	if IS_MOBILE then
@@ -6044,8 +6053,7 @@ function downloadFileFromUrlToPath(url, path)
 			return true
 		end
 		local ok, err = downloadToFile(url, path)
-		if ok then
-			on_finish_download()
+		if ok then on_finish_download()
 		else
 			sampAddChatMessage(CHAT_PREFIX .. " {ffffff}Ошибка загрузки файла: " .. tostring(err), message_color)
 			if download_file == 'helper' and MODULE.Update then
@@ -6056,22 +6064,14 @@ function downloadFileFromUrlToPath(url, path)
 		end
 	else
 		downloadUrlToFile(url, path, function(id, status)
-			if status == 6 then
-				on_finish_download()
-			end
+			if status == 6 then on_finish_download() end
 		end)
 	end
 end
 function MODULE.Update.show_notice()
 	if not MODULE.Update.is_need_update then return end
 	if MODULE.Update.Window[0] then return end
-	sampAddChatMessage(' ', message_color)
-	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}!', message_color)
-	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
-	if MODULE.Update.is_emergency then
-		sampAddChatMessage(CHAT_PREFIX .. ' {FF0000}ВНИМАНИЕ: это аварийное обновление, его установка настоятельно рекомендуется!', message_color)
-	end
-	sampAddChatMessage(' ', message_color)
+	MODULE.Update.print_update_messages()
 	MODULE.Update.popup_opened = false
 	MODULE.Update.Window[0] = true
 	play_sound()
@@ -6079,17 +6079,100 @@ end
 function MODULE.Update.start_install()
 	if not MODULE.Update.is_need_update then return end
 	if MODULE.Update.downloading or MODULE.Update.auto_start_download then return end
-	sampAddChatMessage(' ', message_color)
-	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обнаружена новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}. Начинаю автоматическую установку...', message_color)
-	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
-	if MODULE.Update.is_emergency then
-		sampAddChatMessage(CHAT_PREFIX .. ' {FF0000}ВНИМАНИЕ: это аварийное обновление, исправляющее критические ошибки!', message_color)
-	end
-	sampAddChatMessage(' ', message_color)
+	MODULE.Update.print_update_messages(true)
 	MODULE.Update.auto_start_download = true
 	MODULE.Update.popup_opened = false
 	MODULE.Update.Window[0] = true
 	play_sound()
+	lua_thread.create(function()
+		wait(100)
+		MODULE.Update.start_download()
+	end)
+end
+function MODULE.Update.print_update_messages(auto_install)
+	sampAddChatMessage(' ', message_color)
+	if auto_install then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обнаружена новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}. Начинаю автоматическую установку...', message_color)
+	else
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}!', message_color)
+	end
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
+	if MODULE.Update.is_emergency then
+		if auto_install then
+			sampAddChatMessage(CHAT_PREFIX .. ' {FF0000}ВНИМАНИЕ: это аварийное обновление, исправляющее критические ошибки!', message_color)
+		else
+			sampAddChatMessage(CHAT_PREFIX .. ' {FF0000}ВНИМАНИЕ: это аварийное обновление, его установка настоятельно рекомендуется!', message_color)
+		end
+	end
+	sampAddChatMessage(' ', message_color)
+end
+function MODULE.Update.start_download()
+	if MODULE.Update.downloading then return end
+	MODULE.Update.downloading = true
+	MODULE.Update.download_start = os.time()
+	MODULE.Update.download_file = 'helper'
+	local url = MODULE.Update.url
+	if not url or url == '' then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: URL обновления пустой.', message_color)
+		MODULE.Update.downloading = false
+		MODULE.Update.download_start = nil
+		return
+	end
+	local path = worked_dir .. '/moonloader/Arizona Helper.lua.new'
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Скачивание обновления...', message_color)
+	lua_thread.create(function()
+		wait(50)
+		local ok, err = pcall(function()
+			downloadUrlToFile(url, path, function(id, status)
+				if status == 6 then
+					MODULE.Update.on_finish_download(path)
+				elseif status == 4 then
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Скачивание отменено.', message_color)
+					MODULE.Update.downloading = false
+					MODULE.Update.download_start = nil
+					MODULE.Update.download_file = ''
+				else
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка скачивания (статус: ' .. tostring(status) .. ').', message_color)
+					MODULE.Update.downloading = false
+					MODULE.Update.download_start = nil
+					MODULE.Update.download_file = ''
+				end
+			end)
+		end)
+		if not ok then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка инициализации скачивания: ' .. tostring(err), message_color)
+			MODULE.Update.downloading = false
+			MODULE.Update.download_start = nil
+			MODULE.Update.download_file = ''
+		end
+	end)
+end
+function MODULE.Update.on_finish_download(new_path)
+	local old_path = worked_dir .. '/moonloader/Arizona Helper.lua'
+	local ok, err = pcall(function()
+		if doesFileExist(new_path) then
+			if doesFileExist(old_path) then
+				os.remove(old_path)
+			end
+			os.rename(new_path, old_path)
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обновление успешно установлено! Перезапустите скрипт для применения изменений.', message_color)
+			MODULE.Update.downloading = false
+			MODULE.Update.download_start = nil
+			MODULE.Update.download_file = ''
+			MODULE.Update.is_need_update = false
+		else
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: скачанный файл не найден.', message_color)
+			MODULE.Update.downloading = false
+			MODULE.Update.download_start = nil
+			MODULE.Update.download_file = ''
+		end
+	end)
+	if not ok then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка установки обновления: ' .. tostring(err), message_color)
+		MODULE.Update.downloading = false
+		MODULE.Update.download_start = nil
+		MODULE.Update.download_file = ''
+	end
 end
 function parse_news_ver(v)
 	local t = {}
@@ -6217,6 +6300,10 @@ function load_news(manual)
 	)
 end
 function check_update(manual)
+	if MODULE.Update.downloading then
+		if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения скачивания обновления.', message_color) end
+		return
+	end
 	print('Проверка на наличие обновлений...')
 	if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Проверка обновлений...', message_color) end
 	local function compare_versions(v1, v2)
@@ -6260,7 +6347,7 @@ function check_update(manual)
 			MODULE.Update.show_notice()
 			isUpdateChecked = true; return
 		end
-		local is_beta = (betaVer ~= "") and not beta_closed and ((settings.general.beta_tester == true) or (myVer == betaVer))
+		local is_beta = (betaVer ~= "") and not beta_closed and (settings.general.beta_tester == true)
 		local targetVer  = is_beta and betaVer or stableVer
 		local targetUrl  = is_beta and betaUrl or uUrl
 		local targetInfo = is_beta and MODULE.Update.beta_info or MODULE.Update.stable_info
@@ -11169,6 +11256,11 @@ imgui.OnFrame(
 						else
 							imgui.CenterText((fa.TABLE_LIST) .. u8' Настройки кастомного TAB ' .. (fa.TABLE_LIST))
 							imgui.Separator()
+							local sb = modules.scoreboard.data
+							if not MODULE.Main.sb_actions_cb then MODULE.Main.sb_actions_cb = imgui.new.bool(sb.show_actions_menu ~= false) end
+							if imgui.Checkbox(u8' Колонка действий (телефон и шестерёнка)', MODULE.Main.sb_actions_cb) then
+								sb.show_actions_menu = MODULE.Main.sb_actions_cb[0]; save_module('scoreboard')
+							end						
 							imgui.NewLine()
 							imgui.CenterTextDisabled(u8'Настройки в разработке.')
 							local pad_y = imgui.GetStyle().WindowPadding.y
@@ -11185,8 +11277,7 @@ imgui.OnFrame(
 						if not MODULE.UpdateInfo.loaded and not MODULE.UpdateInfo.loading then
 							load_update_info()
 						end
-						local on_beta_build = (MODULE.Update.beta_version or '') ~= '' and thisScript().version == MODULE.Update.beta_version and not MODULE.Update.beta_closed
-						local is_beta_ui = (settings.general.beta_tester == true) or on_beta_build
+						local is_beta_ui = (settings.general.beta_tester == true)
 						local info = MODULE.UpdateInfo.data
 						local stableVer = (info and tostring(info.stable_version or info.version or '')) or (MODULE.Update.stable_version or '')
 						local betaVer = (info and tostring(info.beta_version or '')) or (MODULE.Update.beta_version or '')
@@ -11218,6 +11309,14 @@ imgui.OnFrame(
 							imgui.TextColored(imgui.ImVec4(0.3, 1, 0.3, 1), '[' .. u8'Открыта' .. ']')
 						end
 						imgui.Separator()
+						if MODULE.Update.downloading and MODULE.Update.download_start then
+							local elapsed = os.time() - MODULE.Update.download_start
+							imgui.Text(fa.DOWNLOAD .. u8' Скачивание обновления...')
+							imgui.SameLine()
+							imgui.TextDisabled(u8'(' .. elapsed .. ' сек.)')
+							imgui.ProgressBar(-1, imgui.ImVec2(-1, 0))
+							imgui.Separator()
+						end
 						if imgui.Button(fa.DOWNLOAD .. u8' Проверить обновления', imgui.ImVec2(200 * dpi, 25 * dpi)) then
 							check_update(true)
 							load_update_info()
@@ -11335,7 +11434,7 @@ imgui.OnFrame(
 								sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы вернулись на стабильный канал обновлений.', message_color)
 							end
 						end
-					elseif sec == 7 then
+						elseif sec == 7 then
 						imgui.CenterText(fa.HEADSET .. u8' Поддержка и ссылки ' .. fa.HEADSET)
 						imgui.Separator()
 						imgui.Text(fa.BOOK .. u8' Руководство по использованию:')
@@ -12046,8 +12145,16 @@ imgui.OnFrame(
     end
 )
 ------------------------------------------[ SCOREBOARD ]---------------------------------------------
+local SB_SORTS = {
+	{ key = function(id) return id end },
+	{ key = function(id) return sampGetPlayerNickname(id):rlower() end },
+	{ key = function(id) return sampGetPlayerScore(id) end },
+	{ key = function(id) return sampGetPlayerPing(id) end },
+}
 function drawScoreboardPlayer(id)
-	local nickname = u8(sampGetPlayerNickname(id))
+	local dpi = settings.general.custom_dpi
+	local raw_nick = sampGetPlayerNickname(id)
+	local nickname = u8(raw_nick)
 	local score = sampGetPlayerScore(id)
 	local ping = sampGetPlayerPing(id)
 	local color = sampGetPlayerColor(id)
@@ -12074,6 +12181,11 @@ function drawScoreboardPlayer(id)
 			imgui.Text(' ' .. nickname)
 		end
 	end
+	if imgui.IsItemClicked() then
+		setClipboardText(raw_nick)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ник ' .. raw_nick .. ' скопирован.', message_color)
+	end
+	if imgui.IsItemHovered() then imgui.SetTooltip(u8'Клик - скопировать ник.') end
 	imgui.NextColumn()
 	imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(score)).x / 2)
 	if modules.scoreboard.data.colored_score then
@@ -12096,14 +12208,20 @@ function drawScoreboardPlayer(id)
 	end
 	imgui.NextColumn()
 	if modules.scoreboard.data.show_actions_menu then
-		if imgui.Button(fa.COPY .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
-			setClipboardText(tostring(nickname))
-		end
-		imgui.SameLine()
-		if imgui.Button(fa.PHONE .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
-			MODULE.Scoreboard.call_checker = id
-			MODULE.Scoreboard.Window[0] = false
-			sampSendChat("/number " .. id)
+		local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+		if id ~= my_id then
+			local sz = imgui.ImVec2(21 * dpi, 22 * dpi)
+			if imgui.Button(fa.PHONE .. "##sb_call" .. id, sz) then
+				MODULE.Scoreboard.call_checker = id
+				MODULE.Scoreboard.Window[0] = false
+				sampSendChat("/number " .. id)
+			end
+			if imgui.IsItemHovered() then imgui.SetTooltip(u8'Позвонить игроку (/number).') end
+			imgui.SameLine()
+			if imgui.Button(fa.GEAR .. "##sb_menu" .. id, sz) then
+				MODULE.Scoreboard.menu_open_id = id
+			end
+			if imgui.IsItemHovered() then imgui.SetTooltip(u8'Действия: поиск, авто-поиск, розыск.') end
 		end
 		imgui.NextColumn()
 	end
@@ -15904,6 +16022,7 @@ imgui.OnFrame(
 imgui.OnFrame(
 	function() return MODULE.Scoreboard.Window[0] end,
 	function(player)
+		local dpi = settings.general.custom_dpi
 		if MODULE.Main.Window[0] then MODULE.Main.Window[0] = false end
 		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
 			local dsx, dsy = sizeX, sizeY
@@ -15964,47 +16083,89 @@ imgui.OnFrame(
 		imgui.SetCursorPosX(imgui.GetWindowWidth() - 30 * settings.general.custom_dpi)
 		if imgui.Button(fa.CIRCLE_XMARK) then MODULE.Scoreboard.Window[0] = false end
 		imgui.Separator()
-		if imgui.BeginChild('##scoreboard_list', imgui.ImVec2(592 * settings.general.custom_dpi, 396 * settings.general.custom_dpi), false) then
-			if modules.scoreboard.data.show_actions_menu then
+		if imgui.BeginChild('##scoreboard_list', imgui.ImVec2(592 * dpi, 396 * dpi), false) then
+			local sb = modules.scoreboard.data
+			local function sb_header(label, width, mode)
+				imgui.SetColumnWidth(-1, width)
+				local active = (sb.sort_mode or 0) == mode
+				if active then imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.3, 0.8, 1, 1)) end
+				local arrow = active and (((sb.sort_dir or 0) == 0) and u8(' (V)') or u8(' (^)')) or ''
+				imgui.CenterColumnText(u8(label) .. arrow)
+				if imgui.IsItemClicked() then
+					if active then sb.sort_dir = 1 - (sb.sort_dir or 0) else sb.sort_mode = mode; sb.sort_dir = 0 end
+					save_module('scoreboard')
+				end
+				if imgui.IsItemHovered() then imgui.SetTooltip(u8'Клик - сортировка, повторный клик - смена направления.') end
+				if active then imgui.PopStyleColor() end
+				imgui.NextColumn()
+			end
+			if sb.show_actions_menu then
 				imgui.Columns(5)
-				imgui.SetColumnWidth(-1, 45 * settings.general.custom_dpi) imgui.CenterColumnText('ID') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 370 * settings.general.custom_dpi) imgui.CenterColumnText('Nickname') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Score') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Ping') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 60 * settings.general.custom_dpi) imgui.CenterColumnText('Action') imgui.NextColumn()
+				sb_header('ID', 45 * dpi, 0)
+				sb_header('Nickname', 370 * dpi, 1)
+				sb_header('Score', 55 * dpi, 2)
+				sb_header('Ping', 55 * dpi, 3)
+				imgui.SetColumnWidth(-1, 60 * dpi) imgui.CenterColumnText(u8'Action') imgui.NextColumn()
 			else
 				imgui.Columns(4)
-				imgui.SetColumnWidth(-1, 45 * settings.general.custom_dpi) imgui.CenterColumnText('ID') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 430 * settings.general.custom_dpi) imgui.CenterColumnText('Nickname') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Score') imgui.NextColumn()
-				imgui.SetColumnWidth(-1, 60 * settings.general.custom_dpi) imgui.CenterColumnText('Ping') imgui.NextColumn()
+				sb_header('ID', 45 * dpi, 0)
+				sb_header('Nickname', 430 * dpi, 1)
+				sb_header('Score', 55 * dpi, 2)
+				sb_header('Ping', 60 * dpi, 3)
 			end
 			local input_decoded = u8:decode(ffi.string(MODULE.Scoreboard.inputField)):gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1"):rlower()
 			local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
-			if input_decoded == "" then
+			local ids = {}
+			for idd = 0, sampGetMaxPlayerId() do
+				if idd ~= my_id and sampIsPlayerConnected(idd) then
+					if input_decoded == '' or tostring(idd):find(input_decoded) or sampGetPlayerNickname(idd):rlower():find(input_decoded) then
+						ids[#ids + 1] = idd
+					end
+				end
+			end
+			local key = SB_SORTS[(sb.sort_mode or 0) + 1].key
+			local asc = (sb.sort_dir or 0) == 1
+			table.sort(ids, function(a, b)
+				local ka, kb = key(a), key(b)
+				if ka == kb then return false end
+				if asc then return ka < kb end
+				return ka > kb
+			end)
+			imgui.Separator()
+			drawScoreboardPlayer(my_id)
+			for _, idd in ipairs(ids) do
 				imgui.Separator()
-				drawScoreboardPlayer(my_id)
-				for id = 0, sampGetMaxPlayerId() do
-					if my_id ~= id and sampIsPlayerConnected(id) then
-						imgui.Separator()
-						drawScoreboardPlayer(id)
-					end
-				end
-			else
-				for idd = 0, sampGetMaxPlayerId() do
-					if sampIsPlayerConnected(idd) or idd == my_id then
-						if tostring(idd):find(input_decoded) or sampGetPlayerNickname(idd):rlower():find(input_decoded) or idd == my_id then
-							imgui.Separator()
-							drawScoreboardPlayer(idd)
-						end
-					end
-				end
+				drawScoreboardPlayer(idd)
 			end
 			imgui.NextColumn()
 			imgui.Columns(1)
 			imgui.Separator()
 		end
 		imgui.EndChild()
+		if MODULE.Scoreboard.menu_open_id then
+			MODULE.Scoreboard.menu_id = MODULE.Scoreboard.menu_open_id
+			MODULE.Scoreboard.menu_open_id = nil
+			imgui.OpenPopup(fa.GEAR .. u8' Действия с игроком ' .. fa.GEAR .. '##sb_actions')
+		end
+		if imgui.BeginPopupModal(fa.GEAR .. u8' Действия с игроком ' .. fa.GEAR .. '##sb_actions', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+			change_dpi()
+			local tid = MODULE.Scoreboard.menu_id or 0
+			local tnick = sampGetPlayerNickname(tid) or ''
+			imgui.Text(u8'Игрок: ' .. u8(tnick) .. ' [' .. tid .. ']')
+			imgui.Separator()
+			local bw = 220 * dpi
+			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Авто-поиск (/afind)', imgui.ImVec2(bw, 25 * dpi)) then
+				if CUSTOM_CMD_HANDLERS.afind then CUSTOM_CMD_HANDLERS.afind(tostring(tid)) end
+				MODULE.Scoreboard.Window[0] = false; imgui.CloseCurrentPopup()
+			end
+			if imgui.Button(fa.STAR .. u8' Выдать розыск (/sum)', imgui.ImVec2(bw, 25 * dpi)) then
+				if CUSTOM_CMD_HANDLERS.sum then CUSTOM_CMD_HANDLERS.sum(tostring(tid)) end
+				MODULE.Scoreboard.Window[0] = false; imgui.CloseCurrentPopup()
+			end
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(bw, 25 * dpi)) then imgui.CloseCurrentPopup() end
+			imgui.EndPopup()
+		end
 		imgui.End()
 	end
 )
@@ -16354,7 +16515,8 @@ imgui.OnFrame(
 				local txt = is_sub and line:sub(3) or line
 				content_h = content_h + calc_wrap_h(txt, is_sub and wrap_sub or wrap_w) + sp
 			end
-			local MAX_LIST = 240 * dpi
+			local chrome_h = 170 * dpi
+			local MAX_LIST = math.max(60 * dpi, math.min(240 * dpi, sizeY - 24 * dpi - chrome_h))
 			local child_h = content_h
 			if child_h > MAX_LIST then child_h = MAX_LIST end
 			if child_h < line_h + 8 * dpi then child_h = line_h + 8 * dpi end
