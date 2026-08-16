@@ -1,0 +1,17042 @@
+---@diagnostic disable: undefined-global, lowercase-global
+
+script_name("Arizona&Rodina Helper")
+script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
+script_author("GreenTechYT")
+script_version("1.5.9.1")
+-----------------------------------------------[ INIT ]---------------------------------------------
+local worked_dir = getWorkingDirectory():gsub('\\','/')
+local IS_MOBILE = MONET_VERSION ~= nil 
+print('Инициализация скрипта версии ' .. thisScript().version)
+print('Директория: ' .. worked_dir .. '/')
+--------------------------------------------[ UPDATE INFO ]-----------------------------------------
+local UPDATE_JSON_URL = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Update.json"
+local NEWS_JSON_URL = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/News.json"
+local NEWS_IMG_BASE = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/News/'
+local UPDATE_STATUS = {
+	patch     = { text = "Патч",                  color = "{00FF00}" },
+	global    = { text = "Глобальное обновление", color = "{3399FF}" },
+	emergency = { text = "Аварийное обновление",  color = "{FF0000}" },
+	news      = { text = "Новость",               color = "{FFFFFF}" },
+	hot_news  = { text = "Важная новость",        color = "{FFA500}" },
+}
+------------------------------------------[ INIT CRASH INFO ]---------------------------------------
+local errors_handler_path = worked_dir .. '/.Arizona Helper Handler.lua'
+if not doesFileExist(errors_handler_path) then
+	local helper_prefix = '/.Arizona Helper '
+	local content = [[
+-- DONT SEND ME THIS FILE, THIS IS NOT AN ERROR, BUT A SCRIPT TO DISPLAY THE ERROR IN DIALOG
+-- НЕ ОТПРАВЛЯЙТЕ МНЕ ЭТОТ ФАЙЛ, ЭТО НЕ ОШИБКА, ЭТО СКРИПТ ДЛЯ ВЫВОДА ОШИБКИ ВАМ В ДИАЛОГЕ
+local lastErrorShown = 0
+local function fileExists(path)
+	local f = io.open(path, 'r')
+	if f then
+		f:close()
+		return true
+	end
+	return false
+end
+function getLog()
+	local worked_dir = getWorkingDirectory():gsub('\\','/')
+	local IS_MOBILE = MONET_VERSION ~= nil
+	local log_path = worked_dir .. (IS_MOBILE and '/logs/monetloader.log' or '/moonloader.log')
+	if not fileExists(log_path) then return 'Файл логов не найден:\n- ' .. log_path end
+	local file = io.open(log_path, 'r')
+	if not file then
+		return 'Не удалось открыть файл логов:\n- ' .. log_path
+	end
+	local lines = {}
+	local max_lines = 10000
+	for line in file:lines() do
+		table.insert(lines, line)
+		if #lines > max_lines then
+			table.remove(lines, 1)
+		end
+	end
+	file:close()
+	local start_index = 1
+	for i = #lines, 1, -1 do
+		if lines[i]:find('Инициализация скрипта', 1, true) then
+			start_index = i
+			break
+		end
+	end
+	local result = {}
+	for i = start_index, #lines do
+		local line = lines[i]
+		if line:find('Arizona&Rodina Helper', 1, true) then
+			if not (line:find('Script died') or line:find('%.lua%:') or line:find('Loaded successfully')) then
+				local clean = line:match('Arizona&Rodina Helper%: (.+)')
+				if clean then
+					table.insert(result, clean)
+				end
+			end
+		end
+	end
+	if #result == 0 then return 'Строки с Arizona&Rodina Helper не найдены.' end
+	local logText = table.concat(result, '\n')
+	if #logText > 2000 then logText = logText:sub(1, 2000) .. '\n... (лог обрезан)' end
+	return logText
+end
+function onSystemMessage(msg, type, script)
+	if script and script.name == 'Arizona&Rodina Helper' and msg and ((msg:find('stack traceback')) or (type == 3 and not msg:find('Script died due to an error'))) then
+		local currentTime = os.time()
+		if currentTime - lastErrorShown < 5 then
+			return
+		end
+		lastErrorShown = currentTime
+		local errorMessage = ('{ffffff}Произошла непредусмотренная ошибка в работе скрипта, из-за чего он был отключён!\n\n' ..
+		'{00FF00}Версия скрипта:{ffffff} ' .. script.version .. '\n' ..
+		'{00FF00}Время ошибки:{ffffff} ' .. os.date('%H:%M:%S %d.%m.%Y') .. '\n\n' ..
+		'Отправьте скриншот этого диалога в {ff9900}тех.поддержку (DS: max_rics){ffffff}.\n\n' ..
+		'Детали возникшей ошибки:\n{ff6666}' .. msg .. '{ffffff}\n\n' ..
+		'Полный лог работы скрипта: \n{66BB6A}' .. getLog())
+		
+		sampShowDialog(123123, '{009EFF}Arizona&Rodina Helper [' .. script.version .. ']', errorMessage, 'Закрыть диалог', '', 0)
+	end
+end]]
+	local file, errstr = io.open(errors_handler_path, 'w')
+	if file then
+		local content_size = #content
+		if content_size > 0 then
+			file:write(content)
+			file:close()
+			local old_handlers = {
+				'Crash Info.lua',
+				'Error Handler.lua',
+				'Errors Handler.lua',
+				'Crash Informer.lua',
+				'CrashInfo.lua',
+				'ErrorHandler.lua'
+			}
+			for _, filename in ipairs(old_handlers) do
+				local path = worked_dir .. '/' .. filename
+				if doesFileExist(path) then
+					os.remove(path)
+				end
+				path = worked_dir .. helper_prefix .. filename
+				if doesFileExist(path) then
+					os.remove(path)
+				end
+			end
+		else
+			file:close()
+			print('Предупреждение: содержимое обработчика ошибок пустое')
+		end
+	else
+		print('Не удалось создать файл для обработки ошибок, ошибка: ', errstr)
+	end
+end
+-------------------------------------------[ Mimgui PieMenu ]---------------------------------------
+local PIE_LIB = [[
+local imgui = require 'mimgui'
+local ImVec2 = imgui.ImVec2
+local ImVec4 = imgui.ImVec4
+
+local IS_MOBILE = (MONET_VERSION ~= nil)
+local DPI = IS_MOBILE and (MONET_DPI_SCALE or 1) or 1
+
+local function pieGetDrawList()
+	local ok, dl = pcall(function() return imgui.GetForegroundDrawList() end)
+	if ok and dl then return dl end
+	return imgui.GetWindowDrawList()
+end
+
+local function ImRectAdd(rect, rhs)
+	local Min, Max = rect.Min, rect.Max
+	if Min.x > rhs.x then Min.x = rhs.x end
+	if Min.y > rhs.y then Min.y = rhs.y end
+	if Max.x < rhs.x then Max.x = rhs.x end
+	if Max.y < rhs.y then Max.y = rhs.y end
+end
+
+local function NewPieMenu(context)
+	local obj = {
+		m_iCurrentIndex = 0,
+		m_fMaxItemSqrDiameter = 0,
+		m_fLastMaxItemSqrDiameter = 0,
+		m_iHoveredItem = 0,
+		m_iLastHoveredItem = 0,
+		m_iClickedItem = 0,
+		m_oItemIsSubMenu = {},
+		m_oItemNames = {},
+		m_oItemSizes = {},
+	}
+	return obj
+end
+
+local function NewPieMenuContext(MaxPieMenuStack, MaxPieItemCount, RadiusEmpty, RadiusMin, MinItemCount, MinItemCountPerLevel)
+	local obj = {
+		c_iMaxPieMenuStack = MaxPieMenuStack or 8,
+		c_iMaxPieItemCount = MaxPieItemCount or 12,
+		c_iRadiusEmpty = RadiusEmpty or 30 * DPI,
+		c_iRadiusMin = RadiusMin or 30 * DPI,
+		c_iMinItemCount = MinItemCount or 3,
+		c_iMinItemCountPerLevel = MinItemCountPerLevel or 3,
+		m_oPieMenuStack = {},
+		m_iCurrentIndex = -1,
+		m_iLastFrame = 0,
+		m_iMaxIndex = 0,
+		m_oCenter = ImVec2(0, 0),
+		m_iMouseButton = IS_MOBILE and 1 or 0,
+		m_bClose = false,
+		m_bOpen = false,
+	}
+	for i = 0, obj.c_iMaxPieMenuStack - 1 do
+		obj.m_oPieMenuStack[i] = NewPieMenu(obj)
+	end
+	return obj
+end
+
+local function BeginPieMenuEx(menuCtx)
+	assert(menuCtx.m_iCurrentIndex < menuCtx.c_iMaxPieMenuStack)
+	menuCtx.m_iCurrentIndex = menuCtx.m_iCurrentIndex + 1
+	menuCtx.m_iMaxIndex = menuCtx.m_iMaxIndex + 1
+	local oPieMenu = menuCtx.m_oPieMenuStack[menuCtx.m_iCurrentIndex]
+	oPieMenu.m_iCurrentIndex = 0
+	oPieMenu.m_fMaxItemSqrDiameter = 0
+	if IS_MOBILE then
+		if imgui.IsMouseClicked(0) then oPieMenu.m_iHoveredItem = -1 end
+	else
+		if not imgui.IsMouseReleased( menuCtx.m_iMouseButton ) then oPieMenu.m_iHoveredItem = -1 end
+	end
+	if menuCtx.m_iCurrentIndex > 0 then
+		oPieMenu.m_fMaxItemSqrDiameter = menuCtx.m_oPieMenuStack[menuCtx.m_iCurrentIndex - 1].m_fMaxItemSqrDiameter
+	end
+end
+
+local function EndPieMenuEx(menuCtx)
+	assert(menuCtx.m_iCurrentIndex >= 0)
+	local oPieMenu = menuCtx.m_oPieMenuStack[menuCtx.m_iCurrentIndex]
+	menuCtx.m_iCurrentIndex = menuCtx.m_iCurrentIndex - 1
+end
+
+local function BeginPiePopup(menuCtx, pName, iMouseButton, bForceOpen)
+	iMouseButton = iMouseButton or 0
+	menuCtx.m_iMouseButton = iMouseButton
+	if bForceOpen then menuCtx.m_bOpen = true end
+	if not menuCtx.m_bOpen then return false end
+	menuCtx.m_bClose = false
+	local iCurrentFrame = imgui.GetFrameCount()
+	if menuCtx.m_iLastFrame < (iCurrentFrame - 1) then
+		if IS_MOBILE then
+			local mp = imgui.GetIO().MousePos
+			menuCtx.m_oCenter = ImVec2(mp.x, mp.y)
+		else
+			local display = imgui.GetIO().DisplaySize
+			menuCtx.m_oCenter = ImVec2(display.x * 0.5, display.y * 0.5)
+		end
+	end
+	menuCtx.m_iLastFrame = iCurrentFrame
+	menuCtx.m_iMaxIndex = -1
+	BeginPieMenuEx(menuCtx)
+	return true
+end
+
+local function EndPiePopup(menuCtx, bWantClose)
+	EndPieMenuEx(menuCtx)
+	local oStyle = imgui.GetStyle()
+	local pDrawList = pieGetDrawList()
+	pDrawList:PushClipRectFullScreen()
+	local oMousePos = imgui.GetIO().MousePos
+	local oDragDelta = ImVec2(oMousePos.x - menuCtx.m_oCenter.x, oMousePos.y - menuCtx.m_oCenter.y)
+	local fDragDistSqr = oDragDelta.x*oDragDelta.x + oDragDelta.y*oDragDelta.y
+	local fCurrentRadius = menuCtx.c_iRadiusEmpty
+	local oArea = {Min = ImVec2(menuCtx.m_oCenter.x, menuCtx.m_oCenter.y), Max = ImVec2(menuCtx.m_oCenter.x, menuCtx.m_oCenter.y)}
+	local bItemHovered = false
+	local c_fDefaultRotate = -math.pi / 2
+	local fLastRotate = c_fDefaultRotate
+	for iIndex = 0, menuCtx.m_iMaxIndex do
+		local oPieMenu = menuCtx.m_oPieMenuStack[iIndex]
+		local fMenuHeight = math.sqrt(oPieMenu.m_fMaxItemSqrDiameter)
+		local fMinRadius = fCurrentRadius
+		local fMaxRadius = fMinRadius + (fMenuHeight * oPieMenu.m_iCurrentIndex) / 2
+		local item_arc_span = 2 * math.pi / math.max(menuCtx.c_iMinItemCount + menuCtx.c_iMinItemCountPerLevel * iIndex, oPieMenu.m_iCurrentIndex)
+		local drag_angle = math.atan2(oDragDelta.y, oDragDelta.x)
+		local fRotate = fLastRotate - item_arc_span * ( oPieMenu.m_iCurrentIndex - 1 ) / 2
+		local item_hovered = -1
+		for item_n = 0, oPieMenu.m_iCurrentIndex - 1 do
+			local item_label = oPieMenu.m_oItemNames[ item_n ]
+			local fMinInnerSpacing = oStyle.ItemInnerSpacing.x / ( fMinRadius * 2 )
+			local fMaxInnerSpacing = oStyle.ItemInnerSpacing.x / ( fMaxRadius * 2 )
+			local item_inner_ang_min = item_arc_span * ( item_n - 0.5 + fMinInnerSpacing ) + fRotate
+			local item_inner_ang_max = item_arc_span * ( item_n + 0.5 - fMinInnerSpacing ) + fRotate
+			local item_outer_ang_min = item_arc_span * ( item_n - 0.5 + fMaxInnerSpacing ) + fRotate
+			local item_outer_ang_max = item_arc_span * ( item_n + 0.5 - fMaxInnerSpacing ) + fRotate
+			local hovered = false
+			if fDragDistSqr >= fMinRadius * fMinRadius and fDragDistSqr < fMaxRadius * fMaxRadius  then
+				while (drag_angle - item_inner_ang_min) < 0 do drag_angle = drag_angle + (2 * math.pi) end
+				while (drag_angle - item_inner_ang_min) > 2 * math.pi do drag_angle = drag_angle - (2 * math.pi) end
+				if drag_angle >= item_inner_ang_min and drag_angle < item_inner_ang_max  then
+					hovered = true
+					bItemHovered = not oPieMenu.m_oItemIsSubMenu[ item_n ]
+				end
+			end
+			local arc_segments = math.floor(( 32 * item_arc_span / ( 2 * math.pi ) ) + 1)
+			local iColor = imgui.GetColorU32( hovered and imgui.Col.ButtonHovered or imgui.Col.Button )
+			local fAngleStepInner = (item_inner_ang_max - item_inner_ang_min) / arc_segments
+			local fAngleStepOuter = ( item_outer_ang_max - item_outer_ang_min ) / arc_segments
+			pDrawList:PrimReserve(arc_segments * 6, (arc_segments + 1) * 2)
+			for iSeg = 0, arc_segments do
+				local fCosInner = math.cos(item_inner_ang_min + fAngleStepInner * iSeg)
+				local fSinInner = math.sin(item_inner_ang_min + fAngleStepInner * iSeg)
+				local fCosOuter = math.cos(item_outer_ang_min + fAngleStepOuter * iSeg)
+				local fSinOuter = math.sin(item_outer_ang_min + fAngleStepOuter * iSeg)
+				if iSeg < arc_segments then
+					local VtxCurrentIdx = pDrawList._VtxCurrentIdx
+					pDrawList:PrimWriteIdx(VtxCurrentIdx + 0)
+					pDrawList:PrimWriteIdx(VtxCurrentIdx + 2)
+					pDrawList:PrimWriteIdx(VtxCurrentIdx + 1)
+					pDrawList:PrimWriteIdx(VtxCurrentIdx + 3)
+					pDrawList:PrimWriteIdx(VtxCurrentIdx + 2)
+					pDrawList:PrimWriteIdx(VtxCurrentIdx + 1)
+				end
+				local pos = ImVec2(menuCtx.m_oCenter.x + fCosInner * (fMinRadius + oStyle.ItemInnerSpacing.x), menuCtx.m_oCenter.y + fSinInner * (fMinRadius + oStyle.ItemInnerSpacing.x))
+				local pos2 = ImVec2(menuCtx.m_oCenter.x + fCosOuter * (fMaxRadius - oStyle.ItemInnerSpacing.x), menuCtx.m_oCenter.y + fSinOuter * (fMaxRadius - oStyle.ItemInnerSpacing.x))
+				pDrawList:PrimWriteVtx(pos, ImVec2(0, 0), iColor)
+				pDrawList:PrimWriteVtx(pos2, ImVec2(0, 0), iColor)
+			end
+			local fRadCenter = ( item_arc_span * item_n ) + fRotate
+			local oOuterCenter = ImVec2( menuCtx.m_oCenter.x + math.cos( fRadCenter ) * fMaxRadius, menuCtx.m_oCenter.y + math.sin( fRadCenter ) * fMaxRadius )
+			ImRectAdd(oArea, oOuterCenter)
+			if oPieMenu.m_oItemIsSubMenu[item_n] then
+				local oTrianglePos = {ImVec2(), ImVec2(), ImVec2()}
+				local fRadLeft = fRadCenter - 5 / fMaxRadius
+				local fRadRight = fRadCenter + 5 / fMaxRadius
+				oTrianglePos[ 0+1 ].x = menuCtx.m_oCenter.x + math.cos( fRadCenter ) * ( fMaxRadius - 5 )
+				oTrianglePos[ 0+1 ].y = menuCtx.m_oCenter.y + math.sin( fRadCenter ) * ( fMaxRadius - 5 )
+				oTrianglePos[ 1+1 ].x = menuCtx.m_oCenter.x + math.cos( fRadLeft ) * ( fMaxRadius - 10 )
+				oTrianglePos[ 1+1 ].y = menuCtx.m_oCenter.y + math.sin( fRadLeft ) * ( fMaxRadius - 10 )
+				oTrianglePos[ 2+1 ].x = menuCtx.m_oCenter.x + math.cos( fRadRight ) * ( fMaxRadius - 10 )
+				oTrianglePos[ 2+1 ].y = menuCtx.m_oCenter.y + math.sin( fRadRight ) * ( fMaxRadius - 10 )
+				pDrawList:AddTriangleFilled(oTrianglePos[1], oTrianglePos[2], oTrianglePos[3], 0xFFFFFFFF)
+			end
+			local ts = oPieMenu.m_oItemSizes[item_n]
+			local text_size = ImVec2(ts.x, ts.y)
+			local text_pos = ImVec2(
+				menuCtx.m_oCenter.x + math.cos((item_inner_ang_min + item_inner_ang_max) * 0.5) * (fMinRadius + fMaxRadius) * 0.5 - text_size.x * 0.5,
+				menuCtx.m_oCenter.y + math.sin((item_inner_ang_min + item_inner_ang_max) * 0.5) * (fMinRadius + fMaxRadius) * 0.5 - text_size.y * 0.5)
+			pDrawList:AddText(text_pos, imgui.GetColorU32(imgui.Col.Text), item_label)
+			if hovered then item_hovered = item_n end
+		end
+		fCurrentRadius = fMaxRadius
+		oPieMenu.m_fLastMaxItemSqrDiameter = oPieMenu.m_fMaxItemSqrDiameter
+		oPieMenu.m_iHoveredItem = item_hovered
+		if fDragDistSqr >= fMaxRadius * fMaxRadius then item_hovered = oPieMenu.m_iLastHoveredItem end
+		oPieMenu.m_iLastHoveredItem = item_hovered
+		fLastRotate = item_arc_span * oPieMenu.m_iLastHoveredItem + fRotate
+		if item_hovered == -1 or not oPieMenu.m_oItemIsSubMenu[item_hovered] then break end
+	end
+	pDrawList:PopClipRect()
+	if oArea.Min.x < 0  then menuCtx.m_oCenter.x = ( menuCtx.m_oCenter.x - oArea.Min.x ) end
+	if oArea.Min.y < 0  then menuCtx.m_oCenter.y = ( menuCtx.m_oCenter.y - oArea.Min.y ) end
+	local oDisplaySize = imgui.GetIO().DisplaySize
+	if oArea.Max.x > oDisplaySize.x then menuCtx.m_oCenter.x = ( menuCtx.m_oCenter.x - oArea.Max.x ) + oDisplaySize.x end
+	if oArea.Max.y > oDisplaySize.y then menuCtx.m_oCenter.y = ( menuCtx.m_oCenter.y - oArea.Max.y ) + oDisplaySize.y end
+	local want_close = bWantClose or false
+	if IS_MOBILE then want_close = want_close or imgui.IsMouseReleased(0) end
+	if menuCtx.m_bClose or want_close then
+		menuCtx.m_bOpen = false
+	end
+end
+
+local function BeginPieMenu(menuCtx, pName, bEnabled)
+	assert(menuCtx.m_iCurrentIndex >= 0 and menuCtx.m_iCurrentIndex < menuCtx.c_iMaxPieItemCount)
+	bEnabled = bEnabled or true
+	local oPieMenu = menuCtx.m_oPieMenuStack[menuCtx.m_iCurrentIndex]
+	local oTextSize = imgui.CalcTextSize(pName)
+	oPieMenu.m_oItemSizes[oPieMenu.m_iCurrentIndex] = oTextSize
+	local fSqrDiameter
+	if IS_MOBILE then
+		fSqrDiameter = oTextSize.x * 15 * DPI + oTextSize.y * 30 * DPI
+	else
+		fSqrDiameter = (oTextSize.x * oTextSize.x / 2) + (oTextSize.y * oTextSize.y / 2)
+	end
+	if fSqrDiameter > oPieMenu.m_fMaxItemSqrDiameter then oPieMenu.m_fMaxItemSqrDiameter = fSqrDiameter end
+	oPieMenu.m_oItemIsSubMenu[oPieMenu.m_iCurrentIndex] = true
+	oPieMenu.m_oItemNames[oPieMenu.m_iCurrentIndex] = pName
+	if oPieMenu.m_iLastHoveredItem == oPieMenu.m_iCurrentIndex then
+		oPieMenu.m_iCurrentIndex = oPieMenu.m_iCurrentIndex + 1
+		BeginPieMenuEx(menuCtx)
+		return true
+	end
+	oPieMenu.m_iCurrentIndex = oPieMenu.m_iCurrentIndex + 1
+	return false
+end
+
+local function EndPieMenu(menuCtx)
+	assert(menuCtx.m_iCurrentIndex >= 0 and menuCtx.m_iCurrentIndex < menuCtx.c_iMaxPieItemCount)
+	menuCtx.m_iCurrentIndex = menuCtx.m_iCurrentIndex - 1
+end
+
+local function PieMenuItem(menuCtx, pName, bEnabled)
+	assert(menuCtx.m_iCurrentIndex >= 0 and menuCtx.m_iCurrentIndex < menuCtx.c_iMaxPieItemCount)
+	bEnabled = bEnabled or true
+	local oPieMenu = menuCtx.m_oPieMenuStack[menuCtx.m_iCurrentIndex]
+	local oTextSize = imgui.CalcTextSize(pName)
+	oPieMenu.m_oItemSizes[oPieMenu.m_iCurrentIndex] = oTextSize
+	local fSqrDiameter
+	if IS_MOBILE then
+		fSqrDiameter = oTextSize.x * 15 * DPI + oTextSize.y * 30 * DPI
+	else
+		fSqrDiameter = (oTextSize.x * oTextSize.x / 3) + (oTextSize.y * oTextSize.y / 3)
+	end
+	if fSqrDiameter > oPieMenu.m_fMaxItemSqrDiameter then oPieMenu.m_fMaxItemSqrDiameter = fSqrDiameter end
+	oPieMenu.m_oItemIsSubMenu[oPieMenu.m_iCurrentIndex] = false
+	oPieMenu.m_oItemNames[oPieMenu.m_iCurrentIndex] = pName
+	local bActive
+	if IS_MOBILE then
+		bActive = (oPieMenu.m_iCurrentIndex == oPieMenu.m_iHoveredItem) and imgui.IsMouseReleased(0)
+	else
+		bActive = oPieMenu.m_iCurrentIndex == oPieMenu.m_iHoveredItem
+	end
+	oPieMenu.m_iCurrentIndex = oPieMenu.m_iCurrentIndex + 1
+	if bActive then menuCtx.m_bClose = true end
+	return bActive
+end
+
+local function New(...)
+	local menuContext = NewPieMenuContext(...)
+	return {
+		_VERSION = '3.0',
+		BeginPiePopup = function(name, mouseButton, forceOpen) return BeginPiePopup(menuContext, name, mouseButton, forceOpen) end,
+		EndPiePopup = function(wantClose) return EndPiePopup(menuContext, wantClose) end,
+		PieMenuItem = function(name, enabled) return PieMenuItem(menuContext, name, enabled) end,
+		BeginPieMenu = function(name, enabled) return BeginPieMenu(menuContext, name, enabled) end,
+		EndPieMenu = function() return EndPieMenu(menuContext) end,
+	}
+end
+
+local defaultPieMenu = New()
+defaultPieMenu.New = New
+return defaultPieMenu
+]]
+local function pie_ensure_lib(path, content)
+	local need = false
+	if not doesFileExist(path) then
+		need = true
+	else
+		local f = io.open(path, 'rb')
+		if f then
+			local cur = f:read('*a') or ''
+			f:close()
+			if cur:gsub('\r', '') ~= content:gsub('\r', '') then need = true end
+		else
+			need = true
+		end
+	end
+	if need then
+		local f = io.open(path, 'w')
+		if f then f:write(content); f:close() end
+	end
+	return need
+end
+--------------------------------------------[ CONNECT LIBS ]----------------------------------------
+print('Подключение библиотек...')
+require('lib.moonloader')
+require('encoding').default = 'CP1251'
+local u8 = require('encoding').UTF8
+local ffi = require('ffi')
+local effil = require('effil')
+local imgui = require('mimgui')
+local fa = require('fAwesome6_solid')
+local sampev = require('samp.events')
+
+local vkeys_ok, vkeys = pcall(require, 'vkeys')
+local dkjson_ok, dkjson = pcall(require, "dkjson")
+local memory_ok, memory = pcall(require, "memory")
+local sam_ok, sam = pcall(require, "SAMemory")
+local widgets_ok, widgets = pcall(require, 'widgets')
+local monet_ok, moon_monet = pcall(require, 'MoonMonet')
+local hotkey_ok, hotkey = pcall(require, 'mimgui_hotkeys')
+do
+    local mod_name  = 'mimgui_piemenu' local lib_path  = worked_dir .. "/lib/mimgui_piemenu.lua" local rewritten = pie_ensure_lib(lib_path, PIE_LIB)
+    if rewritten then package.loaded[mod_name] = nil
+	end pie_ok, pie = pcall(require, mod_name)
+end
+local sizeX, sizeY = getScreenResolution()
+print('Библиотеки успешно подключены!')
+--------------------------------------------[ TERMS ]--------------------------------------------
+local TERMS_TEXT = [[
+1. Общие положения
+1.1. Настоящее соглашение регулирует использование программного обеспечения «Arizona Helper» (далее - «Хелпер»).
+1.2. Хелпер является неофициальной модификацией, созданной независимо и не связанной с администрацией, владельцами или представителями проектов Arizona Role Play, Arizona Online и Rodina Online.
+1.3. Используя Хелпер, вы подтверждаете, что ознакомились с условиями настоящего соглашения и принимаете их в полном объёме.
+1.4. Если вы не согласны с условиями - немедленно прекратите использование Хелпера.
+
+2. Статус программного обеспечения
+2.1. Хелпер предоставляется «как есть» (as is), без каких-либо явных или подразумеваемых гарантий.
+2.2. Автор не гарантирует работоспособность, бесперебойность, совместимость с обновлениями игры/сервера и пригодность для каких-либо целей.
+2.3. Сервер может классифицировать стороннее ПО по своему усмотрению; автор не влияет на политику сервера и не отвечает за неё.
+
+3. Риски и ответственность пользователя
+3.1. Использование Хелпера осуществляется исключительно на ваш страх и риск.
+3.2. Установка и использование стороннего ПО может нарушать правила сервера и повлечь санкции вплоть до блокировки аккаунта.
+3.3. Только вы несёте ответственность за соблюдение правил сервера и применимого законодательства.
+
+4. Отказ от ответственности автора
+4.1. Автор не несёт ответственности за санкции администрации сервера: предупреждения, муты, баны, блокировки аккаунта.
+4.2. Автор не несёт ответственности за потерю игровых ценностей, валюты, имущества, данных, прогресса или доступа к аккаунту.
+4.3. Автор не несёт ответственности за сбои, ошибки, конфликты с другим ПО, повреждение файлов и работоспособность игры.
+4.4. Автор не возмещает прямой, косвенный ущерб, упущенную выгоду или моральный вред.
+4.5. Любые претензии к автору, связанные с использованием Хелпера, считаются заранее необоснованными и отклоняются.
+
+5. Данные и конфиденциальность
+5.1. Настройки и данные персонажа хранятся локально на вашем устройстве.
+5.2. Хелпер не передаёт личные данные третьим лицам.
+5.3. Опциональная аналитика передаёт только обезличенную техническую информацию.
+
+6. Распространение и изменение
+6.1. Разрешается свободное распространение оригинального Хелпера при указании авторства и ссылки на первоисточник.
+6.2. Разрешается внесение изменений в код Хелпера (модификации) исключительно на ваш страх и риск.
+6.3. Автор не отвечает за модифицированные версии и не оказывает по ним поддержку.
+6.4. Запрещается выдавать модификации за оригинал и распространять их от имени автора.
+
+7. Изменение условий
+7.1. Автор вправе изменять условия соглашения и функциональность Хелпера без предварительного уведомления.
+
+8. Заключительные положения
+8.1. Продолжая использование Хелпера, вы подтверждаете согласие с условиями соглашения.
+8.2. При недействительности отдельного пункта остальные сохраняют силу.
+8.3. Если вы не согласны - прекратите использование Хелпера.
+]]
+local function get_terms_text()        return TERMS_TEXT end
+local function render_terms_text()
+	local text_u8 = u8(get_terms_text())
+	for line in text_u8:gmatch('[^\n]+') do
+		if line:match('^%d+%.%s') then imgui.Spacing() end
+		imgui.TextWrapped(line)
+	end
+end
+--------------------------------------------[ JSON SETTINGS ]---------------------------------------
+local config_dir = worked_dir .. '/Arizona Helper'
+local settings = {}
+local default_settings = {
+	general = {
+		version = thisScript().version,
+		analytics = true,
+        custom_dpi = 1.0,
+		autofind_dpi = false,
+        helper_theme = 0,
+		message_color = 40703,
+		moonmonet_theme_color = 40703,
+		transparent = 75,
+		background_transparent = 10, 
+		members_update_period = 3,
+		frp_radius = 5,
+		fraction_mode = '',
+		chat_prefix = 'Arizona Helper',
+		bind_mainmenu = '[113]',
+		bind_fastmenu = '[69]',
+		bind_leader_fastmenu = '[71]',
+		bind_action = '[13]',
+		bind_command_stop = '[123]',
+		piemenu = true,
+		mobile_fastmenu_button = true,
+		mobile_stop_button = true,
+		ping = true,
+		rp_weapon = false,
+		rp_chat = false,
+		accent_enable = true,
+		auto_accept_docs = true,
+		auto_doklad_post = false,
+		post_doklad_period = 5,
+		auto_mask = false,
+		auto_invite = false,
+		auto_invite_rank = 1,
+		auto_uninvite = false,
+		auto_update_members = true,
+		adaptive_cruise = false,
+		aflip_domkrat = false,
+		scoreboard = true,
+		crosshair = true,
+		nmembers = true,
+		updater = false,
+		armory_enable = true,
+		terms_accepted = false,
+	},
+	mj = {
+		auto_time = true,
+		anti_screpki = true,
+		auto_doklad_damage = true,
+		auto_change_code_siren = true,
+		wanted_update_period = 10,
+		auto_update_wanteds = false,
+		afind_find_cd = 3,
+		afind_auto_stop = true,
+		afind_stop_radius = 10,
+		edgo_rp_cd = 3000,
+    	edgo_rp_enabled = true,
+		patrool_doklad_period = 5,
+	},
+	armory = {
+		auto_armory = true,
+		auto_locker = false,
+		grace_ms = 350,
+		step_ms  = 550,
+		locker_step_ms = 1600,
+		swat = true, mask = true,
+		bodycam = true, objects = false, heals = false,
+		vest = true, taser = true, baton = true,
+		rifle = true, shotgun = true, smg = true, sniper = false,
+		smoke = true, shield = true, spikes = false,
+		pistol = 'de',
+	},
+	md = {
+		auto_doklad_damage = true,
+	},
+	mh = {
+		price = {
+			ant = 50000,
+			recept = 100000,
+			heal = 100000,
+			heal_vc = 1000,
+			healactor = 800000,
+			healactor_vc = 1000,
+			healbad = 400000,
+			medosm = 800000,
+			mticket = 400000,
+			med7 = 50000,
+			med14 = 100000,
+			med30 = 150000,
+			med60 = 200000,
+		},
+		heal_in_chat = {
+			enable = true,
+			auto_heal = false
+		},
+	},
+	smi = {
+		ads_buttons = true,
+		ads_history = true,
+		notify_new_ads = true,
+		auto_select_first_ad = false,
+	},
+	lc = {
+		price = {
+			avto1 = 200000,
+			avto2 = 360000,
+			avto3 = 410000,
+			moto1 = 300000,
+			moto2 = 350000,
+			moto3 = 450000,
+			fish1 = 500000,
+			fish2 = 550000,
+			fish3 = 590000,
+			swim1 = 500000,
+			swim2 = 550000,
+			swim3 = 590000,
+			gun1 = 1000000,
+			gun2 = 1090000,
+			gun3 = 1150000,
+			hunt1 = 1000000,
+			hunt2 = 1100000,
+			hunt3 = 1190000,
+			klad1 = 1100000,
+			klad2 = 1200000,
+			klad3 = 1250000,
+			taxi1 = 800000,
+			taxi2 = 1150000,
+			taxi3 = 1250000,
+			mexa1 = 800000,
+			mexa2 = 1150000,
+			mexa3 = 1250000,
+			fly1 = 1200000,
+			fly2 = 1200000,
+			fly3 = 1200000,
+			train1 = 500000 --Rodina RP
+		},
+		auto_find_clorest_znak = true,
+	},
+	fd = {
+		doklads = {
+			togo = true,
+			here = true,
+			fire = true,
+			stretcher = true,
+			npc_save = true,
+			file_end = true,
+		},
+	}, 
+	gov = {
+		anti_trivoga = true,
+		custom_zeks = true,
+		zeks_update_period = 10,
+	},
+	ins = {
+		anti_trivoga = true,
+		hint_in_sort = true,
+		notify_new_ticket = true,
+		auto_input_ticket = true,
+	},
+	windows_pos = {
+		pie = {x = sizeX * 0.7, y = sizeY * 0.7},
+		patrool_menu = {x = sizeX / 2, y = sizeY / 2},
+		post_menu = {x = sizeX / 2, y = sizeY / 2},
+		wanteds_menu = {x = sizeX / 1.2, y = sizeY / 2},
+		zeks_menu = {x = sizeX / 1.2, y = sizeY / 2},
+		mobile_fastmenu_button = {x = sizeX / 8.5, y = sizeY / 2.3},
+	},
+}
+function safe_encode_json(array) 
+	if dkjson_ok then
+		local ok, encoded = pcall(dkjson.encode, array, {indent = true})
+		if ok then return encoded end
+	end
+	local ok, encoded = pcall(encodeJson, array)
+	if ok then return encoded end
+end
+function merge_defaults(default, loaded)
+	local has_changes = false
+    for key, value in pairs(default) do
+        if type(value) == "table" then
+            if type(loaded[key]) ~= "table" then
+				has_changes = true
+				print('В ваш локальный конфиг импортировано новое значение: ' .. key .. ' = ' .. tostring(value))
+                loaded[key] = {}
+            end
+            merge_defaults(value, loaded[key])
+        else
+            if loaded[key] == nil then
+                loaded[key] = value
+				print('В ваш локальный конфиг импортировано новое значение: ' .. key .. ' = ' .. tostring(value))
+				has_changes = true
+            end
+        end
+    end
+	return has_changes
+end
+function load_default_settings()
+	settings = default_settings
+	print('Используются стандартные настройки!')
+end
+function save_settings()
+    local file, errstr = io.open(config_dir .. "/Settings.json", 'w')
+    if file then
+		local content = safe_encode_json(settings)
+		if content then
+			file:write(content)
+			print('Настройки хелпера сохранены!')
+		else
+			print('Не удалось сохранить настройки хелпера! Ошибка кодировки json')
+		end
+		file:close()
+    else
+        print('Не удалось сохранить настройки хелпера, ошибка: ', (errstr or "Unknown"))
+    end
+end
+function load_settings()
+    if not doesDirectoryExist(config_dir) then createDirectory(config_dir) end
+    if not doesFileExist(config_dir .. "/Settings.json") then
+        load_default_settings()
+    else
+        local file = io.open(config_dir .. "/Settings.json", 'r')
+        if file then
+            local contents = file:read('*a')
+            file:close()
+			if #contents ~= 0 then
+				local result, loaded = pcall(decodeJson, contents)
+				if result then
+					settings = loaded
+					if settings.general.version ~= thisScript().version then
+						settings.general.version = thisScript().version
+						print('Импортирую новые параметры в локальный конфиг...')
+						merge_defaults(default_settings, settings)
+						save_settings()
+					end
+					print('Настройки хелпера успешно загружены!')
+				else
+					load_default_settings()
+				end
+			else
+                load_default_settings()
+			end
+        else
+            load_default_settings()
+        end
+    end
+end
+function isMode(mode)
+	return settings.general.fraction_mode == mode
+end
+load_settings()
+----------------------------------------------[ AUTO DPI ]------------------------------------------
+if not settings.general.autofind_dpi then
+	print('Автоматическое определение DPI интерфейса...')
+	if IS_MOBILE then
+		settings.general.custom_dpi = MONET_DPI_SCALE
+	else
+		local width_scale = sizeX / 1366
+		local height_scale = sizeY / 768
+		settings.general.custom_dpi = (width_scale + height_scale) / 2
+	end
+	settings.general.autofind_dpi = true
+	settings.general.custom_dpi = tonumber(string.format('%.3f', settings.general.custom_dpi))
+	print('DPI интерфейса: ' .. settings.general.custom_dpi)
+	save_settings()
+end
+------------------------------------------[ JSON & MODULES ]----------------------------------------
+local modules = {
+	player = {
+		name = 'Игрок',
+		path = config_dir .. "/Player.json",
+		data = {
+			nick = '',
+			name_surname = '',
+			sex = 'Мужчина',
+			fraction = 'none',
+			fraction_tag = '',
+			fraction_rank = '',
+			fraction_rank_number = 0,
+			accent = '[Иностранный акцент]:'
+		}
+	},
+	departament = {
+		name = 'Рация Департамента',
+		path = config_dir .. "/Departament.json",
+		data = {
+			anti_skobki = false,
+			dep_fm = 'to',
+			dep_tag1 = '',
+			dep_tag2 = '[Всем]',
+			dep_tags = {
+				"[Всем]",
+				"[Похитители]",
+				"[Терористы]",
+				"[Диспетчер]",
+				'skip',
+				"[МЮ]",
+				"[Мин.Юст.]",
+				"[ЛСПД]",
+				"[СФПД]",
+				"[ЛВПД]",
+				"[ЛССД]",
+				"[СВАТ]",
+				"[ФБР]",
+				'skip',
+				"[МО]",
+				"[Мин.Обороны]",
+				"[АНГ]",
+				"[ВНГ]",
+				"[ФИК]",
+				'skip',
+				"[МЗ]",
+				"[МЗП]",
+				"[Мин.Здрав.]",
+				"[ЛСМЦ]",
+				"[СФМЦ]",
+				"[ЛВМЦ]",
+				"[ДМЦ]",
+				"[ПД]",
+				'skip',
+				"[ЦА]",
+				"[ЦЛ]",
+				"[СК]",
+				"[Пра-во]",
+				"[Губернатор]",
+				"[Прокурор]",
+				"[Cудья]",
+				'skip',
+				"[СМИ]",
+				"[СМИ ЛС]",
+				"[СМИ СФ]",
+				"[СМИ ЛВ]",
+			},
+			dep_tags_en = {
+				"[ALL]",
+				'skip',
+				"[MJ]",
+				"[Min.Just.]",
+				"[LSPD]",
+				"[SFPD]",
+				"[LVPD]",
+				"[RCSD]",
+				"[SWAT]",
+				"[FBI]",
+				'skip',
+				"[MD]",
+				"[Mid.Def.]",
+				"[LSa]",
+				"[SFa]",
+				"[MSP]",
+				'skip',
+				"[MH]",
+				"[MHF]",
+				"[Min.Healt]",
+				"[LSMC]",
+				"[SFMC]",
+				"[LVMC]",
+				"[JMC]",
+				"[FD]",
+				'skip',
+				"[GOV]",
+				'[Governor]',
+				"[Prosecutor]",
+				"[Judge]",
+				"[LC]",
+				"[INS]",
+				'skip',
+				"[CNN]",
+				"[CNN LS]",
+				"[CNN LV]",
+				"[CNN SF]",
+			},
+			dep_tags_custom = {},
+			dep_fms = {
+				'-',
+				'- з.к. -',
+				'to',
+			},
+			dep_quick_replies = {
+				{ name = 'На связи',          text = 'На связи.' },
+				{ name = 'От кого помехи?',   text = 'От кого помехи?' },
+				{ name = 'Проверка ЧС',       text = 'Могу заехать на вашу ВЧ для проверки на ЧС?' },
+				{ name = 'От меня',           text = 'Помехи...' },
+			},
+		}
+	},
+	members = {
+		name = 'Настройки списка /members',
+		path = config_dir .. "/Members.json",
+		data = {
+			update_period = 3,
+			auto_update = false,
+			open_delay = 250,
+			open_cooldown = 2,
+			afk_threshold = 5,
+			afk_warn_color = {255, 200, 0},
+			afk_over_color = {255, 120, 0},
+			label_max = 10,
+			sort_mode = 0,
+			custom_info = {},
+			migrated = false,
+		},
+	},
+	forensic = {
+		name = 'Криминалистические экспертизы',
+		path = config_dir .. "/Forensic.json",
+		data = {
+			default_wait = 2.0,
+			types = {
+				{
+					name = 'Экспертиза веществ',
+					desc = 'Полевая химическая экспертиза вещества из кейса на тактическом поясе: пробирка, спирт, Имуно-Хром-10. Определяет, является ли вещество "укроп"тиком.',
+					hint = 'проводите после обыска (/fr), если изъято вещество; результат это прямое основание для розыска и дальнейшего ареста.',
+					text = '/do На тактическом поясе прикреплён криминалистический кейс с защёлками.&/me отстёгивает защёлки, открывает кейс и достаёт набор для экспертизы&/me надевает резиновые перчатки из кейса&/do В раскрытом кейсе разложены: пробирка, спирт, тест Имуно-Хром-10, пинцет.&/me берёт из кейса стерильную пробирку с этиловым спиртом&/me аккуратно берёт пинцетом образец найденного вещества&/me засыпает образец вещества в пробирку со спиртом&/me достаёт тест Имуно-Хром-10 и добавляет его в пробирку&/me аккуратными движениями взбалтывает пробирку несколько секунд&/do От теста Имуно-Хром-10 содержимое пробирки изменило цвет.&/todo Да, это точно "укроп"*увидев изменение цвета содержимого пробирки&/me записывает результат теста в полевой протокол&/me убирает пробирку и набор в кейс, застёгивает его на поясе',
+				},
+				{
+					name = 'Дактилоскопия',
+					desc = 'Сбор отпечатков в полевых условиях: порошок по цвету поверхности, кисть, скотч, плёнка, конверт, фото с линейкой-наклейкой.',
+					hint = 'используйте на месте преступления; отпечаток пригодится для SmartUK и запроса ордера.',
+					text = '/do На тактическом поясе прикреплён криминалистический кейс с защёлками.&/me открывает кейс и достаёт набор для дактилоскопии&/me надевает маску и резиновые перчатки из кейса&/me логически представляет картину преступления и ищет гладкие поверхности&/me фотографирует общий план места преступления на камеру&/me определяет цвет поверхности и подбирает порошок нужного цвета&/me распыляет кистью магнитный порошок по месту предполагаемого отпечатка&/do На поверхности проявился отпечаток пальца.&/me клеит рядом с отпечатком линейку-наклейку с датой и своей фамилией&/me фотографирует отпечаток вместе с линейкой-наклейкой&/me наклеивает скотч на отпечаток и резко сдёргивает его вместе с печатью&/me приклеивает скотч с отпечатком на пластиковую плёнку&/me кладёт плёнку в конверт, подписывает и убирает в кейс&/do Конверт с отпечатком подготовлен для отправки в суд.',
+				},
+				{
+					name = 'Сбор и анализ ДНК',
+					desc = 'Полевой сбор биоматериала (кровь, слюна, волосы, кожа) в зип-пакеты с фото и линейкой для ДНК-профиля.',
+					hint = 'собирайте биоматериал до того, как место преступления будет затоптано.',
+					text = '/do На тактическом поясе прикреплён криминалистический кейс с защёлками.&/me открывает кейс и достаёт пипетку, лопатку, пинцет и зип-пакеты&/me надевает стерильные резиновые перчатки из кейса&/me осматривает место и определяет тип биологического материала&/me фотографирует место сбора вместе с линейкой для масштаба&/me собирает свежую кровь пипеткой и переносит в зип-пакет&/me острой лопаткой соскабливает засохшую кровь в зип-пакет&/me промакивает жидкость марлевым бинтом для выпаривания влаги&/me пинцетом собирает волосы и частички кожи в зип-пакет&/me опечатывает зип-пакеты и вписывает данные о сборе&/do Зип-пакеты с образцами подготовлены для отправки в лабораторию.&/me убирает пакеты в кейс и застёгивает его на поясе',
+				},
+				{
+					name = 'Одорология',
+					desc = 'Полевой сбор запахов: фольга и зип для предмета, шприц и колба для пробы воздуха с предметов, которых касался преступник.',
+					hint = 'пробу воздуха берите сразу - запах быстро выветривается.',
+					text = '/do На тактическом поясе прикреплён криминалистический кейс с защёлками.&/me открывает кейс и достаёт фольгу, зип-пакеты, шприц и колбу&/me надевает стерильные резиновые перчатки из кейса&/me осматривает предметы, которых предположительно касался преступник&/me фотографирует предметы вместе с линейкой для масштаба&/me аккуратно укладывает предмет в стерильную фольгу&/me помещает упакованный предмет в зип-пакет и опечатывает его&/me подносит стерильный шприц к поверхности другого предмета&/me втягивает шприцем воздух с пахучими молекулами&/me быстро переносит пробу воздуха в плотно закрывающуюся колбу&/do Колба с пробой воздуха плотно закупорена и подписана.&/me убирает предмет и колбу в кейс для отправки в лабораторию',
+				},
+				{
+					name = 'Баллистика',
+					desc = 'Полевой сбор пуль и гильз, замер глубины и диаметра отверстия лазерной линейкой и штангенциркулем для баллистической экспертизы.',
+					hint = 'гильзы и пули фиксируйте до /take, чтобы приобщить их к делу.',
+					text = '/do На тактическом поясе прикреплён криминалистический кейс с защёлками.&/me открывает кейс и достаёт пинцет, зип-пакеты и штангенциркуль&/me надевает стерильные резиновые перчатки из кейса&/me фотографирует найденные гильзы и пули с линейкой для масштаба&/me пинцетом складывает найденные гильзы в зип-пакет&/me осматривает пулевое отверстие на предмет сквозного пробития&/me оценивает длину и количество трещин в материале отверстия&/me аккуратно извлекает пулю из отверстия пинцетом&/me складывает извлечённую пулю в отдельный зип-пакет&/me измеряет лазерной линейкой глубину пулевого отверстия&/me измеряет штангенциркулем диаметр отверстия&/do Все данные отверстия записаны в полевой протокол.&/me опечатывает зип-пакеты и убирает их в кейс для лаборатории',
+				},
+				{
+					name = 'Трасология',
+					desc = 'Полевой сбор следов: скотчевые отпечатки на плёнку, силиконовые слепки с грунта, фото с линейкой и замеры рулеткой.',
+					hint = 'силиконовые слепки снимайте после фотографирования следов.',
+					text = '/do На тактическом поясе прикреплён криминалистический кейс с защёлками.&/me открывает кейс и достаёт скотч, плёнку, силикон и рулетку&/me надевает стерильные резиновые перчатки из кейса&/me обходит место преступления в поисках следов обуви и шин&/me фотографирует все найденные следы с линейкой для масштаба&/me делает замер глубины вдавленного следа линейкой-рулеткой&/me собирает следы-отпечатки скотчем на пластиковую плёнку&/me аккуратно заливает вдавленный след силиконовой смесью&/me дожидается полного засыхания силиконового слепка&/me извлекает готовый слепок из грунта и упаковывает в конверт&/do Слепки и отпечатки подготовлены для трасологической лаборатории.&/me убирает конверт и плёнку в кейс, застёгивает его на поясе',
+				},
+				{
+					name = 'Габитоскопия',
+					desc = 'Опрос свидетеля и составление фоторобота на планшете из полевого кейса, финальная проверка и приобщение к делу.',
+					hint = 'фоторобот составляйте со слов свидетеля, а не со своих догадок.',
+					text = '/do В криминалистическом кейсе лежат планшет для фоторобота и папка.&/me подходит к свидетелю и представляется сотрудником&/me просит свидетеля подробно описать внешность преступника&/do Свидетель готов к описанию внешности преступника.&/me проводит психологическую оценку правдивости показаний&/me детально записывает приметы преступника в папку&/me составляет фоторобот на планшете по описанию свидетеля&/me показывает составленный фоторобот свидетелю&/do Свидетель подтверждает сходство фоторобота с преступником.&/me приобщает фоторобот к материалам уголовного дела&/me убирает планшет и папку обратно в кейс',
+				},
+			},
+		}
+	},
+	commands = {
+		name = 'Команды',
+		path = config_dir .. "/Commands.json",
+		data = {
+			commands = {
+				my = {},
+				police = {
+					{cmd = '55', description = 'Проведение 10-55', text = '/r {my_doklad_nick} на CONTROL. Провожу 10-55 в районе {get_area} ({get_square}), СODE 4.&/m Водитель {get_drived_car} внимание!&/m Говорит {fraction}! Снизьте скорость и прижмитесь к обочине.&/m После остановки заглушите двигатель, и не выходите из транспорта.&/m В случае неподчинения вы будете объявлены в розыск!', arg = '', enable = true, waiting = '2', bind = "[101]"},
+					{cmd = '66', description = 'Проведение 10-66', text = '/r {my_doklad_nick} на CONTROL. Провожу 10-66 в районе {get_area} ({get_square}), СODE 3!&/m Водитель {get_drived_car} внимание!&/m Говорит {fraction}! Немедленно прижмитесь к обочине!&/m В случае неподчинения по вам будет открыт огонь!', arg = '', enable = true, waiting = '2', bind = "[102]"},
+					{cmd = 'zd', description = 'Приветствие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь?', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'bk', description = 'Запрос помощи с координатами', text = '/me достал{sex} свой КПК и отправил{sex} координаты в базу данных {fraction_tag}&/bk 10-20&/r {my_doklad_nick} на CONTROL. Срочно нужна помощь, отправил{sex} свои координаты!', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'siren', description = 'Вкл/выкл мигалок в т/с', text = '{switchCarSiren}', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'fara', description = 'Оставить отпечаток на фаре', text = '/me коснулся левой фары {get_nearest_car}&/do Отпечаток успешно оставлен на левой фаре транспортного средства.', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'pas', description = 'Запрос документов',  text = 'Здравствуйте, управление {fraction_tag}, я {fraction_rank} {my_ru_nick}&/do Cлева на груди жетон полицейского, справа именная нашивка с именем.&/me достаёт своё удостоверение из кармана&/showbadge {id}&Прошу предъявить документ, удостоверяющий вашу личность.&/n @{get_nick({id})}, введите /showpass {my_id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'ts', description = 'Выписать штраф',  text = '/do Планшет находится в кармане формы.&/writeticket {id} {arg}&/me вносит изменения в базу штрафов&/todo Оплатите штраф*убирая планшет обратно в карман', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'find', description = 'Поиск игрока',  text = '/me достал{sex} свой КПК и зайдя в базу данных {fraction_tag} открыл{sex} дело гражданина N{id}&/me нажал{sex} на кнопку GPS отслеживания местоположения гражданина&/find {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'prs', description = 'Погоня за преступником',  text = '/me достал{sex} свой КПК и зайдя в базу данных {fraction_tag} открыл{sex} дело преступника N{id}&/me нажал{sex} на кнопку GPS отслеживания местоположения гражданина&/pursuit {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'su', description = 'Выдать розыск',  text = '/me достал{sex} свой КПК и открыл{sex} базу данных преступников&/me вносит изменения в базу данных преступников&/su {id} {number} {arg}&/z {id}&/todo Отлично, преступник в розыске*убирая КПК', arg = '{id} {number} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'fsu', description = 'Запросить выдачу розыска',  text = '/do Рация на тактическом поясе.&/me достал{sex} рацию c пояса, и связавашись с диспетчером, запросил{sex} обьявление человека в розыск&/r {my_doklad_nick} на CONTROL.&/r Прошу обьявить в розыск {number} степени дело N{id}. Причина: {arg}', arg = '{id} {number} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'givefsu', description = 'Выдача розыска по запросу',  text = '/r 10-4, обьявляю гражданина в розыск по запросу офицера {get_rp_nick({id})}!&/me достал{sex} свой КПК и открыл{sex} базу данных преступников&/me вносит изменения в базу данных преступников&/su {get_form_su} (по запросу офицера {get_rp_nick({id})})&/todo Отлично, розыск по запросу офицера {get_rp_nick({id})} выдан*убирая КПК', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'unsu', description = 'Понизить розыск',  text = '/me достал{sex} свой КПК и открыл{sex} базу данных преступников&/me найдя дело N{id} вносит изменения в базу данных преступников&/unsu {id} {number} {arg}', arg = '{id} {number} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'clear', description = 'Снять розыск',  text = '/me достаёт свой КПК и открывает базу данных преступников&/me найдя дело N{id} вносит изменения в базу данных преступников&/clear {id}&/do Дело N{id} больше не находится в списке разыскиваемых преступников.', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'gcuff', description = 'Надеть наручники и вести за собой',  text = '/do Наручники на тактическом поясе.&/todo Я надену на вас наручники*снимая наручники с тактического пояса&/cuff {id}&/todo Не двигайтесь*надевая наручники на человека&/me схватывает задержанного за руки и ведёт его за собой&/gotome {id}&/do Задержанный идёт в конвое.', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'cuff', description = 'Надеть наручники',  text = '/do Наручники на тактическом поясе.&/todo Я надену на вас наручники*снимая наручники с тактического пояса&/cuff {id}&/todo Не двигайтесь*надевая наручники на человека', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'uncuff', description = 'Снять наручники',  text = '/do На тактическом поясе прикреплены ключи от наручников.&/me взяв с пояса ключи от наручников прокрутил{sex} замок наручников задержанного&/uncuff {id}&/todo Ваши руки свободны*убирая ключи от наручники обратно на пояс', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'gtm', description = 'Повести за собой',  text = '/me крепко схватив задержанного, взял{sex} его за руки&/gotome {id}&/do Задержанный идёт в конвое.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'ungtm', description = 'Перестать вести за собой',  text = '/me отпускает руки задержанного и перестаёт вести его за собой&/ungotome {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'bot', description = 'Изьять скрепки у игрока (взлом наручников)',  text = '/me увидел{sex} что задержанный использует скрепки для взлома наручников&/bot {id}&/todo Вы что себе позволяете?!*изымая скрепки у {get_rp_nick({id})}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'ss', description = 'Кричалка',  text = '/s Всем поднять руки вверх, работает {fraction_tag}!', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 't', description = 'Достать тазер',  text = '/taser', arg = '', enable = true, waiting = '2', bind = "[18,49]" },
+					{cmd = 'frl', description = 'Первичный обыск',  text = 'Сейчас я проверю у вас наличие оружия или других острых предметов, не двигайтесь.&/me прощупывает тело задержанного человека&/me прощупывает карманы задержанного человека', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'fr', description = 'Полный обыск',  text = '/do Резиновые перчатки на тактическом поясе.&/todo Сейчас я полностью обыщу вас, на наличие запрещенных предметов*надевая резиновые перчатки&/me прощупывает тело и карманы задержанного человека&/me достаёт из карманов задержанного все его вещи для изучения&/me внимательно осматривает все найденные вещи у задержанного человека&/frisk {id}&/me снимает резиновые перчатки и убирает их на тактический пояск&/do Блокнот с ручкой в нагрудном кармане.&/me берет в руки блокнот с ручкой, и записывает всю информацию про обыск&/me сделав пометки, убирает блокнот с ручкой в нагрудный карман', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'take', description = 'Изьять предметы у игрока (6+)', text = '/do В подсумке находится небольшой зип-пакет.&/me достаёт из подсумка зип-пакет и отрывает его&/me кладёт в зип-пакет изъятые предметы задержанного человека&/take {id}&/do Изъятые предметы в зип-пакете.&/todo Отлично*убирая зип-пакет в подсумок', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true },
+					{cmd = 'camon', description = 'Включить cкрытую боди камеру',  text = '/do К форме прикреплена скрытая боди камера.&/me незаметным движением руки включил{sex} боди камеру.&/do Скрытая боди камера включена и снимает всё происходящее.', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'camoff', description = 'Выключить cкрытую боди камеру',  text = '/do К форме прикреплена скрытая боди камера.&/me незаметным движением руки выключил{sex} боди камеру.&/do Скрытая боди камера выключена и больше не снимает всё происходящее.', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'inc', description = 'Затащить в транспорт',  text = '/me открывает заднюю дверь транспорта&/todo Наклоните голову, здесь дверь*заталкивая задержанного в транспортное средство&/incar {id} {arg}&/me закрывает заднюю дверь транспорта&/do Задержанный в транспортном средстве.', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'ej', description = 'Выбросить из транспорта',  text = '/me открывает дверь транспорта&/me помогает человеку выйти из транспорта&/eject {id}&/me закрывает дверь транспорта', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},	
+					{cmd = 'pl', description = 'Выбросить игрока из его транспорта',  text = '/me резким ударом дубинки разбивает стело транспорта задержанного&/pull {id}&/me выбрасывает задержанного из его транспорта и ударом дубинки оглушает его', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},	
+					{cmd = 'mr', description = 'Зачитать правило Миранды',  text = 'Вы имеете право хранить молчание.&Всё, что вы скажете, может и будет использовано против вас в суде.&Вы имеете право на 1 телефонный звонок, например для вызова частного адвоката.&Ваш адвокат может присутствовать при допросе.&Если вы не можете оплатить услуги адвоката, он будет предоставлен вам государством.&Вам ясны Ваши права?', arg = '', enable = true, waiting = '2', bind = "{}"},	
+					{cmd = 'unmask', description = 'Снять балаклаву с игрока',  text = '/do Задержанный в балаклаве.&/me стягивает балаклаву с головы задеражнного&/unmask {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'arr', description = 'Арестовать (в участке)',  text = '/me включает свой бортовой компютер и вводит код доступа сотрудника&/me заходит в раздел оформления протоколов задержаний и указывает данные&/do Протокол задержания заполнен.&/me вызывает по рации дежурный наряд участка и передаёт им задержанного человека&/arrest', arg = '', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'bribe', description = 'Получение взятки от игрока',  text = '/do Гражданин сейчас ведёт запись через аудио-видео устройства?&/n @{get_nick({id})}, отвечайте на РП, например /do Нет.&{pause}&/do Телефон в кармане.&/me достал{sex} телефон, открыл{sex} заметки, и что-то туда написал{sex}&/do В заметках телефона написан такой текст: {arg}$&/todo Что скажете?*показав телефон преступнику возле себя&{pause}&/bribe {id} {arg} 1', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'rbomb', description = 'Деактивировать бомбу',  text = '/do На тактическом поясе прикреплён сапёрный набор.&/me снимает с пояса сапёрный набор и кладет его на землю, затем открывает его&/do Открытый сапёрный набор находится на земле.&/me достаёт из сапёрного набора пакет с жидким азотом и кладет его на землю&/me достаёт из сапёрного набора отвёртку&/do Отвертка в руках, а пакет с жидким азотом на земле.&/do На корпусе бомбы находится 2 болтика.&/me откручивает болтики с бомбы и убирает их вместе с отвёрткой в сторону&/me аккуратным движением руки вскрывает крышку бомбы&/me внимательно осматривает бомбу&/do Внутри бомбы видна детонирующая часть.&/me достаёт из сапёрного набора кусачки&/do Кусачки в руках.&/me аккуратным движением кусочок разрезает красный провод бомбы&/do Таймер остановился, тиканье со стороны бомбы не слышно.&/me берёт в руки охлаждающий пакет с жидким азотом и кладёт его детонирующую часть бомбы&/removebomb&/do Бомба обезврежена.&/me убирает кусачки и отвёртку обратно в саперный набор и закрывает его', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'delo', description = 'Расследование убийства',  text = '/do Сотрудник прибыл на место убийства.&/todo Такс, что же здесь произошло*осматривая место убийства&/me осматривает и  изучает все улики&{pause}&/me достаёт из подсумка бланк для расследования и ручку&/me заполняет бланк расследования записывая все изученные улики&{pause}&/me записывает в бланк точную дату и время убийства&{pause}&/do Найдено орудие убийства.&/me записывает в бланк орудие убийства&{pause}&/do Бланк расследования убийства полностью заполнен.&/todo Отлично, расследование окончено*убирая бланк в карман', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'giveplate', description = 'Выдача разрешений на номера',  text = '/do Бланк и ручка в нагрудном кармане.&/me достаёт ручку и бланк из нагрудного кармана&/me заполняет бланк для выдачу разрешения на номерной знак&/do Бланк полностью заполнен.&/todo Вот ваше разрешение, берите*убирая ручку в нагрудный карман&/giveplate {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'agenda', description = 'Выдача повестки игроку',  text = '/do В папке с документами лежит ручка и пустой бланк с надписью Повестка.&/me достаёт из папки ручку с пустым бланком повестки&/me начинает заполнять все необходимые поля на бланке повестки&/do Все данные в повестке заполнены.&/me ставит на повестку штамп и печать {fraction_tag}&/do Готовый бланк повестки в руках.&/todo Не забудьте явиться в военкомат по указанному адресу и времени*передавая повестку&/agenda {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},					},
+				fbi = {
+					{cmd = 'doc', description = 'Запросить документы (FBI)',  text = 'Здравствуйте, я {fraction_rank} {fraction_tag}&/do Cлева на груди спец-жетон ФБР.&/me указывает пальцем на свой спец-жетон на груди&Прошу предъявить документ, удостоверяющий вашу личность.&/n @{get_nick({id})}, введите /showpass {my_id} или /showbadge {my_id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'gar', description = 'Зачитать предупреждение Гаррити', text = 'Вы вызваны для дачи пояснений в рамках внутреннего расследования.&Это добровольный опрос.&Вы имеете право хранить молчание по любым вопросам, ответы на которые могут повлечь ...&... Ваше обвинение в совершении преступления.&К Вам не будут применены дисциплинарные меры исключительно за отказ отвечать на вопросы.&Однако доказательственная ценность Вашего молчания может быть учтена в ходе разбирательства.&Любое заявление, которое Вы решите дать, может быть использовано в качестве ...&... доказательства в текущем разбирательстве.&Вам ясны Ваши права?', arg = '', enable = true, waiting = '2', bind = "{}"},					
+					{cmd = 'priton1', description = 'Обнаружен притон',  text = '/d ФБР - МЮ: В опасном районе найден притон с укропом!&/d ФБР - МЮ: Желающие присоедениться к рейду - в гараж ЛСПД&/d ФБР - МЮ: Возьмите с собой оружие, бронижелет, и обязательно маску!', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'priton2', description = 'Прибытие на притон',  text = '/d ФБР - МЮ: Мы прибыли на територию притона с укропом! Я куратор спец-операции.&/d ФБР - МЮ: Оцепляйте територию, и никого не вступайте на територию притона с укропом.&/d ФБР - МЮ: Кусты укропа срезают только агенты, остальные защищают!', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'priton3', description = 'Конец притона',  text = '/d ФБР - МЮ: Спец-операция "Притон" окончена!&/d ФБР - МЮ: Всем спасибо за участие, можете быть свободны!&/d ФБР - МЮ: Не забудьте убрать ограждения с территории.', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'gwarn', description = 'Выдать спец-выговор',  text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me открыв базу данных {fraction_tag} переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/gwarn {id} {arg}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'ungwarn', description = 'Снять спец-выговор',  text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me открыв базу данных {fraction_tag} переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/ungwarn {id}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'dismiss', description = 'Уволить госслужащего (1-4)',  text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me открыв базу данных {fraction_tag} переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/dismiss {id} {arg}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+				},
+				army = {
+					{cmd = 'pas', description = 'Проверка документов (кпп)', text = 'Здравствуйте, я {fraction_rank} {fraction_tag} - {my_doklad_nick}.&/do Удостоверение находится в левом кармане брюк.&/me достал{sex} удостоверение и раскрыл{sex} его перед человеком.&/do В удостоверении указано: {fraction} - {fraction_rank} {my_doklad_nick}.&Назовите причину прибытия на территорию на нашу базу.&И предоставьте мне свои документы для проверки!', arg = '', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'agenda', description = 'Выдача повестки игроку',  text = '/do В папке с документами лежит ручка и пустой бланк с надписью Повестка.&/me достаёт из папки ручку с пустым бланком повестки&/me начинает заполнять все необходимые поля на бланке повестки&/do Все данные в повестке заполнены.&/me ставит на повестку штамп и печать {fraction_tag}&/do Готовый бланк повестки в руках.&/todo Не забудьте явиться в военкомат по указанному адресу и времени*передавая повестку&/agenda {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'siren', description = 'Вкл/выкл мигалок в т/с', text = '{switchCarSiren}', arg = '', enable = true, waiting = '2', bind = "{}"},
+				},
+				prison = {
+					{cmd = 't', description = 'Достать тазер',  text = '/taser', arg = '', enable = true, waiting = '2', },
+					{cmd = 'cuff', description = 'Надеть наручники', text = '/do Наручники на тактическом поясе.&/me снимает наручники с пояса и надевает их на задержанного&/cuff {id}&/do Задержанный в наручниках.', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'uncuff', description = 'Снять наручники', text = '/do На тактическом поясе прикреплены ключи от наручников.&/me снимает с пояса ключ от наручников и вставляет их в наручники задержанного&/me прокручивает ключ в наручниках и снимает их с задержанного&/uncuff {id}&/do Наручники сняты с задержанного&/me кладёт ключ и наручники обратно на тактический пояс', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'gotome', description = 'Повести за собой', text = '/me схватывает задержанного за руки и ведёт его за собой&/gotome {id}&/do Задержанный идёт в конвое.', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'ungotome', description = 'Перестать вести за собой', text = '/me отпускает руки задержанного и перестаёт вести его за собой&/ungotome {id}', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'take', description = 'Изьять предметы у игрока (6+)', text = '/do В подсумке находится небольшой зип-пакет.&/me достаёт из подсумка зип-пакет и отрывает его&/me кладёт в зип-пакет изъятые предметы задержанного человека&/take {id}&/do Изъятые предметы в зип-пакете.&/todo Отлично*убирая зип-пакет в подсумок', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'carcer', description = 'Посадка игрока в карцер',text = '/do На поясе висит связка ключей.&/me прислонив заключённого к стене, снял ключ со связки, открыл дверцу камеры&/me лёгкими движениями рук затолкнул заключённого в камеру, после чего закрыл её&/me лёгкими движениями рук закрепил ключ к связке&/carcer {id} {number} {arg}',arg = '{id} {number} {arg}', enable = true, waiting = '2'},
+					{cmd = 'setcarcer', description = 'Смена карцера игроку', text = '/do На поясе висит связка ключей.&/me лёгкими движениями рук снял ключ со связки, открыл свободную камеру и камеру заключённого&/me вытолкнул заключённого из первой камеры, затолкнул во вторую, закрыв двери обоих камер&/me лёгкими движениями рук закрепил ключ к связке&/setcarcer {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2'},
+					{cmd = 'uncarcer', description = 'Выпуск игрока из карцера', text = '/do На поясе висит связка ключей.&/me движениями рук снял ключ со связки, открыл камеру и вытолкнул из неё заключённого&/me закрыл дверцу камеры, закрепил ключ к связке&/uncarcer {id}', arg = '{id}', enable = true, waiting = '2' },
+					{cmd = 'frisk', description = 'Обыск заключённого', text = '/do Перчатки на поясе.&/me схватил перчатки и одел&/do Перчатки одеты.&/me начал нащупывать человека напротив&/frisk {id}', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'punishsu', description = 'Повысить уровень наказания.', text ='/me достаёт свой КПК и открывает базу данных тюрьмы&/me вносит изменения в базу данных тюрьмы&/do Изменения занесены в базу данных тюрьмы.&/punish {id} {number} 2 {arg}', arg = '{id} {number} {arg}', enable = true, waiting = '2'},
+					{cmd = 'punishclear', description = 'Понизить уровень наказания', text = '/me достаёт блокнот из нагрудного кармана&/do Блокнот в руке.&/me открывает его на странице с записями о поведении заключенных.&/do В блокноте видна запись: "{get_rp_nick({id})}, примерное поведение...&/do ...участие в уборке территории, отсутствие нарушений."&/me берёт ручку и записывает новую информацию о заключённом.&/do В блокноте добавлена запись: "Рекомендация на сокращение срока...&/do ...на {number} года за добросовестное выполнение обязанностей."&/me закрывает блокнот и убирает его обратно в карман формы.&/do Данные о заключённом зафиксированы...&/do ...для последующего рассмотрения администрацией.&/punish {id} {number} 1 {arg}', arg = '{id} {number} {arg}', enable = true, waiting = '2'},
+				},
+				hospital = {
+					{cmd = 'siren', description = 'Вкл/выкл мигалок в т/с', text = '{switchCarSiren}', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь?', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'go', description = 'Позвать игрока за собой', text = 'Хорошо {get_ru_nick({id})}, следуйте за мной.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'hl', description = 'Обычное лечение игрока', text = '/me достаёт из своего мед.кейса нужное лекарство и передаёт его человеку напротив&/todo Принимайте это лекарство, оно вам поможет*улыбаясь&/heal {id} {get_price_heal}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'hla', description = 'Лечение охранника игрока',  text = '/me достаёт из своего мед.кейса лекарство и передаёт его человеку напротив&/todo Давайте своему охраннику это лекарство, оно ему поможет*улыбаясь&/healactor {id} {get_price_actorheal}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'hlb', description = 'Лечение игрока от зависимости укропа',  text = '/me достаёт из своего мед.кейса таблетки от зависимости укропа и передаёт их пациенту напротив&/todo Принимайте эти таблетки, и в скором времени Вы излечитесь от зависимости укропа*улыбаясь&/healbad {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},	
+					{cmd = 'mt', description = 'Мед.оcмотр для военного билета',  text = 'Хорошо, сейчас я проведу вам мед.осмотр для получения военного ... &... билета по стану здоровья, но шанс на успех всего 1 процент!&/mticket {id} {get_price_mticket}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'pilot', description = 'Мед.осмотр для пилотов',  text = 'Хорошо, сейчас я проведу вам мед.осмотр для пилотов.&/medcheck {id} {get_price_medosm}&{pause}&И так...&/me достаёт из мед.кейса стерильные перчатки и надевает их на руки&/do Перчатки на руках.&/todo Начнём мед.осмотр*улыбаясь.&Сейчас я проверю ваше горло, откройте рот и высуните язык.&/me достаёт из мед.кейса фонарик и включив его осматривает горло человека напротив&Хорошо, можете закрывать рот, сейчас я проверю ваши глаза.&/me проверяет реакцию человека на свет, посветив фонарик в глаза&/do Зрачки глаз обследуемого человека сузились.&/todo Отлично*выключая фонарик и убирая его в мед.кейс&Такс, сейчас я проверю ваше сердцебиение, поэтому приподнимите верхную одежду!&/me достаёт из мед.кейса стетоскоп и приложив его к груди человека проверяет сердцебиение&/do Сердцебиение в районе 65 ударов в минуту.&/todo С сердцебиением у вас все в порядке*убирая стетоскоп обратно в мед.кейс&/me снимает со своих рук использованные перчатки и выбрасывает их&Ну что-ж я могу вам сказать, со здоровьем у вас все в порядке, вы свободны!', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'medin', description = 'Оформление игроку мед.страховки',  text = 'Для оформления мед.страховки Вам необходимо оплатить определнную cумму.&Стоимость зависит от срока действия будущей мед.страховки.&На 1 неделю - $4ОО.ООО. На 2 недели - $8ОО.ООО. На 3 недели - $1.2ОО.ООО.&И так, скажите, на какой срок Вам оформить мед.страховку?&{pause}&/me достаёт из своего мед.кейса пустой бланк мед.страховки, ручку и печать {fraction_tag}&/me открывает бланк мед.страховки и начинает его заполнять, затем ставит печать {fraction_tag}&/me полностью заполнив бланк мед.страховки убирает ручку и печать обратно в свой мед.кейс&/givemedinsurance {id}&/todo Вот ваша мед.страховка, берите*протягивая бланк с мед.страховкой человеку напротив себя', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'med', description = 'Оформление игроку мед.карты',  text = 'Оформление мед. карты платное и зависит от её срока действия!&Мед. карта на 7 дней - ${get_price_med7}&Мед. карта на 14 дней - ${get_price_med14}&Мед. карта на 30 дней - ${get_price_med30}&Мед. карта на 60 дней - ${get_price_med60}&Скажите, вам на какой срок оформить мед. карту?&{show_medcard_menu}&Хорошо, тогда приступим к оформлению.&/me достаёт из своего мед.кейса пустую мед.карту, ручку и печать {fraction_tag}&/me открывает пустую мед.карту и начинает её заполнять, затем ставит печать {fraction_tag}&/me полностью заполнив мед.карту убирает ручку и печать обратно в свой мед.кейс&/todo Вот ваша мед.карта, берите*протягивая заполненную мед.карту человеку напротив себя&/medcard {id} {get_medcard_status} {get_medcard_days} {get_medcard_price}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'recept', description = 'Выдача игроку рецептов',  text = 'Стоимость одного рецепта составляет ${get_price_recept}&Скажите сколько Вам требуется рецептов, после чего мы продолжим.&/n Внимание! В течении часа выдаётся максимум 5 рецептов!&{show_recept_menu}&Хорошо, сейчас я выдам вам рецепты.&/me достаёт из своего мед.кейса бланк для оформления рецептов и начает его заполнять&/me ставит на бланк рецепта печать {fraction_tag}&/do Бланк успешно заполнен.&/todo Вот, держите!*передавая бланк  рецепта человеку напротив&/recept {id} {get_recepts}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'ant', description = 'Выдача игроку антибиотиков',  text = 'Стоимость одного антибиотика составляет ${get_price_ant}&Скажите сколько Вам требуется антибиотиков, после чего мы продолжим.&/n Внимание! Вы можете купить от 1 до 20 антибитиков за один раз!&{show_ant_menu}&Хорошо, сейчас я выдам вам антибиотики.&/me открывает свой мед.кейс и достаёт из него пачку антибиотиков, после чего закрывает мед.кейс&/do Антибиотики находятся в руках.&/todo Вот держите, употребляйте их строго по рецепту!*передавая антибиотики человеку напротив&/antibiotik {id} {get_ants}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'osm', description = 'Полный мед.осмотр игрока (РП)',  text = 'Хорошо, сейчас я проведу вам мед.осмотр.&Дайте мне вашу мед.карту для проверки.&/n @{get_nick({id})}, введите /showmc {my_id} чтобы показать мне мед.карту.&{pause}&/me достаёт из мед.кейса стерильные перчатки и надевает их на руки&/do Перчатки на руках.&/todo Начнём мед.осмотр*улыбаясь.&Сейчас я проверю ваше горло, откройте рот и высуните язык.&/n Используйте /me открыл(-а) рот чтоб мы продолжили&{pause}&/me достаёт из мед.кейса фонарик и включив его осматривает горло человека напротив&Хорошо, можете закрывать рот, сейчас я проверю ваши глаза.&/me проверяет реакцию человека на свет, посветив фонарик в глаза&/do Зрачки глаз обследуемого человека сузились.&/todo Отлично*выключая фонарик и убирая его в мед.кейс&Такс, сейчас я проверю ваше сердцебиение, поэтому приподнимите верхную одежду!&{pause}&/me достаёт из мед.кейса стетоскоп и приложив его к груди человека проверяет сердцебиение&/do Сердцебиение в районе 65 ударов в минуту.&/todo С сердцебиением у вас все в порядке*убирая стетоскоп обратно в мед.кейс&/me снимает со своих рук использованные перчатки и выбрасывает их&Ну что-ж я могу вам сказать...&Со здоровьем у вас все в порядке, вы свободны!', arg = '{id}', enable = true, waiting = '2', bind = "{}"}, 
+					{cmd = 'gd', description = 'Экстренный вызов (/godeath)',  text = '/me достаёт из кармана свой телефон и заходит в базу данных {fraction_tag}&/me просматривает информацию и включает навигатор к выбранному месту экстренного вызова&/godeath {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'exp', description = 'Выгнать игрока из больницы',  text = 'Вы больше не можете здесь находится, я выгоняю вас из больницы!&/me схватив человека ведёт к выходу из больницы и закрывает за ним дверь&/expel {id} Н.П.Б.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+				},
+				smi = {
+					{cmd = 'ads', description = 'Открыть список обьявлений',  text = '/newsredak', arg = '', enable = true, waiting = '2', bind = "[18,49]" },
+					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь?', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'go', description = 'Позвать игрока за собой', text = 'Хорошо {get_ru_nick({id})}, следуйте за мной.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'expel', description = 'Выгнать игрока из здания',  text = 'Вы больше не можете здесь находится, я выгоняю вас из здания!&/me схватив человека ведёт к выходу из здания и закрывает за ним дверь&/expel {id} Н.П.Р.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'live_sobes', description = 'Собеседование', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Собеседование]: Доброго времени суток, уважаемые граждане Штата!&/news [Собеседование]: С Вами - Я, {fraction_rank} - {my_ru_nick}.&/news [Собеседование]: Давно мечтали изменить свою жизнь в лучшую сторону?&/news [Собеседование]: Поставить новые и не запланированные цели?&/news [Собеседование]: Спешу Вас обрадовать! Ведь именно сейчас ...&/news [Собеседование]: ... проходит собеседование в Радиоцентр {fraction_tag}!&/news [Собеседование]: Что нужно иметь для прохождения собеседования?&/news [Собеседование]: Критерии очень просты, при себе необходимо иметь: ...&/news [Собеседование]: ... Паспорт, мед. карту с отметкой Полностью здоров&/news [Собеседование]: Ведь именно у нас: Доброе и отзывчивое начальство ...&/news [Собеседование]: ... достойный карьерный рост и высокие зарплаты!&/news [Собеседование]: Заинтересовавшихся пройти собеседование ожидаем в ...&/news [Собеседование]: ... холле главного офиса {fraction_tag}.&/news [Собеседование]: А на этом наш эфир подходит к концу!&/news [Собеседование]: С Вами был - Я, {my_ru_nick}. До скорых встреч!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_mp1', description = 'Викторина "Столицы"', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну! Просьба не перебивать.&/news •°•°•°•° Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Викторина]: Добрый день, уважаемые радиослушатели!&/news [Викторина]: У микрофона - {my_ru_nick}!&/news [Викторина]: Сегодня мы проведём - Столицы.&/news [Викторина]: Суть викторины такова: Я говорю вам страну, А вы мне её столицу.&/news [Викторина]: Ответы присылать на номер студии, его вы можете найти...&/news [Викторина]: ...в своём телефоне, в разделе: Контакты.&/news [Викторина]: Призовой Фонд сегодня составляет целый 1 милион долларов!&/news [Викторина]: Ну что же, давайте начинать.&/news [Викторина]: Открывает сегодняшний марафон стран поистине прекрасное государство.&/news [Викторина]: Страна, которая подарила миру необычную поп культуру. И это...&/news [Викторина]: ...Республика Корея. Или как её называют еще - Южная Корея.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Правильный ответ - Сеул...&/news [Викторина]: ...густо населённый город с миллионом развлечений на любой вкус.&/news [Викторина]: Первый правильный ответ мы получили от гражданина...&{pause}&/news [Викторина]: Продолжаем. Следующее Государство известно во всём мире как страна футбола...&/news [Викторина]: ...и самбы - Бразилия.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Как бы абсурдно это не звучало, столица страны Бразилия - Бразилиа.&/news [Викторина]: Ответов было много... Но самым быстрым оказался гражданин...&{pause}&/news [Викторина]: Большую часть следующего государства занимают трудно проходимые Джунгли...&/news [Викторина]: Я говорю о Вьетнаме.&{pause}&/news [Викторина]: На студию поступил правильный ответ!&/news [Викторина]: Столицей Вьетнама является город Ханой.&/news [Викторина]: Правильный ответ нам дал гражданин...&{pause}&/news [Викторина]: Вы, уважаемый радиослушатель, и правда не прогуливали географию в школе.&/news [Викторина]: Именно в этой стране находится действующий вулкан 'Кракатау'.&/news [Викторина]: ...Индонезия.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: И... Правильный ответ... Джакарта.&/news [Викторина]: Город контрастов, в котором переплелись разные языки и культуры...&/news [Викторина]: ...богатство и бедность.&/news [Викторина]: Уверен с этим городом знаком наш слушатель под именем...&{pause}&/news [Викторина]: Ведь именно он и дал правильный ответ!&/news [Викторина]: Густые леса, скалистые острова, горнолыжные курорты. Это всё про...&/news [Викторина]: ...страну - Финляндия.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Правильным ответом является - Хельсинки! И этот ответ дал штата с именем...&{pause}&/news [Викторина]: Больше всего об этой стране знают лыжники и сноубордисты...&/news [Викторина]: ...Австрия.&/news [Викторина]: На студию поступил правильный ответ!&/news [Викторина]: Любой разговор об Австрии всегда сводится к ее столице, и не спроста.&/news [Викторина]: Ведь 'Вена' - крупнейший культурно-исторический центр Европы.&/news [Викторина]: Первым правильный ответ в студию прислал гражданин с именем...&{pause}&/news [Викторина]: И так, сейчас я озвучу победителя нашей викторины, вы готовы?&{pause}&/news [Викторина]: Просим победителя приехать к нам за наградой...&/news [Викторина]: На этом наша викторина окончена, спасибо всем вам за участие!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_mp2', description = 'Викторина "Математика"', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Викторина]: Добрый день, уважаемые радиослушатели!&/news [Викторина]: У микрофона - {my_ru_nick}!&/news [Викторина]: Сегодня мы проведём викторину - Математика.&/news [Викторина]: Суть викторины: Я говорю вам примеры, а вы мне ответы на них.&/news [Викторина]: В примерах могут использоваться такие операторы, как...&/news [Викторина]: ...сложение +, умножение *, вычитание -, деление /.&/news [Викторина]: Ответы присылать на номер студии, его вы можете найти...&/news [Викторина]: ...в своём телефоне, в разделе: Контакты.&/news [Викторина]: Призовой Фонд сегодня составляет аж целых 500.000$!&/news [Викторина]: Ну что же, давайте начинать.&/news [Викторина]: Первый пример...&/news [Викторина]: ... '3 + 3 * 3'.&{pause}&/news [Викторина]: Стоп! На студию поступил верный ответ.&/news [Викторина]: Правильный ответ - '12'.&/news [Викторина]: Верный ответ нам дал гражданин с именем ...&{pause}&/news [Викторина]: Мы только начинаем разгоняться...&/news [Викторина]: ... '66 - 44 + 1'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Корректным ответом является - '23'.&/news [Викторина]: Первый правильный ответ мы получили от граждана ...&{pause}&/news [Викторина]: Следующий пример...&/news [Викторина]: ... '35 + 75'.&/news [Викторина]: И... У нас есть корректный ответ!&/news [Викторина]: И так, правильный ответ '110', и мы получили этот ответ от гражданина ...&{pause}&/news [Викторина]: Без лишних слов, следующий пример...&/news [Викторина]: ... '25 - 28 + 1'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Не ожидали отрицательных чисел в ответе? Правильный ответ - '-2'.&/news [Викторина]: Этот ответ нам подарил граждинин с именем ...&{pause}&/news [Викторина]: Давайте добавим разнообразия. Я загадаю пример при помощи...&/news [Викторина]: ...римских чисел. Ответ должен быть в виде римского числа!&/news [Викторина]: ... 'X - IV'.&{pause}&/news [Викторина]: Стоп! На студию поступил правильный ответ!&/news [Викторина]: Корректным ответом является - 'VI'.&/news [Викторина]: Самым быстрым был граждинин ...&{pause}&/news [Викторина]: Опять римские числа.&/news [Викторина]: ... 'XV - VIII'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: 'VII' - верный ответ.&/news [Викторина]: Этот ответ нам подарил гражданин штата -&{pause}&/news [Викторина]: И... Последний пример с римскими числами на сегодня.&/news [Викторина]: ... 'XII - III'.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Верный ответ - 'IX'. А первый ответчик - гражданин ...&{pause}&/news [Викторина]: И так, сейчас я озвучу победителя нашей викторины, вы готовы?&{pause}&/news [Викторина]: Просим победителя приехать к нам за наградой...&/news [Викторина]: На этом наша викторина окончена, спасибо всем вам за участие!/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_weather1', description = 'Прогноз погоды (утренний дождь)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news Доброе утро, уважаемые радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news Сегодняшний день начался с пасмурной погоды и дождя.&/news Синоптики сообщают, что осадки продлятся до полудня, так что не забудьте взять зонт!&/news Ветер северо-западный, умеренный, но может усиливаться порывами до 15 м/c.&/news Температура воздуха +16°C, однако ощущается как +13°C.&/news Внимание водителям: дороги могут быть скользкими, соблюдайте дистанцию!&/news Ближе к обеду тучи начнут рассеиваться, а дождь прекратится.&/news А пока держитесь теплее и не забывайте наслаждаться свежестью после дождя!&/news На этом наш утренний прогноз погоды завершается.&/news С вами был {fraction_rank} - {my_ru_nick}.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '2', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_weather2', description = 'Прогноз погоды (дневной)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news Добрый день, дорогие радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news Сейчас самое время узнать, какая погода ждёт нас днём.&/news Температура воздуха в данный момент составляет +22°C, солнечно, но возможна переменная облачность.&/news Ветер южный, слабый, около 5 м/с, комфортные условия для прогулок.&/news Осадков не ожидается, но к вечеру возможны лёгкие порывы ветра.&/news Если планировали провести день на свежем воздухе - отличная возможность!&/news На этом наш дневной прогноз завершается.&/news С вами был {fraction_rank} - {my_ru_nick}. До скорых встреч!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_weather3', description = 'Прогноз погоды (вечерний торнадо)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news Добрый вечер, дорогие радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news И в нашем вечернем эфире речь пойдёт о прогнозе погоды.&/news Сейчас я вам зачитаю, что говорят нам наши синоптики...&/news В 21:52 предполагается песчаная буря, которая продлится всего несколько минут.&/news В связи с этим просим вас остаться дома и плотно закрыть окна и двери.&/news Также в районе Паломино Крит замечено торнадо.&/news Призываем Вас избегать поездок в этот район Штата.&/news И уже в 22:10 нас ожидает спокойная, ночная погода.&/news Но не стоит так сильно радоваться, ближе к ночи чередование спокойной погоды и песчаной бури продолжится.&/news С чем это связано - неизвестно! Но мы попытаемся уведомить Вас об изменениях как можно скорее.&/news А на этом наш эфир подходит к концу.&/news С вами был {fraction_rank} - {my_ru_nick}.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_int1', description = 'Интервью (начало)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Интервью]: Здравствуйте, уважаемые радиослушатели!&/news [Интервью]: У микрофона - {my_ru_nick}!&/news [Интервью]: Сегодня у нас в гостях особый гость на интервью...&/news [Интервью]: Возможно многие из вас даже знают его, и так, наш гость это ...", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_int2', description = 'Интервью (конец)', text = "/news [Интервью]: И наш эфир к сожалению подходит к концу.&/news [Префикс]: С вами был Я - {my_ru_nick}.&/news [Интервью]: До свидания, штат! Не переключайтесь!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+				},
+				fd = {
+					{cmd = 'siren', description = 'Вкл/выкл мигалок в т/с', text = '{switchCarSiren}', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь?', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+				},
+				lc = {
+					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь? Если нужна лицензия - скажите тип и срок', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'go', description = 'Позвать игрока за собой', text = 'Хорошо {get_ru_nick({id})}, следуйте за мной.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'gl', description = 'Выдача лицензии игроку', text = '/me взял{sex} со стола бланк на получение лицензии и заполнил{sex} его&/do Спустя некоторое время бланк на получение лицензии был заполнен.&/me распечатав лицензию передал{sex} её человеку напротив&/givelicense {id}&Вот ваша лицензия, всего Вам хорошего!', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'prices', description = 'Ознакомить игрока с ценами', text = '/todo Сейчас я скажу вам цены на лицензии*доставая изпод стойки бланк с ценами&/do Бланк с ценами всех лицензий в руках.&/me подвинул{sex} бланк поближе к себе и начал{sex} читать цены&На автомобиль: 1 месяц - ${get_price_avto1}, 2 месяца - ${get_price_avto2}, 3 месяца - ${get_price_avto3}&На мото: 1 месяц - ${get_price_moto1}, 2 месяца - ${get_price_moto2}, 3 месяца - ${get_price_moto3}&На водный: 1 месяц - ${get_price_swim1}, 2 месяца - ${get_price_swim2}, 3 месяца - ${get_price_swim3}&На полёты: 1 месяц - ${get_price_fly1}&На оружие: 1 месяц - ${get_price_gun1}, 2 месяца - ${get_price_gun2}, 3 месяца - ${get_price_gun3}&На охоту: 1 месяц - ${get_price_hunt1}, 2 месяца - ${get_price_hunt2}, 3 месяца - ${get_price_hunt3}&На рыбалку: 1 месяц - ${get_price_fish1}, 2 месяца - ${get_price_fish2}, 3 месяца - ${get_price_fish3}&На клады: 1 месяц - ${get_price_klad1}, 2 месяца - ${get_price_klad2}, 3 месяца - ${get_price_klad3}&На такси: 1 месяц - ${get_price_taxi1}, 2 месяца - ${get_price_taxi2}, 3 месяца - ${get_price_taxi3}&На механика: 1 месяц - ${get_price_mexa1}, 2 месяца - ${get_price_mexa2}, 3 месяца - ${get_price_mexa3}&/todo Вот такие у нас цены*убирая бланк с ценами', arg = '', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'medka', description = 'Запросить медкарту для проверки', text = 'Чтобы получить эту лицензию, покажите мне вашу мед.карту&/n @{get_nick({id})}, введите команду /showmc {my_id} чтобы показать мне мед.карту', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'exp', description = 'Выгнать игрока из ЦЛ',  text = 'Вы больше не можете здесь находится, я выгоняю вас из ЦЛ!&/me схватив человека ведёт к выходу из ЦЛ и закрывает за ним дверь&/expel {id} Н.П.Ц.Л.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+				},
+				ins = {
+					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь? Если нужна лицензия - скажите тип и срок', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'go', description = 'Позвать игрока за собой', text = 'Хорошо {get_ru_nick({id})}, следуйте за мной.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'ins', description = 'Предложить доп.услуги',  text = 'Я могу оформить "Семейный сертификат" или "Пенсионное страхование"&Что вам нужно? Страхование для депозита, сертификат для выплат&/insurance {id}&/me достаёт нужные бумаги для оформления и передаёт их человеку напротив', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'exp', description = 'Выгнать игрока из СТК',  text = 'Вы больше не можете здесь находится, я выгоняю вас из СТК!&/me схватив человека ведёт к выходу из СТК и закрывает за ним дверь&/expel {id} Н.П.С.К.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+				},
+				gov = {		
+					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь?', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'go', description = 'Позвать игрока за собой', text = 'Хорошо {get_ru_nick({id})}, следуйте за мной.', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'visit', description = 'Показать визитку адвоката',  text = '/me вытащил{sex} из нагрудного кармана визитку адвоката&/do На визитке написано: "{my_ru_nick}, адвокат штата".&/showvisit {id}', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'freely', description = 'Предложить услуги адвоката',  text = '/do Папка с документами находится в левой руке.&/me открыв папку, вытащил{sex} из неё бланк для освобождения заключённого&/me достав из кармана ручку, заполнил{sex} документ и передал{sex} человеку напротив&/todo Впишите сюда свои данные и поставьте подпись снизу*передавая лист с ручкой&/free {id} 500000', arg = '{id}', enable = true, waiting = '2'},
+					{cmd = 'visa', description = 'Выдать рабочую визу для VC',  text = 'Стоимость услуги составляет 600 тысяч. Вы согласны?&Если да, то приступаем к оформлению&{pause}&/do Бланк для оформления визы находится в кармане.&/me засунув руку в карман, взял{sex} бланк, после чего протянул{sex} его человеку напротив&/todo Впишите сюда Ваши данные и поставьте подпись снизу*протягивая лист с ручкой&/givevisa {id}', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'tsr', description = 'Оповещение ФИК про прибытие',  text = '/d [Пра-во] - [ФИК] Заезжаю на вашу територию для оказания адвокатских услуг!', arg = '', enable = true, waiting = '2'},
+					{cmd = 'car', description = 'Превратить личный т/c в сертификат', text = 'Перед тем, как начать, попрошу полностью опустошить багажник и снять весь тюнинг&А также убедиться, что пробег меньше либо равен 200 км&Если Вы все сделали, то можем приступать&{pause}&Окей, приступаем&/do Бланк для получения сертификата находится под в кармане.&/me засунув руку в карман, взял{sex} бланк, после чего протянул{sex} его человеку напротив&/todo Впишите сюда Ваши данные и поставьте подпись снизу*протягивая лист с ручкой&/givepass {id}', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'wed', description = 'Заключение брака',  text = 'Добрый день, уважаемые новобрачные и гости!&Уважаемые невеста и жених!&Сегодня - самое прекрасное и незабываемое событие в вашей жизни.&Создание семьи - это начало доброго союза двух любящих сердец.&С этого дня вы пойдёте по жизни рука об руку, вместе переживая и радость счастливых дней, и огорчения.&Создавая семью, вы добровольно приняли на себя великий долг друг перед другом и перед будущим ваших детей.&Перед началом регистрации прошу вас ещё раз подтвердить, является ли ваше решение стать супругами, создать семью&{pause}&С вашего взаимного согласия, выраженного в присутствии свидетелей, ваш брак регистрируется.&Прошу вас в знак любви и преданности друг другу обменяться обручальными кольцами.&/wedding {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2'},
+					{cmd = 'pass', description = 'Исправить дату рождения в паспорте',  text = '/do Бланк для замены информации в паспорте находится в кармане.&/me засунув руку в карман, взял{sex} бланк, после чего протянул{sex} его человеку напротив&/todo Впишите сюда новую дату и поставьте подпись снизу*протягивая лист с ручкой&/givepass {id}', arg = '{id}', enable = true, waiting = '2'},	
+					{cmd = 'givesocial', description = 'Выдать соц.жильё новичку',  text = '/me взял{sex} документы на Социальное Жильё у {get_ru_nick({id})} для подписания&/do Документы в руках.&/me достал{sex} ручку из правого кармана пиджака, затем подписал{sex} документ&/do Документ на Социальное Жильё подписан.&/me передал{sex} подписанные документы на Соц.Жильё {get_ru_nick({id})}&/givesocial {id}', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+					{cmd = 'frisk', description = 'Обыск (7+)', text = '/do Перчатки находятся в кармане.&/me взял{sex} перчатки с кармана и надел{sex} их&/do Перчатки одеты.&/me начал нащупывать человека напротив&/frisk {id}&/me полностью прощупав человека убрал{sex} перчатки обратно в карман', arg = '{id}', enable = false, waiting = '2' },
+					{cmd = 'gwarn', description = 'Выдать спец-выговор (8+)',  text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me открыв базу данных {fraction_tag} переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/gwarn {id} {arg}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {arg}', enable = false, waiting = '2', bind = "{}"},
+					{cmd = 'ungwarn', description = 'Снять спец-выговор (8+)',  text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me открыв базу данных {fraction_tag} переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/ungwarn {id}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {arg}', enable = false, waiting = '2', bind = "{}"},
+					{cmd = 'exp', description = 'Выгнать игрока из правительства',  text = 'Вы больше не можете здесь находится, я выгоняю вас из Мэрии!&/me схватив человека ведёт к выходу из мэрии и закрывает за ним дверь&/expel {id} Н.П.П.', arg = '{id}', enable = true, waiting = '2', in_fastmenu = true},
+				},
+				judge = {		
+					{cmd = 'ud', description = 'Показать удостоверение', text = '/do В кармане пиджака лежит удостоверение.&/me сунул{sex} руку в карман и достал{sex} удостоверение&/todo Ознакомтесь*показав удостоверение человеку напротив&/do Обложка «Судейская коллегия штата Сан-Сити».&/do «J2025 - <{my_ru_nick}> - Судья штата».', arg = '', enable = true, waiting = '2'},
+				},
+				mafia = {
+					{cmd = 'tie', description = 'Связать жертву', text = '/do В кармане бронежилета лежит шпагат.&/me легким движением руки достал{sex} из кармана шпагат&/me обвязывает руки жертвы веревкой и стягивает её&/tie {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'untie', description = 'Развязать жертву', text = '/do На правом бедре закреплено тактическое крепление для ножа.&/me движением правой руки открепив нож, берёт его в руки&/do В правой руке держит нож.&/me подойдя к жертве со спины, отрезал{sex} верёвку&/untie {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'lead', description = 'Вести жертву за собой', text = '/me движением руки схватив за шкирку жертвы, ведёт его за собой&/lead {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'unlead', description = 'Прекратить вести жертву', text = '/me расслабив схватку, перестаёт контролировать жертву&/unlead {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'gag', description = 'Заткнуть рот жертве тряпкой', text = '/do На поясе закреплена сумка.&/me правой рукой отстегнув молнию, открывает сумку&/do Внутри сумки лежит тряпка.&/me подходя к жертве, попутно достал{sex} из сумки тряпку&/do Тряпка в руках в развёрнутом виде.&/me обеими руками завернув тряпку, запихнул{sex} в рот жертвы&/gag {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'ungag', description = 'Вытащить тряпку изо рта жертвы', text = '/me подойдя ближе к жертве, движением правой руки потянул{sex} за тряпку и забрал{sex} себе&/ungag {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'bag', description = 'Надеть пакет на голову жертвы', text = '/do В кармане куртки лежит мусорный пакет.&/me достал{sex} мусорный пакет из кармана, развернул{sex} его&/me надевает мусорный пакет на голову жертвы, не затягивая его&/bag {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'unbag', description = 'Снять пакет с головы жертвы', text = '/me легким движением руки схватив за пакет, потянул{sex} его вверх, тем самым стянув пакет с головы жертвы&/unbag {id}', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+					{cmd = 'inс', description = 'Затолкать жертву в фургон', text = '/me открывает двери фургона&/me берет жертву под руки и заталкивает вперёд головой в фургон&/me закрывает двери и садится в фургон&/incar {id} 3', arg = '{id}', enable = true, waiting = '2', bind = '{}', in_fastmenu = true},
+				},
+				ghetto = {}
+			},
+			commands_manage = {
+				my = {},
+				goss = {
+					{cmd = 'inv', description = 'Принятие игрока в организацию', text = '/do В кармане есть связка с ключами от раздевалки.&/me достаёт из кармана один ключ из связки ключей от раздевалки&/todo Возьмите, это ключ от нашей раздевалки*передавая ключ человеку напротив&/invite {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true  },
+					{cmd = 'sr', description = 'Продажа ранга (частные)', text = '/me достаёт документы на подпись и передаёт их человеку напротив&{sellrank({id})}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true },
+					{cmd = 'rp', description = 'Выдача сотруднику /fractionrp', text = '/fractionrp {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'gr', description = 'Повышение/понижение cотрудника', text = '{show_rank_menu}&/me достаёт из кармана свой телефон и заходит в базу данных {fraction_tag}&/me изменяет информацию о сотруднике {get_ru_nick({id})} в базе данных {fraction_tag}&/me выходит с базы данных и убирает телефон обратно в карман&/giverank {id} {get_rank}&/r Сотрудник {get_ru_nick({id})} получил новую должность!', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'vize', description = 'Управление Vice City визой сотрудника', text = '/me достаёт из кармана свой телефон и заходит в базу данных {fraction_tag}&/me изменяет информацию о сотруднике {get_ru_nick({id})} в базе данных {fraction_tag}&/me выходит с базы данных и убирает телефон обратно в карман&{lmenu_vc_vize}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'cjob', description = 'Посмотреть успешность сотрудника', text = '/checkjobprogress {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},	
+					{cmd = 'fmutes', description = 'Выдать мут сотруднику (10 min)', text = '/fmutes {id} Н.У.&/r Сотрудник {get_ru_nick({id})} лишился права использовать рацию на 10 минут!', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true },
+					{cmd = 'funmute', description = 'Снять мут сотруднику', text = '/funmute {id}&/r Сотрудник {get_ru_nick({id})} теперь может пользоваться рацией!', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'vig', description = 'Выдача выговора cотруднику', text = '/me достаёт из кармана свой телефон и заходит в базу данных {fraction_tag}&/me изменяет информацию о сотруднике {get_ru_nick({id})} в базе данных {fraction_tag}&/me выходит с базы данных и убирает телефон обратно в карман&/fwarn {id} {arg}&/r Сотруднику {get_ru_nick({id})} выдан выговор! Причина: {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'unvig', description = 'Снятие выговора cотруднику', text = '/me достаёт из кармана свой телефон и заходит в базу данных {fraction_tag}&/me изменяет информацию о сотруднике {get_ru_nick({id})} в базе данных {fraction_tag}&/me выходит с базы данных и убирает телефон обратно в карман&/unfwarn {id}&/r Сотруднику {get_ru_nick({id})} был снят выговор!', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
+					{cmd = 'unv', description = 'Увольнение игрока из фракции', text = '/me достаёт из кармана свой телефон и заходит в базу данных {fraction_tag}&/me изменяет информацию о сотруднике {get_ru_nick({id})} в базе данных {fraction_tag}&/me выходит с базы данных и убирает свой телефон обратно в карман&/uninvite {id} {arg}&/r Сотрудник {get_ru_nick({id})} был уволен по причине: {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'point', description = 'Установить метку для сотрудников', text = '/r Срочно выдвигайтесь ко мне, отправляю вам координаты...&/point', arg = '', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'govka', description = 'Собеседование по госс.волне', text = '/d [{fraction_tag}] - [Всем]: Занимаю государственную волну, просьба не перебивать!&/gov [{fraction_tag}]: Доброго времени суток, уважаемые жители нашего штата!&/gov [{fraction_tag}]: Сейчас проходит собеседование в организацию {fraction}&/gov [{fraction_tag}]: Для вступления вам нужно иметь документы и приехать к нам в холл.&/d [{fraction_tag}] - [Всем]: Освобождаю  государственную волну, спасибо что не перебивали.', arg = '', enable = true, waiting = '2', bind = "{}"},
+				},
+				goss_fbi = {
+					{cmd = 'demoute', description = 'Уволить госслужащего', text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me заходит в базу данных {fraction_tag} и переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/demoute {id} {number} {arg}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {number} {arg}', enable = false, waiting = '2', bind = "{}"},
+				},
+				goss_prison = {
+					{cmd = 'unpunish', description = 'Выпуск заключенных из ФИК', text = '/me лёгкими движениями рук берёт дело заключённого с полки, кладёт его на стол&/do На столе лежит ручка и печать.&/me лёгким движением правой руки берёт ручку, заполняет поле в деле заключённого&/me лёгкими движениями рук кладёт ручку на стол, берёт печать и ставит её в деле&/me лёгкими движениями рук ставит печать на стол, после чего закрывает дело&Ваш срок укорочен, возвращайтесь в камеру и ожидайте ...&... транспортировки до ближайшего населённого пункта.&/unpunish {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2'},
+					{cmd = 'rjailreklama', description = 'Реклама УДО', text = '/rjail Доброго времени суток заключенные.&/rjail В данный момент Вы можете покинуть тюрьму досрочно, через кабинет начальства тюрьмы.&/rjail Обратите внимание, УДО (условно дорочное освобожение) платное!&/rjail Спасибо за внимание.', arg = '', enable = true, waiting = '2'}
+				},
+				goss_gov = {
+					{cmd = 'lic', description = 'Выдать лицензию адвоката', text = '/do Бланк для выдачи лицензии находится под столом.&/me засунув руку под стол, взял{sex} бланк, после чего заполнил{sex} его нужной информацией&/todo Впишите сюда Ваши данные и поставьте подпись снизу*передавая бланк и ручку&/givelicadvokat {id}', arg = '{id}', enable = true, waiting = '2', },
+					{cmd = 'demoute', description = 'Уволить госслужащего',  text = '/do КПК находится на поясном держателе.&/me берёт в руки свой КПК и включает его&/me заходит в базу данных {fraction_tag} и переходит в раздел управление сотрудниками других организаций&/me открывает дело нужного сотрудника и вносит в него изменения&/do Изменения успешно сохранены.&/demoute {id} {arg}&/me выходит с базы данных {fraction_tag} и выключив КПК убирает его на поясной держатель', arg = '{id} {arg}', enable = false, waiting = '2', bind = "{}"},
+				},
+				mafia = {
+					{cmd = 'inv', description = 'Принятие игрока в мафию', text = '/do В кармане есть связка с ключами от раздевалки.&/me достаёт из кармана один ключ из связки ключей от раздевалки&/todo Возьмите, это ключ от нашей раздевалки*передавая ключ человеку напротив&/invite {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'rp', description = 'Выдача /fractionrp', text = '/fractionrp {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'gr', description = 'Повышение/понижение cотрудника', text = '{show_rank_menu}&/todo Вот тебе новая форма!*протягивая форму человеку напротив &/giverank {id} {get_rank}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'fmutes', description = 'Выдать мут (10 min)', text = '/fmutes {id} Подумай о своём поведении', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'funmute', description = 'Снять мут', text = '/funmute {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'vig', description = 'Выдача выговора', text = '/f {get_ru_nick({id})}, ты провинился(-лась) в {arg}!&/fwarn {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'unvig', description = 'Снятие выговора', text = '/f {get_ru_nick({id})}, ты прощён(-а)!&/unfwarn {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'unv', description = 'Увольнение игрока', text = '/me забирает организационную форму у человека&/uninvite {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'point', description = 'Установить метку для сотрудников', text = '/f Срочно выдвигайтесь ко мне, отправляю вам координаты...&/point', arg = '', enable = true, waiting = '2', bind = "{}"},
+				},
+				ghetto = {
+					{cmd = 'inv', description = 'Инвайт', text = '/todo Бери, это теперь твоя*протягивая бандану человеку напротив.&/invite {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'rp', description = 'Квест РП', text = '/fractionrp {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'gr', description = 'Сменить ранг', text = '{show_rank_menu}&/todo Вот тебе новая форма!*протягивая форму человеку напротив &/giverank {id} {get_rank}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'fmutes', description = 'Выдать мут (10м)', text = '/fmutes {id} Подумай о своём поведении', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'funmute', description = 'Снять мут', text = '/funmute {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'vig', description = 'Дать выговор', text = '/f {get_ru_nick({id})}, ты провинился(-лась) в {arg}!&/fwarn {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'unvig', description = 'Снять выговор', text = '/f {get_ru_nick({id})}, ты прощён(-а)!&/unfwarn {id}', arg = '{id}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'unv', description = 'Уволить', text = '/r Аривидерчи, {get_ru_nick({id})}&/uninvite {id} {arg}', arg = '{id} {arg}', enable = true, waiting = '2', bind = "{}"},
+					{cmd = 'point', description = 'Установить метку', text = '/f Фастом все ко мне!&/point', arg = '', enable = true, waiting = '2', bind = "{}"},
+				}
+			}
+		}
+	},
+	custom_commands = {
+		name = 'Кастомные команды',
+		path = config_dir .. "/Custom Commands.json",
+		data = {
+			{ key = 'edgo',     cmd = 'edgo',     description = 'Система пробива личности по ЭБГО', arg = '', text = '', enable = true, editable = true },
+			{ key = 'pnv',      cmd = 'pnv',      description = 'Надеть/снять очки ночного видения', arg = '', text = '/me достаёт из кармана прибор ночного видения и надевает его&/me снимает прибор ночного видения и убирает его в карман', enable = true, editable = true },
+			{ key = 'irv',      cmd = 'irv',      description = 'Надеть/снять инфракрасные очки', arg = '', text = '/me достаёт из кармана инфракрасный визор и надевает его&/me снимает инфракрасный визор и убирает его в карман', enable = true, editable = true },
+			{ key = 'cruise',   cmd = 'cruise',   description = 'Адаптивный круиз-контроль', arg = '', text = '', enable = true, editable = true },
+			{ key = 'frp',      cmd = 'frp',      description = 'Выдать /fractionrp в радиусе', arg = '', text = '', enable = true, editable = true },
+			{ key = 'dep',      cmd = 'dep',      description = 'Рация департамента', arg = '', text = '', enable = true, editable = true },
+			{ key = 'sob',      cmd = 'sob',      description = 'Проведение собеседования', arg = '{id}', text = '', enable = true, editable = true },
+			{ key = 'post',     cmd = 'post',     description = 'Меню системы постов', arg = '', text = '', enable = true, editable = true },
+			{ key = 'zeks',     cmd = 'zeks',     description = 'Меню списка заключенных', arg = '', text = '', enable = true, editable = true },
+			{ key = 'pum',      cmd = 'pum',      description = 'Меню умного повышения срока', arg = '{id}', text = '', enable = true, editable = true },
+			{ key = 'wanteds',  cmd = 'wanteds',  description = 'Меню общего списка /wanted', arg = '', text = '', enable = true, editable = true },
+			{ key = 'patrool',  cmd = 'patrool',  description = 'Меню патрулирования', arg = '', text = '', enable = true, editable = true },
+			{ key = 'sum',      cmd = 'sum',      description = 'Меню умной выдачи розыска', arg = '{id}', text = '', enable = true, editable = true },
+			{ key = 'tsm',      cmd = 'tsm',      description = 'Меню умной выдачи штрафов', arg = '{id}', text = '', enable = true, editable = true },
+			{ key = 'afind',    cmd = 'afind',    description = 'Авто-поиск игрока по GPS', arg = '{id}', text = '/me достал{sex} свой КПК и зайдя в базу данных {fraction_tag} открыл{sex} дело гражданина N{id}&/me нажал{sex} на кнопку GPS отслеживания местоположения гражданина&', waiting = '2', enable = true, editable = true },
+			{ key = 'forensic', cmd = 'forensic', description = 'Меню криминалистических экспертиз', arg = '', text = '', enable = true, editable = true },
+			--
+			{ key = 'helper',   cmd = 'helper',   description = 'Открыть меню хелпера', arg = '', text = '', enable = true, editable = false },
+			{ key = 'binder',   cmd = 'binder',   description = 'Открыть биндер команд', arg = '', text = '', enable = true, editable = false },
+			{ key = 'hm',       cmd = 'hm',       description = 'Быстрые RP команды (/hm ID)', arg = '', text = '', enable = true, editable = false },
+			{ key = 'stop',     cmd = 'stop',     description = 'Остановить отыгровку любой RP команды', arg = '', text = '', enable = true, editable = false },
+			{ key = 'fixsize',  cmd = 'fixsize',  description = 'Сбросить размер интерфейса хелпера', arg = '', text = '', enable = true, editable = false },
+			{ key = 'debug',    cmd = 'debug',    description = 'Отслеживание серверных данных', arg = '', text = '', enable = true, editable = false },
+			{ key = 'members',  cmd = 'members',  description = 'Кастомный /members', arg = '', text = '', enable = true, editable = false },
+			{ key = 'wanted',   cmd = 'wanted',   description = 'Алиас для /wanteds', arg = '{arg}', text = '', enable = true, editable = false },
+			{ key = 'lm',       cmd = 'lm',       description = 'Лидерское фастменю (9/10 ранг)', arg = '', text = '', enable = true, editable = false },
+			{ key = 'spcar',    cmd = 'spcar',    description = 'Заспавнить транспорт организации', arg = '', text = '', enable = true, editable = false },
+			{ key = 'fcleaner', cmd = 'fcleaner', description = 'Уволить неактивных членов организации', arg = '{number}', text = '', enable = true, editable = false },
+		}
+	},
+	piemenu = {
+		name = 'Круговое меню',
+		path = config_dir .. "/PieMenu.json",
+		data = {}
+	},
+	scoreboard = {
+		name = 'Mimgui ScoreBoard',
+		path = config_dir .. "/Scoreboard.json",
+		data = {
+			show_actions_menu = true,
+			colored_id = true,
+			colored_nickname = true,
+			colored_score = true,
+			colored_ping = true
+		}
+	},
+	crosshair = {
+		name = 'Кастомизация прицела',
+		path = config_dir .. "/Crosshair.json",
+		data = {
+			standart_color = {0, 255, 255},
+			enemy_color = {255, 0, 0},
+			check_weapon_range = true,
+			show_weapon_range = true,
+			is_legendary_stripe = false,
+			distance_color_in  = {0, 255, 0},
+			distance_color_out = {255, 0, 0},
+			font_name = 'Arial',
+			font_size = 15,
+		}
+	},
+	buttons = {
+		name = 'Кнопочки',
+		path = config_dir .. "/Buttons.json",
+		data = {
+			{
+				enable = true,
+				name = 'Броник',
+				icon = 'SHIELD',
+				action = '/armour',
+				size = {x = 100, y = 25},
+				pos = {x = 100, y = 400}
+			}
+		}
+	},
+	notes = {
+		name = 'Заметки',
+		path = config_dir .. "/Notes.json",
+		data = {}
+	},
+	weapon = {
+		name = 'Оружие',
+		path = config_dir .. "/Weapon.json",
+		data = {
+            rp_weapon = {
+                {id = 0, name = 'кулаки', enable = true, rpTake = 2},
+				{id = 1, name = 'кастеты', enable = false, rpTake = 2},
+				{id = 2, name = 'клюшку для гольфа', enable = false, rpTake = 1},
+				{id = 3, name = 'дубинку', enable = true, rpTake = 3},
+				{id = 4, name = 'острый нож', enable = false, rpTake = 3},
+				{id = 5, name = 'биту', enable = false, rpTake = 1},
+				{id = 6, name = 'лопату', enable = true, rpTake = 1},
+				{id = 7, name = 'кий', enable = false, rpTake = 1},
+				{id = 8, name = 'катану', enable = false, rpTake = 1},
+				{id = 9, name = 'бензопилу', enable = false, rpTake = 1},
+				{id = 10, name = 'игрушку', enable = false, rpTake = 2},
+				{id = 11, name = 'большую игрушку', enable = false, rpTake = 2},
+				{id = 12, name = 'моторную игрушку', enable = false, rpTake = 2},
+				{id = 13, name = 'большую игрушку', enable = false, rpTake = 2},
+				{id = 14, name = 'букет цветов', enable = true, rpTake = 1},
+				{id = 15, name = 'трость', enable = false, rpTake = 1},
+				{id = 16, name = 'осколочную гранату', enable = false, rpTake = 3},
+				{id = 17, name = 'дымовую гранату', enable = true, rpTake = 3},
+				{id = 18, name = 'коктейль Молотова', enable = true, rpTake = 3},
+				{id = 22, name = 'пистолет Colt45', enable = false, rpTake = 4},
+				{id = 23, name = "пистолет с глушителем", enable = true, rpTake = 4},
+				{id = 24, name = 'пистолет Desert Eagle', enable = true, rpTake = 4},
+				{id = 25, name = 'дробовик', enable = true, rpTake = 1},
+				{id = 26, name = 'обрез', enable = true, rpTake = 4},
+				{id = 27, name = 'улучшенный обрез', enable = false, rpTake = 1},
+				{id = 28, name = 'ПП Micro Uzi', enable = true, rpTake = 3},
+				{id = 29, name = 'ПП MP5', enable = true, rpTake = 4},
+				{id = 30, name = 'автомат AK47', enable = true, rpTake = 1},
+				{id = 31, name = 'автомат M4', enable = true, rpTake = 1},
+				{id = 32, name = 'ПП Tec9', enable = true, rpTake = 4},
+				{id = 33, name = 'винтовку Rifle', enable = true, rpTake = 1},
+				{id = 34, name = 'снайперскую винтовку', enable = true, rpTake = 1},
+				{id = 35, name = 'РПГ', enable = false, rpTake = 1},
+				{id = 36, name = 'ПТУР', enable = false, rpTake = 1},
+				{id = 37, name = 'огнемёт', enable = false, rpTake = 1},
+				{id = 38, name = 'миниган', enable = false, rpTake = 1},
+				{id = 39, name = 'динамит', enable = false, rpTake = 3},
+				{id = 40, name = 'детонатор', enable = false, rpTake = 3},
+				{id = 41, name = 'перцовый балончик', enable = true, rpTake = 2},
+				{id = 42, name = 'огнетушитель', enable = true, rpTake = 1},
+				{id = 43, name = 'фотоапарат', enable = true, rpTake = 2},
+				{id = 44, name = 'ПНВ', enable = false, rpTake = 3},
+				{id = 45, name = 'тепловизор', enable = false, rpTake = 3},
+				{id = 46, name = 'парашут', enable = true, rpTake = 1},
+				-- gta sa damage reason
+				{id = 49, name = 'т/с', enable = false, rpTake = 1},
+				{id = 50, name = 'лопасти вертолёта', enable = false, rpTake = 1},
+				{id = 51, name = 'гранату', enable = false, rpTake = 1},
+				{id = 54, name = 'коллизию/тюнинг', enable = false, rpTake = 1},
+				-- ARZ CUSTOM GUN
+				{id = 71, name = 'пистолет Desert Eagle Steel', enable = true, rpTake = 4},
+				{id = 72, name = 'пистолет Desert Eagle Gold', enable = true, rpTake = 4},
+				{id = 73, name = 'пистолет Glock Gradient', enable = true, rpTake = 4},
+				{id = 74, name = 'пистолет Desert Eagle Flame', enable = true, rpTake = 4},
+				{id = 75, name = 'пистолет Python Royal', enable = true, rpTake = 4},
+				{id = 76, name = 'пистолет Python Silver', enable = true, rpTake = 4},
+				{id = 77, name = 'автомат AK-47 Roses', enable = true, rpTake = 1},
+				{id = 78, name = 'автомат AK-47 Gold', enable = true, rpTake = 1},
+				{id = 79, name = 'пулемёт M249 Graffiti', enable = true, rpTake = 1},
+				{id = 80, name = 'золотую Сайгу', enable = true, rpTake = 1},
+				{id = 81, name = 'ПП Standart', enable = true, rpTake = 4},
+				{id = 82, name = 'пулемёт M249', enable = true, rpTake = 1},
+				{id = 83, name = 'ПП Skorp', enable = true, rpTake = 4},
+				{id = 84, name = 'автомат AKS74 камуфляжный', enable = true, rpTake = 1},
+				{id = 85, name = 'автомат AK47 камуфляжный', enable = true, rpTake = 1},
+				{id = 86, name = 'дробовик Rebecca', enable = true, rpTake = 1},
+				{id = 87, name = 'Doomgun', enable = true, rpTake = 1},
+				{id = 88, name = 'ледяной меч', enable = true, rpTake = 1},
+				{id = 89, name = 'портальную пушку', enable = true, rpTake = 4},
+				{id = 90, name = 'оглушающую гранату', enable = true, rpTake = 3},
+				{id = 91, name = 'ослепляющую гранату', enable = true, rpTake = 3},
+				{id = 92, name = 'снайперскую винтовку TAC50', enable = true, rpTake = 1},
+				{id = 93, name = 'оглушающий пистолет', enable = true, rpTake = 4},
+				{id = 94, name = 'снежную пушку', enable = true, rpTake = 1},
+				{id = 95, name = 'пиксельный бластер', enable = true, rpTake = 3},
+				{id = 96, name = 'автомат M4 Gold', enable = true, rpTake = 1},
+				{id = 97, name = 'бандитский дробовик', enable = true, rpTake = 1},
+				{id = 98, name = 'ПП Uzi Graffiti', enable = true, rpTake = 4},
+				{id = 99, name = 'золотую монтировку', enable = true, rpTake = 1},
+				{id = 100, name = 'биту Compton', enable = true, rpTake = 1},
+				{id = 101, name = 'пистолет SciFi Deagle', enable = true, rpTake = 4},
+				{id = 102, name = 'автомат SciFi AK47', enable = true, rpTake = 1},
+				{id = 103, name = 'дробовик SciFi', enable = true, rpTake = 1},
+				{id = 104, name = 'нож SciFi', enable = true, rpTake = 3},
+				{id = 105, name = 'сканер', enable = false, rpTake = 4},
+				{id = 106, name = 'золотой нож', enable = true, rpTake = 3},
+				{id = 107, name = 'катану Нир', enable = true, rpTake = 1},
+				{id = 108, name = 'невидимый нож', enable = true, rpTake = 3},
+				{id = 109, name = "электрошокер Taser X26P", enable = true, rpTake = 4},
+				{id = 110, name = 'огненную кирку', enable = true, rpTake = 1},
+            },
+            rpTakeNames = {
+				{"из-за спины", "за спину"},
+				{"из кармана", "в карман"},
+				{"из пояса", "на пояс"},
+				{"из кобуры", "в кобуру"}
+			},
+            gunActions = {
+                on = {},
+                off = {},
+                partOn = {},
+                partOff = {}
+            },
+			byId = {},
+            oldGun = nil,
+            nowGun = 0
+        }
+	},
+    smart_uk = {
+		name = 'Умный Розыск',
+		path = config_dir .. "/SmartUK.json",
+		data = {}
+	},
+    smart_pdd = {
+		name = 'Умные Штрафы',
+		path = config_dir .. "/SmartPDD.json",
+		data = {}
+	},
+    smart_rptp = {
+		name = 'Умный Срок',
+		path = config_dir .. "/SmartRPTP.json",
+		data = {}
+	},
+	vehicles = {
+		name = 'Транспорт',
+		path = config_dir .. "/Vehicles.json",
+		data = {},
+		byId = {},	
+		cache = {}
+	},
+	ads_history = {
+		name = 'История Объявлений',
+		path = config_dir .. "/ADS.json",
+		data = {}
+	}
+}
+function save_module(key)
+	local module = modules[key]
+	if not module then print('Неизвестный модуль: ' .. tostring(key)) return false end
+
+	local content = safe_encode_json(module.data)
+	if not content then print('Не удалось сохранить модуль "' .. module.name .. '" - ошибка кодировки JSON') return false end
+
+	local file, errstr = io.open(module.path, 'w')
+	if not file then print('Не удалось сохранить модуль "' .. module.name .. '": ' .. tostring(errstr or 'Unknown')) return false end
+
+	file:write(content)
+	file:close()
+
+	print('Модуль "' .. module.name .. '" сохранён')
+	return true
+end
+local function deep_copy(orig)
+	if type(orig) ~= 'table' then return orig end
+	local copy = {}
+	for k, v in pairs(orig) do copy[k] = deep_copy(v) end
+	return copy
+end
+local function sync_keyed_array(def_arr, loaded_arr, idfield)
+	local changed = false
+	local def_by_id = {}
+	for _, d in ipairs(def_arr or {}) do
+		if type(d) == 'table' and d[idfield] ~= nil then
+			def_by_id[tostring(d[idfield])] = d
+		end
+	end
+	local seen, result = {}, {}
+	for _, item in ipairs(loaded_arr or {}) do
+		if type(item) == 'table' and item[idfield] ~= nil then
+			local def = def_by_id[tostring(item[idfield])]
+			if def then
+				for k, v in pairs(def) do
+					if item[k] == nil then item[k] = deep_copy(v); changed = true end
+				end
+				seen[tostring(item[idfield])] = true
+				table.insert(result, item)
+			else
+				changed = true
+			end
+		else
+			table.insert(result, item)
+		end
+	end
+
+	for _, d in ipairs(def_arr or {}) do
+		if type(d) == 'table' and d[idfield] ~= nil and not seen[tostring(d[idfield])] then
+			table.insert(result, deep_copy(d))
+			changed = true
+		end
+	end
+	return result, changed
+end
+local function detect_id_field(arr)
+	for _, f in ipairs({'key', 'id', 'cmd'}) do
+		local all = true
+		for _, e in ipairs(arr) do
+			if type(e) ~= 'table' or e[f] == nil then all = false; break end
+		end
+		if all then return f end
+	end
+	return nil
+end
+local function sync_all(def, loaded)
+	if type(def) ~= 'table' or type(loaded) ~= 'table' then return loaded, false end
+	local changed = false
+
+	if #def > 0 then
+		local idf = detect_id_field(def)
+		if idf then
+			return sync_keyed_array(def, loaded, idf)
+		end
+	end
+
+	for k, v in pairs(def) do
+		if type(v) == 'table' and type(loaded[k]) == 'table' then
+			local newv, ch = sync_all(v, loaded[k])
+			loaded[k] = newv
+			changed = changed or ch
+		end
+	end
+	return loaded, changed
+end
+function load_module(key)
+	local module = modules[key]
+	if not module then print('Неизвестный модуль: ' .. tostring(key)) return end
+
+	if not doesFileExist(module.path) then print('Модуль "' .. module.name .. '" инициализирован') save_module(key) return end
+
+	local file, errstr = io.open(module.path, 'r')
+	if not file then print('Не удалось открыть модуль "' .. module.name .. '": ' .. tostring(errstr or 'Unknown')) return end
+
+	local contents = file:read('*a') file:close()
+	if #contents == 0 then print('Не удалось загрузить модуль "' .. module.name .. '" - файл пустой') return end
+
+	local ok, loaded = pcall(decodeJson, contents)
+	if not ok or type(loaded) ~= 'table' then print('Не удалось загрузить модуль "' .. module.name .. '" - ошибка decode JSON') return end
+
+	local changed = merge_defaults(module.data, loaded)
+
+	local synced, ch = sync_all(module.data, loaded)
+	loaded = synced
+	changed = changed or ch
+
+	if key == 'commands' then
+		local mode = settings.general.fraction_mode or 'none'
+		local defs = (module.data.commands or {})[mode] or {}
+		local my = loaded.commands and loaded.commands.my
+		if type(my) == 'table' and #defs > 0 then
+			local have = {}
+			for _, c in ipairs(my) do
+				if type(c) == 'table' and c.cmd then have[c.cmd] = c end
+			end
+			for _, d in ipairs(defs) do
+				if type(d) == 'table' and d.cmd then
+					local ex = have[d.cmd]
+					if ex then
+						for k, v in pairs(d) do
+							if ex[k] == nil then ex[k] = deep_copy(v); changed = true end
+						end
+					else
+						table.insert(my, deep_copy(d))
+						changed = true
+					end
+				end
+			end
+		end
+	end
+
+	module.data = loaded
+	if changed then
+		save_module(key)
+		print('Модуль "' .. module.name .. '" обновлён под новую версию')
+	else
+		print('Модуль "' .. module.name .. '" загружен')
+	end
+end
+function load_modules()
+	load_module('player')
+	load_module('notes')
+	load_module('weapon')
+	load_module('vehicles')
+	load_module('commands')
+	load_module('custom_commands')
+	load_module('departament')
+	load_module('members')
+	load_module('scoreboard')
+	if IS_MOBILE then load_module('buttons') end
+	if pie_ok then
+		load_module('piemenu')
+		if settings.general.piemenu == nil or settings.general.piemenu == false then
+			settings.general.piemenu = true
+			save_settings()
+		end
+	else
+		settings.general.piemenu = false
+		save_settings()
+	end
+	if memory_ok then load_module('crosshair') else settings.general.crosshair = false save_settings() end
+	if isMode('police') or isMode('fbi') then load_module('smart_uk') load_module('smart_pdd') load_module('forensic') end
+	if isMode('prison') then load_module('smart_rptp') end
+	if isMode('smi') then load_module('ads_history') end
+end
+load_modules()
+-------------------------------------------[ CUSTOM COMMANDS ]--------------------------------------
+function get_custom_cmd_data(key)
+    for _, item in ipairs(modules.custom_commands.data) do
+        if item.key == key then return item end
+    end
+    return nil
+end
+function get_custom_cmd(key)
+    local data = get_custom_cmd_data(key)
+    return data and data.cmd or key
+end
+function is_custom_cmd_enabled(key)
+    local data = get_custom_cmd_data(key)
+    return data and data.enable or true
+end
+function get_custom_cmd_text(key, index)
+    local data = get_custom_cmd_data(key)
+    if not data or data.text == '' then return nil end
+    local texts = {}
+    for t in data.text:gmatch('[^&]+') do
+        table.insert(texts, t)
+    end
+    return texts[index or 1]
+end
+function register_custom_command(key)
+	local item = get_custom_cmd_data(key)
+	if not item or not item.enable then return end
+	local name = get_custom_cmd(key)
+	local handler = CUSTOM_CMD_HANDLERS[key]
+	sampRegisterChatCommand(name, function(args)
+		if handler then handler(args) end
+		if item.text and item.text ~= '' and (item.arg or '') == '' then
+			run_command_lines(name, item.arg or '', item.text, tonumber(item.waiting) or 2, args)
+		end
+	end)
+end
+-------------------------------------------[ GUI & MODULES ]----------------------------------------
+local MODULE = {
+	Initial = {
+		Window = imgui.new.bool(),
+		input = imgui.new.char[256](""),
+		slider = imgui.new.int(0),
+		step = 0,
+		fraction_type_selector = 0,
+		fraction_type_selector_text = 'Без организации',
+		fraction_type_icon = nil,
+		step2_result = 0,
+		fraction_selector = 0,
+		fraction_selector_text = '',
+	},
+	TermsConfirm = { 
+		Window = imgui.new.bool() 
+	},
+	Main = {
+		Window = imgui.new.bool(),
+		theme = imgui.new.int(tonumber(settings.general.helper_theme)),
+		input = imgui.new.char[256](""),
+		checkbox = {
+			accent_enable = imgui.new.bool(settings.general.accent_enable or false),
+			mobile_stop_button = imgui.new.bool(settings.general.mobile_stop_button or false),
+			mobile_fastmenu_button = imgui.new.bool(settings.general.mobile_fastmenu_button or false),
+			mobile_piemenu_button = imgui.new.bool(settings.general.piemenu or false),
+		},
+		slider = {
+			transparent = imgui.new.int(tonumber(settings.general.transparent)),
+			background_transparent = imgui.new.int(tonumber(settings.general.background_transparent or 75)),
+			rank = imgui.new.int(),
+			dpi = imgui.new.float(tonumber(settings.general.custom_dpi)),
+		},
+		mmcolor = imgui.new.float[3](),
+		msgcolor = imgui.new.float[3](),
+	},
+	Binder = {
+		closed_main = false,
+		waiting_slider = imgui.new.float(0),
+		ComboTags = imgui.new.int(),
+		input_cmd = imgui.new.char[256](""),
+		input_description = imgui.new.char[256](""),
+		input_text = imgui.new.char[8192](""),
+		item_list = {
+			u8('Без аргументов'),
+			u8('Любое значение'),
+			u8('ID игрока'),
+			u8('ID игрока и любое значение (пример /vig 429 Без бейджика)'),
+			u8('ID игрока и любое число и любое значение  (пример /su 429 2 Неподчинение)')
+		},
+		ImItems = nil,
+		data = {
+			change_waiting = nil,
+			change_cmd = nil,
+			change_text = nil,
+			change_arg = nil,
+			change_bind = nil,
+			create_command_9_10 = false,
+			input_description = nil
+		},
+		state = {
+			isActive = false,
+			isStop = false,
+			isPause = false
+		},
+		input_search_tag = imgui.new.char[64](""),
+		tag = {},
+		tags = {},
+	},
+	CustomCmdEdit = {
+		closed_main = false,
+		index = nil,
+		key = nil,
+		original_cmd = nil,
+		input_cmd = imgui.new.char[256](""),
+		input_text = imgui.new.char[8192](""),
+		input_description = imgui.new.char[256](""),
+		ComboTags = imgui.new.int(0),
+		waiting_slider = imgui.new.float(2),
+		orig_waiting = 2,
+	},
+	Note = {
+		Window = imgui.new.bool(),
+		input_text = imgui.new.char[1048576](""),
+		input_name = imgui.new.char[256](""),
+		show_note_name = '',
+		show_note_text = '',
+	},
+	Accounts = {
+		list = { { name = 'Гостевой', server = 'Arizona', is_guest = true } },
+		selected = 1,
+		edit_index = nil,
+		del_index = nil,
+		edit_open = false,
+		del_open = false,
+		name_buf = imgui.new.char[64](""),
+		server_buf = imgui.new.char[64](""),
+	},
+	Buttons = {
+		Editor = {
+			icon = '',
+			name = imgui.new.char[256](""),
+			action = imgui.new.char[256](""),
+			size = {x = imgui.new.int(75), y = imgui.new.int(25)}
+		}
+	},
+	Members = {
+		Window = imgui.new.bool(),
+		all = {},
+		new = {},
+		upd = {},
+		info = {fraction = '', check = false},
+		search_buf = imgui.new.char[64](""),
+		info_buf = imgui.new.char[64](""),
+		info_edit_id = nil,
+		info_open = false,
+	},
+	RPWeapon = {
+		open_popup = false,
+		Window = imgui.new.bool(),
+		ComboTags = imgui.new.int(),
+		item_list = {u8'Спина', u8'Карман', u8'Пояс', u8'Кобура'},
+		ImItems = imgui.new['const char*'][4]({u8'Спина', u8'Карман', u8'Пояс', u8'Кобура'}),
+		input_search = imgui.new.char[256]('')
+	},
+	CruiseControl = {
+		active = false,
+		wait_point = false,
+		point = {x = 0, y = 0, z = 0},
+		driving = false,
+		drive_type = 2,
+		last_drive_set = 0,
+		stuck_x = 0, stuck_y = 0, stuck_z = 0, stuck_t = 0,
+		pursuit_active = false,
+		pursuit_target_id = -1,
+		last_deactivate_time = 0,
+		hud_last_x = 0, hud_last_y = 0, hud_last_z = 0, hud_last_t = 0,
+		hud_speed = 0,
+		hud_start_dist = 0,
+	},
+	Cruise = {
+		Window = imgui.new.bool(),
+		pursuit_id_buf = imgui.new.char[16](''),
+		speed_slider = imgui.new.float(28),
+		radius_slider = imgui.new.float(15),
+		stuck_slider = imgui.new.float(4),
+		ride_combo = imgui.new.int(0),
+		drive_combo = imgui.new.int(2),
+		_auto_cb = imgui.new.bool(false),
+		_aggr_cb = imgui.new.bool(true),
+		_hud_cb  = imgui.new.bool(settings.general.cruise_hud ~= false),
+	},
+	AutoFlipDomkrat = { 
+		cooldown = false,
+	},
+	AutoClicker = { 
+		active = false 
+	},
+	AutoInvite = {},
+	Departament = {
+		Window = imgui.new.bool(),
+		text = imgui.new.char[256](),
+		fm = imgui.new.char[32](u8(modules.departament.data.dep_fm)),
+		tag1 = imgui.new.char[32](u8(modules.departament.data.dep_tag1)),
+		tag2 = imgui.new.char[32](u8(modules.departament.data.dep_tag2)),
+		new_tag = imgui.new.char[32](""),
+		quick_reply = imgui.new.char[256](""),
+		quick_reply_name = imgui.new.char[64](""),
+		checkbox = {anti_skobki = imgui.new.bool(modules.departament.data.anti_skobki or false)},
+		selector = {tag = imgui.new.int(0), fm = imgui.new.int(0), reply = imgui.new.int(0)}
+	},
+	Post = {
+		Window = imgui.new.bool(),
+		input = imgui.new.char[256](""),
+		ComboCode = imgui.new.int(5),
+		codes = {'RFR', 'NonRFR', 'OVER***'},
+		ImItemsCode = nil,
+		name = '',
+		code = 'CODE 4',
+		active = false,
+		start_time = 0,
+		current_time = 0,
+		time = 0,
+		process_doklad = false,
+		auto_doklad = { time = 0, },
+	},
+	Wanted = {
+		Window = imgui.new.bool(),
+		all = {},
+		new = {},
+		checker = false,
+		updwanteds = { period = 15 },
+	},
+	Arrest = { 
+		last_nick = "Неизвестный" 
+	},
+	Afind = {
+		active = false,
+		target_id = -1,
+		target_nick = "",
+		in_building = false,
+		building_since = 0,
+		last_building_msg = 0,
+	},
+	Awanted = {
+		queue = {},
+		checked = {},
+		scanning = false,
+		last_target = -1,
+		last_target_time = 0,
+		last_reset = os.time(),
+		scan_radius = 50,
+		scan_delay = 2,
+		target_timeout = 10,
+		reset_interval = 45,
+	},
+	Patrool = {
+		Window = imgui.new.bool(),
+		ComboMark = imgui.new.int(1),
+		marks = {'ADAM', 'LINCOLN', 'MARY', 'KING', 'HENRY', 'AIR', 'ASD', 'CHARLIE', 'ROBERT', 'SUPERVISOR', 'DAVID', 'EDWARD', 'NORA'},
+		ImItemsMark = nil,
+		ComboCode = imgui.new.int(5),
+		codes = {'CODE 0', 'CODE 1', 'CODE 2', 'CODE 2 HIGHT', 'CODE 3', 'CODE 4', 'CODE 4 ADAM', 'CODE 5', 'CODE 6', 'CODE 7', 'CODE 30', 'CODE 30 RINGER', 'CODE 37', 'CODE TOM'},
+		ImItemsCode = nil,
+		active = false,
+		start_time = 0,
+		current_time = 0,
+		time = 0,
+		process_doklad = false,
+		code = 'CODE 4',
+		mark = 'ADAM',
+		patrol_type = 1,
+		auto_doklad = { time = 0 },
+	},
+	SumMenu = {
+		Window = imgui.new.bool(),
+		input = imgui.new.char[256](""),
+		form_su = '',
+		player_id = nil
+	},
+	TsmMenu = {
+		Window = imgui.new.bool(),
+		input = imgui.new.char[256](""),
+		player_id = nil
+	},
+	ArmyPatrool = {
+		post = ''
+	},
+	PumMenu = {
+		Window = imgui.new.bool(),
+		input = imgui.new.char[256](""),
+		player_id = nil
+	},
+	MedCard = {
+		Window = imgui.new.bool(),
+		days = imgui.new.int(3),
+		status = imgui.new.int(3),
+		player_id = nil
+	},
+	Recept = {
+		Window = imgui.new.bool(),
+		recepts = imgui.new.int(1),
+		player_id = nil
+	},
+	Antibiotik = {
+		Window = imgui.new.bool(),
+		ants = imgui.new.int(1),
+		player_id = nil
+	},
+	HealChat = {
+		Window = imgui.new.bool(),
+		bool = false,
+		player_id = nil,
+		worlds = {'вылечи', 'лечи', 'хил', 'лек', 'heal', 'hil', 'lek', 'табл', 'болит', 'голова', 'лекни', 'ktr', 'ktxb', 'ujkjdf'},
+	},
+	GoDeath = {
+		player_id = nil,
+		locate = '',
+		city = ''
+	},
+	MedicalPrice = {
+		heal         = imgui.new.char[12](u8(settings.mh.price.heal)),
+		heal_vc      = imgui.new.char[12](u8(settings.mh.price.heal_vc)),
+		healactor    = imgui.new.char[12](u8(settings.mh.price.healactor)),
+		healactor_vc = imgui.new.char[12](u8(settings.mh.price.healactor_vc)),
+		medosm       = imgui.new.char[12](u8(settings.mh.price.medosm)),
+		mticket      = imgui.new.char[12](u8(settings.mh.price.mticket)),
+		healbad      = imgui.new.char[12](u8(settings.mh.price.healbad)),
+		recept       = imgui.new.char[12](u8(settings.mh.price.recept)),
+		ant          = imgui.new.char[12](u8(settings.mh.price.ant)),
+		med7         = imgui.new.char[12](u8(settings.mh.price.med7)),
+		med14        = imgui.new.char[12](u8(settings.mh.price.med14)),
+		med30        = imgui.new.char[12](u8(settings.mh.price.med30)),
+		med60        = imgui.new.char[12](u8(settings.mh.price.med60)),
+	},
+	SmiEdit = {
+		Window = imgui.new.bool(),
+		input_edit_text = imgui.new.char[512](""),
+		input_search = imgui.new.char[256](""),
+		ad_message = '',
+		ad_from = '',
+		ad_dialog_id = '',
+		adshistory_orig = '',
+		adshistory_input_text = imgui.new.char[512](""),
+		skip_dialogd = false,
+		ad_repeat_count = 0,
+		last_ad_text = "",
+		vip_pause = false,
+		is_active_ad = false,
+	},
+	LicensePrice = {
+		avto1 = imgui.new.char[12](u8(settings.lc.price.avto1)),
+		avto2 = imgui.new.char[12](u8(settings.lc.price.avto2)),
+		avto3 = imgui.new.char[12](u8(settings.lc.price.avto3)),
+		moto1 = imgui.new.char[12](u8(settings.lc.price.moto1)),
+		moto2 = imgui.new.char[12](u8(settings.lc.price.moto2)),
+		moto3 = imgui.new.char[12](u8(settings.lc.price.moto3)),
+		fish1 = imgui.new.char[12](u8(settings.lc.price.fish1)),
+		fish2 = imgui.new.char[12](u8(settings.lc.price.fish2)),
+		fish3 = imgui.new.char[12](u8(settings.lc.price.fish3)),
+		swim1 = imgui.new.char[12](u8(settings.lc.price.swim1)),
+		swim2 = imgui.new.char[12](u8(settings.lc.price.swim2)),
+		swim3 = imgui.new.char[12](u8(settings.lc.price.swim3)),
+		gun1 = imgui.new.char[12](u8(settings.lc.price.gun1)),
+		gun2 = imgui.new.char[12](u8(settings.lc.price.gun2)),
+		gun3 = imgui.new.char[12](u8(settings.lc.price.gun3)),
+		hunt1 = imgui.new.char[12](u8(settings.lc.price.hunt1)),
+		hunt2 = imgui.new.char[12](u8(settings.lc.price.hunt2)),
+		hunt3 = imgui.new.char[12](u8(settings.lc.price.hunt3)),
+		klad1 = imgui.new.char[12](u8(settings.lc.price.klad1)),
+		klad2 = imgui.new.char[12](u8(settings.lc.price.klad2)),
+		klad3 = imgui.new.char[12](u8(settings.lc.price.klad3)),
+		taxi1 = imgui.new.char[12](u8(settings.lc.price.taxi1)),
+		taxi2 = imgui.new.char[12](u8(settings.lc.price.taxi2)),
+		taxi3 = imgui.new.char[12](u8(settings.lc.price.taxi3)),
+		mexa1 = imgui.new.char[12](u8(settings.lc.price.mexa1)),
+		mexa2 = imgui.new.char[12](u8(settings.lc.price.mexa2)),
+		mexa3 = imgui.new.char[12](u8(settings.lc.price.mexa3)),
+		fly1 = imgui.new.char[12](u8(settings.lc.price.fly1)),
+		fly2 = imgui.new.char[12](u8(settings.lc.price.fly2)),
+		fly3 = imgui.new.char[12](u8(settings.lc.price.fly3)),
+		train1 = imgui.new.char[12](u8(settings.lc.price.train1)) -- Rodina RP
+	},
+	Fires = {
+		isZone = false,
+		isDialog = false,
+		dialogId = -1,
+		location = '',
+		locations = '',
+		lvl = '-1',
+	},
+	Ins = {
+		catch_ticket = {enable = false, nickname = nil},
+	},
+	Zeks = {
+		Window = imgui.new.bool(),
+		updzeks = {},
+		all = {},
+		new = {},
+		checker = false,
+	},
+	GiveRank = {
+		Window = imgui.new.bool(),
+		number = imgui.new.int(5),
+		player_id = nil
+	},
+	Sobes = {
+		Window = imgui.new.bool(),
+		player_id = nil
+	},
+	LeadTools = {
+		vc_vize = {bool = false, player_id = nil},
+		auto_uninvite = {checker = false, msg1 = '', msg2 = '', msg3 = '', player_id = nil},
+		spawncar = false,
+		platoon = {check = false, player_id = nil},
+		cleaner = {day_afk = 0, reason_day = 0, uninvite = false, players_to_kick = {}},
+		sell_rank = {checker = false, player_id = nil},
+	},
+	Forensic = {
+		Window = imgui.new.bool(),
+		selected = imgui.new.int(1),
+	},
+	News = {
+		loading = false,
+		loaded  = false,
+		error   = nil,
+		list    = {},
+		visible = {},
+		selected = 1,
+	},
+	Update = {
+		Window = imgui.new.bool(),
+		is_need_update = false,
+		can_show = false,
+		version = "", url = "", info = "",
+		status = "", status_color = "{FFFFFF}", is_emergency = false,
+		downloading = false, download_start = nil,
+		download_file = ""
+	},
+	Crosshair = {
+		Window = imgui.new.bool(),
+		InfoWindow = imgui.new.bool(),
+		check_weapon_range = imgui.new.bool(modules.crosshair.data.check_weapon_range),
+		show_weapon_range = imgui.new.bool(modules.crosshair.data.show_weapon_range),
+		show_weapon_range_color = nil,
+		is_legendary_stripe = imgui.new.bool(modules.crosshair.data.is_legendary_stripe),
+		standart_color = imgui.new.float[3](modules.crosshair.data.standart_color[1] / 255, modules.crosshair.data.standart_color[2] / 255, modules.crosshair.data.standart_color[3] / 255),
+		enemy_color = imgui.new.float[3](modules.crosshair.data.enemy_color[1] / 255, modules.crosshair.data.enemy_color[2] / 255, modules.crosshair.data.enemy_color[3] / 255),
+		distance_color_in = imgui.new.float[3]((modules.crosshair.data.distance_color_in  or {0,255,0})[1] / 255, (modules.crosshair.data.distance_color_in  or {0,255,0})[2] / 255, (modules.crosshair.data.distance_color_in  or {0,255,0})[3] / 255),
+		distance_color_out = imgui.new.float[3]((modules.crosshair.data.distance_color_out or {255,0,0})[1] / 255,(modules.crosshair.data.distance_color_out or {255,0,0})[2] / 255,(modules.crosshair.data.distance_color_out or {255,0,0})[3] / 255),
+		font_name_buf  = imgui.new.char[64](modules.crosshair.data.font_name or 'Arial'),
+		font_size      = imgui.new.int(modules.crosshair.data.font_size or 15),
+		crosshair_size = imgui.new.float(modules.crosshair.data.crosshair_size or 1.0),
+		last_sight_color = nil,
+		distance = nil,
+		currentWeaponRange = nil,
+	},	
+	Scoreboard = {
+		Window = imgui.new.bool(),
+		inputField = imgui.new.char[256](""),
+		show_actions_menu = imgui.new.bool(modules.scoreboard.data.show_actions_menu),
+		colored_id = imgui.new.bool(modules.scoreboard.data.colored_id),
+		colored_nickname = imgui.new.bool(modules.scoreboard.data.colored_nickname),
+		colored_score = imgui.new.bool(modules.scoreboard.data.colored_score),
+		colored_ping = imgui.new.bool(modules.scoreboard.data.colored_ping),
+		call_checker = false
+	},
+	CommandStop = {
+		Window = imgui.new.bool()
+	},
+	CommandPause = {
+		Window = imgui.new.bool()
+	},
+	LeaderFastMenu = {
+		Window = imgui.new.bool(),
+		player_id = nil
+	},
+	FastMenu = {
+		Window = imgui.new.bool(),
+		player_id = nil
+	},
+	PieMenu = {
+		Window = imgui.new.bool(),
+		editor = {
+			icon = imgui.new.char[32](""),
+			name = imgui.new.char[32](""),
+			action = imgui.new.char[256](""),
+			selector = imgui.new.int(0),
+			current = nil,
+			history = {},
+			title = '',
+			item = nil
+		}
+	},
+	FastMenuButton = {
+		Window = imgui.new.bool()
+	},
+	FastMenuPlayers = {
+		Window = imgui.new.bool()
+	},
+	Icons = {
+		keys = {},
+		input = imgui.new.char[32](""),
+	},
+	Edgo = {
+		Window = imgui.new.bool(false),
+		Online = imgui.new.bool(true),
+		id_buf = imgui.new.char[16](""), nick_buf = imgui.new.char[64](""),
+		year_buf = imgui.new.char[8](""), org_buf = imgui.new.char[64](""),
+		rank_buf = imgui.new.char[64](""), phone_buf = imgui.new.char[16](""),
+		status_buf = imgui.new.char[32](""),
+		badge = { active = false, closing = false, target_id = -1, match_nick = "", target_color = nil, display_name = "", mode = "badge", phase = "phone", order = nil, org_pos = 0, last_active_time = 0, retry_count = 0, full_org_name = "...", result_org = "...", found = false, result = nil },
+		history = { active = false, finished = false, waiting_result = false, got = nil, count = 0, token = "", display_name = "", result_time = 0 },
+		last_history_check = 0,
+		queue = { active = false, type = "", payload = {}, timestamp = 0 },
+		rp_queue = {}, cmd_queue = {}, last_send = 0, RP_CD = 3000, last_rp = 0,
+		PACKET_APP32 = {220, 18, 14, 0, 108,97,117,110,99,104,101,100,65,112,112,124,51,50, 0,0,0,0},
+		pending_number = nil, _num_token = 0, last_unsu = nil,
+		unsu_choice = imgui.new.int(0), unsu_id_buf = imgui.new.char[16](""),
+		SKIP_LIST = {"Список собеседований", "Таксисты", "Механики", "Дальнобойщики", "Налоговая служба", "Адвокаты", "Фермеры", "Развозчики продуктов"},
+		ORGS = {
+			{name = 'ЛСПД', index = 1, color = '0049FF'},
+			{name = 'ЛССД', index = 2, color = '0049FF'},
+			{name = 'СФПД', index = 3, color = '004EFF'},
+			{name = 'ЛСМЦ', index = 4, color = 'FF7E7E'},
+			{name = 'ЛВМЦ', index = 5, color = 'FF7E7E'},
+			{name = 'Правительство', index = 6, color = 'CCFF00'},
+			{name = 'FCC', index = 7, color = 'BDBDBD'},
+			{name = 'СФМЦ', index = 8, color = 'FF7E7E'},
+			{name = 'ДТЛ', index = 9, color = 'FF6633'},
+			{name = 'РЛС', index = 10, color = 'FF8000'},
+			{name = 'АНГ', index = 11, color = '996633'},
+			{name = 'ЛВМПД', index = 12, color = '0049FF'},
+			{name = 'РЛВ', index = 13, color = 'FF8000'},
+			{name = 'РСФ', index = 14, color = 'FF8000'},
+			{name = 'ВНГ', index = 15, color = '996633'},
+			{name = 'Страховая Компания', index = 31, color = '084F6B'},
+			{name = 'БЖМЦ', index = 33, color = 'FF7E7E'},
+			{name = 'Пожарный Департамент', index = 34, color = 'FF4500'},
+		},
+		ORG_TAG = {
+			['Полиция ЛС'] = 'LSPD', 
+			['Полиция LV'] = 'LVMPD', 
+			['Полиция SF'] = 'SFPD', 
+			['Полиция VC'] = 'VCPD',
+			['RCSD'] = 'LSSD', 
+			['Тюрьма Строгого режима'] = 'FCC', 
+			['Армия SF'] = 'VNG', 
+			['Армия LS'] = 'ANG',
+			['Radio LS'] = 'RLS', 
+			['Radio SF'] = 'RSF', 
+			['Radio LV'] = 'RLV',
+			['Больница LS'] = 'LSMC',
+			['Больница SF'] = 'SFMC', 
+			['Больница LV'] = 'LVMC', 
+			['Больница VC'] = 'VCMC',
+			['Больница Jefferson'] = 'JFMC', 
+			['Правительство'] = 'GOV', 
+			['Лицензеры'] = 'DTL', 
+			['Пожарный департамент'] = 'FD', 
+			['Страховая компания'] = 'IC', 
+		},
+	},
+	InfraredVision = false,
+	NightVision = false,
+	INPUT = {
+		CURSOR_POS = 0,
+		SELECTION_START = 0,
+		SELECTION_END = 0,
+		USER_MOVED_CURSOR = false,
+	},
+	FONT = nil,
+	DEBUG = false,
+	MOBILE_PLAYER_ID = -1,
+	RPDelay = {},
+	ClickerDelay = {},
+}
+local BIND_DAYS = { [0]="Воскресенье", [1]="Понедельник", [2]="Вторник", [3]="Среда", [4]="Четверг", [5]="Пятница", [6]="Суббота" }
+local BIND_MONTHS = { "Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь" }
+local BIND_MONTHS_GEN = { "января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря" }
+local function get_forensic_settings(index)
+	local t = modules.forensic.data.types[index]
+	return t.text, modules.forensic.data.default_wait
+end
+local function run_forensic_rp(index)
+    if MODULE.Binder.state.isActive then
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+        play_sound()
+        return false
+    end
+    
+    local text, waiting_time = get_forensic_settings(index)
+    local forensic_name = modules.forensic.data.types
+    
+    MODULE.Binder.state.isActive = true
+    MODULE.Binder.state.isPause = false
+    MODULE.Binder.state.isStop  = false
+    local chat_cmd = (type(get_custom_cmd) == 'function' and get_custom_cmd('forensic')) or 'forensic'
+    if type(text) == 'string' and text:find('&.+&') and type(info_stop_command) == 'function' then
+        info_stop_command()
+    end
+    local lines = {}
+    for raw in (text or ''):gmatch('[^&]+') do
+        local l = raw:match('^%s*(.-)%s*$')
+        if l and l ~= '' then table.insert(lines, l) end
+    end
+    lua_thread.create(function()
+        for line_index, line in ipairs(lines) do
+            if MODULE.Binder.state.isStop then
+                MODULE.Binder.state.isStop  = false
+                MODULE.Binder.state.isActive = false
+                if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отыгровка экспертизы «' .. (forensic_name or chat_cmd) .. '» успешно остановлена!', message_color)
+                return
+            end
+            if line == '{pause}' then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Экспертиза «' .. (forensic_name or chat_cmd) .. '» поставлена на паузу!', message_color)
+                if not IS_MOBILE then
+                    if hotkey_ok and settings.general.bind_action then
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для продолжения нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_action) .. ' {ffffff}или вызовите курсор открыв чат (T/F6)', message_color)
+                    else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для продолжения вызовите курсор открыв чат (T/F6)', message_color)
+                    end
+                end
+                MODULE.Binder.state.isPause = true
+                if type(MODULE.CommandPause) == 'table' then MODULE.CommandPause.Window[0] = true end
+                while MODULE.Binder.state.isPause do wait(0) end
+                if not MODULE.Binder.state.isStop then
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Продолжаю отыгровку экспертизы «' .. (forensic_name or chat_cmd) .. '».', message_color)
+                end
+            elseif line:find('^{wait%((%d+)%)%}$') then
+                wait(tonumber(line:match('^{wait%((%d+)%)%}$')))
+            else
+                if line_index ~= 1 then
+                    local total_wait_ms = (waiting_time or 2) * 1000
+                    local waited = 0
+                    while waited < total_wait_ms do
+                        if MODULE.Binder.state.isStop then break end
+                        if MODULE.DEBUG then
+                            local remaining = math.max(0, total_wait_ms - waited) / 1000
+                            printStringNow(string.format('%d/%d - %.1fs', line_index - 1, #lines, remaining), 105)
+                        end
+                        wait(100); waited = waited + 100
+                    end
+                end
+                if not MODULE.Binder.state.isStop then
+                    for tag, replacement in pairs(MODULE.Binder.tag) do
+                        if line:find('{' .. tag .. '}') then
+                            local ok, result = pcall(string.gsub, line, '{' .. tag .. '}', function() return replacement() end)
+                            if ok then line = result end
+                        end
+                    end
+                    if MODULE.DEBUG then sampAddChatMessage('[SendChat] {ffffff}' .. line, message_color) end
+                    sampSendChat(line)
+                end
+            end
+        end
+        MODULE.Binder.state.isActive = false
+        if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end
+    end)
+    return true
+end
+local function declension(n, f1, f2, f5)
+	local m100, m10 = n % 100, n % 10
+	if m100 >= 11 and m100 <= 14 then return f5 end
+	if m10 == 1 then return f1 end
+	if m10 >= 2 and m10 <= 4 then return f2 end
+	return f5
+end
+local function format_duration_words(total)
+	total = math.floor(tonumber(total) or 0)
+	if total < 0 then total = 0 end
+	local h = math.floor(total / 3600)
+	local m = math.floor((total % 3600) / 60)
+	local s = total % 60
+	if h > 0 then
+		return string.format("%d %s %d %s %d %s",
+			h, declension(h, "час",     "часа",    "часов"),
+			m, declension(m, "минуту",  "минуты",  "минут"),
+			s, declension(s, "секунду", "секунды", "секунд"))
+	elseif m > 0 then
+		return string.format("%d %s %d %s",
+			m, declension(m, "минуту",  "минуты",  "минут"),
+			s, declension(s, "секунду", "секунды", "секунд"))
+	else
+		return string.format("%d %s", s, declension(s, "секунду", "секунды", "секунд"))
+	end
+end
+local function get_greeting_word()
+	local h = tonumber(os.date('%H'))
+	if h >= 5 and h < 12 then return 'Доброе утро'
+	elseif h >= 12 and h < 18 then return 'Добрый день'
+	elseif h >= 18 and h < 23 then return 'Добрый вечер'
+	else return 'Доброй ночи' end
+end
+local function get_cardinal_word()
+	local dirs = { 'север','северо-восток','восток','юго-восток','юг','юго-запад','запад','северо-запад' }
+	local heading = getCharHeading(PLAYER_PED) or 0
+	local idx = math.floor(((heading % 360) / 45) + 0.5) % 8 + 1
+	return dirs[idx]
+end
+local function cfg_tag(key, fallback)
+	local v = settings.general[key]
+	if v == nil or v == '' then return fallback or '[тэг не задан]' end
+	return v
+end
+MODULE.Patrool.ImItemsMark = imgui.new['const char*'][#MODULE.Patrool.marks](MODULE.Patrool.marks)
+MODULE.Patrool.ImItemsCode = imgui.new['const char*'][#MODULE.Patrool.codes](MODULE.Patrool.codes)
+MODULE.Post.ImItemsCode = imgui.new['const char*'][#MODULE.Post.codes](MODULE.Post.codes)
+MODULE.Binder.ImItems = imgui.new['const char*'][#MODULE.Binder.item_list](MODULE.Binder.item_list)
+MODULE.Binder.tags = {
+    {
+        key = "my_id",
+        description = "Ваш ID",
+        category = "Игрок",
+		mode = 'all',
+        func = function()
+			if IS_MOBILE then
+				return MODULE.MOBILE_PLAYER_ID
+			else
+				return select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			end
+        end
+    },
+	{
+		key = "my_ru_nick",
+		description = "Ваше Имя Фамилия",
+		category = "Игрок",
+		mode = "all",
+		func = function() return modules.player.data.name_surname end
+	},
+    {
+        key = "my_nick",
+        description = "Ваш никнейм",
+        category = "Игрок",
+		mode = 'all',
+        func = function()
+            return modules.player.data.nick
+        end
+    },
+	{
+		key = "my_rp_nick",
+		description = "Ваш никнейм без _",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			return modules.player.data.nick:gsub('_',' ')
+		end
+	},
+	{
+		key = "my_doklad_nick",
+		description = "Ваше И.Фамилия по форме",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			local nick = modules.player.data.nick
+			local name, surname = nick:match('^(.+)%_(.+)$')
+			if name and surname then
+				return name:sub(1,1).."."..surname
+			end
+			return nick
+		end
+	},
+	{
+		key = "my_name",
+		description = "Ваше имя",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			return (modules.player.data.nick:match('^(.-)_') or modules.player.data.nick)
+		end
+	},
+	{
+		key = "my_surname",
+		description = "Ваша фамилия",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			return (modules.player.data.nick:match('_(.+)$') or '')
+		end
+	},
+	{
+		key = "sex",
+		description = "Символ 'а' если женский пол",
+		category = "Игрок",
+		mode = "all",
+		func = function()
+			return (modules.player.data.sex == 'Женщина') and 'a' or ''
+		end
+	},
+	-- Фракция
+	{
+		key = "fraction",
+		description = "Название вашей фракции",
+		category = "Фракция",
+		mode = "all",
+		func = function() return modules.player.data.fraction end
+	},
+	{
+		key = "fraction_rank",
+		description = "Название вашего ранга",
+		category = "Фракция",
+		mode = "all",
+		func = function() return modules.player.data.fraction_rank end
+	},
+	{
+		key = "fraction_rank_number",
+		description = "Номер вашего ранга",
+		category = "Фракция",
+		mode = "all",
+		func = function() return modules.player.data.fraction_rank_number end
+	},
+	{
+		key = "fraction_tag",
+		description = "Тег вашей фракции",
+		category = "Фракция",
+		mode = "all",
+		func = function() return modules.player.data.fraction_tag end
+	},
+	-- Общие
+	{ 
+		key = "get_greeting", 
+		description = "Приветствие по времени суток", 
+		category = "Общее", 
+		mode = "all",
+		func = function() return get_greeting_word() end },
+	{
+		key = "get_nick({id})",
+		description = "Никнейм игрока из ID",
+		category = "Общее",
+		mode = "all",
+		func = function() return '' end
+	},
+	{
+		key = "get_rp_nick({id})",
+		description = "Никнейм игрока из ID без _",
+		category = "Общее",
+		mode = "all",
+		func = function() return '' end
+	},
+	{
+		key = "get_ru_nick({id})",
+		description = "Имя Фамилия игрока из ID",
+		category = "Общее",
+		mode = "all",
+		func = function() return '' end
+	},
+	{
+		key = "get_cardinal",
+		description = "Сторона света по направлению взгляда",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return get_cardinal_word()
+		end
+	},
+	-- Время/дата
+	{
+		key = "get_dd",
+		description = "День (число)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%d')
+		end
+	},
+	{
+		key = "get_mm",
+		description = "Месяц (число)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%m')
+		end
+	},
+	{
+		key = "get_YYYY",
+		description = "Год (4 цифры)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%Y')
+		end
+	},
+	{
+		key = "get_YY",
+		description = "Год (2 цифры)",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%y')
+		end
+	},
+	{
+		key = "get_H",
+		description = "Часы",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%H')
+		end
+	},
+	{
+		key = "get_M",
+		description = "Минуты",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%M')
+		end
+	},
+	{
+		key = "get_S",
+		description = "Секунды",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%S')
+		end
+	},
+	{
+		key = "get_datetime",
+		description = "Дата и время вместе",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			return os.date('%d %m %Y, %H:%M:%S')
+		end
+	},
+	{
+		key = "get_time",
+		description = "Текущее время",
+		category = "Общее",
+		mode = "all",
+		func = function() return os.date("%H:%M:%S") end
+	},
+	{
+		key = "get_date",
+		description = "Текущая дата",
+		category = "Общее",
+		mode = "all",
+		func = function() return os.date("%d.%m.%Y") end
+	},
+	{
+		key = "get_time_hm",
+		description = "Текущее время ЧЧ:ММ",
+		category = "Общее",
+		mode = "all",
+		func = function() return os.date("%H:%M") end
+	},
+	{
+		key = "get_day_week",
+		description = "Сегодняшний день недели",
+		category = "Общее",
+		mode = "all",
+		func = function() return BIND_DAYS[tonumber(os.date("%w"))] or os.date("%A") end
+	},
+	{
+		key = "get_month_name",
+		description = "Текущий месяц (именительный)",
+		category = "Общее",
+		mode = "all",
+		func = function() return BIND_MONTHS[tonumber(os.date("%m"))] or os.date("%B") end
+	},
+	{
+		key = "get_date_human",
+		description = "Дата словами: 06 августа 2026",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			local m = tonumber(os.date("%m"))
+			return os.date("%d ") .. (BIND_MONTHS_GEN[m] or "") .. os.date(" %Y")
+		end
+	},
+	{
+		key = "get_server_number",
+		description = "Номер текущего сервера",
+		category = "Общее",
+		mode = "all",
+		func = function() return getServerNumber() end
+	},
+	{
+		key = "get_server_name",
+		description = "Название текущего сервера",
+		category = "Общее",
+		mode = "all",
+		func = function() return sampGetCurrentServerName() end
+	},
+	{
+		key = "get_rank",
+		description = "Выбранный ранг",
+		category = "Общее",
+		mode = "all",
+		func = function() return MODULE.GiveRank.number[0] end
+	},
+	{
+		key = "get_square",
+		description = "Текущий квадрат",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			local KV = {[1]="А",[2]="Б",[3]="В",[4]="Г",[5]="Д",[6]="Ж",[7]="З",[8]="И",[9]="К",[10]="Л",[11]="М",[12]="Н",[13]="О",[14]="П",[15]="Р",[16]="С",[17]="Т",[18]="У",[19]="Ф",[20]="Х",[21]="Ц",[22]="Ч",[23]="Ш",[24]="Я"}
+			local X,Y,Z = getCharCoordinates(playerPed)
+			X = math.ceil((X+3000)/250)
+			Y = math.ceil((Y*-1+3000)/250)
+			Y = KV[Y]
+			if Y then return (Y .. '-' .. X) else return X end
+		end
+	},
+	{
+		key = "get_area",
+		description = "Текущий район",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			local x,y,z = getCharCoordinates(PLAYER_PED)
+			return get_area(x,y,z)
+		end
+	},
+	{
+		key = "get_city",
+		description = "Текущий город",
+		category = "Общее",
+		mode = "all",
+		func = function()
+			local city = {[0]="Вне города",[1]="Лос Сантос",[2]="Сан Фиерро",[3]="Лас Вентурас"}
+			return city[getCityPlayerIsIn(PLAYER_PED)]
+		end
+	},
+	-- ТРАНСПОРТ
+	{
+		key = "get_nearest_car",
+		description = "Ближайший т/с",
+		category = "Транспорт",
+		mode = "all",
+		func = function() return get_near_car() end
+	},
+	{
+		key = "get_drived_car",
+		description = "Ближайший т/с с водителем",
+		category = "Транспорт",
+		mode = "all",
+		func = function() return get_near_car(true) end
+	},
+	{
+		key = "get_car_units",
+		description = "Напарники в вашем т/с",
+		category = "Транспорт",
+		mode = "all",
+		func = function()
+			if not doesCharExist(PLAYER_PED) or not isCharInAnyCar(PLAYER_PED) then return 'Нету' end
+			local ok_car, car = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+			if not ok_car or not car then return 'Нету' end
+			local ok_n, a, b = pcall(getNumberOfPassengers, car)
+			if not ok_n then return 'Нету' end
+			local count = tonumber(b or a) or 0
+			if count <= 0 then return 'Нету' end
+			local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			local my_passengers = {}
+			local ok_all, all = pcall(getAllChars)
+			if not ok_all or type(all) ~= 'table' then return 'Нету' end
+			for _, v in ipairs(all) do
+				if doesCharExist(v) then
+					local res, id = sampGetPlayerIdByCharHandle(v)
+					if res and id and id ~= my_id and sampIsPlayerConnected(id) then
+						if isCharInAnyCar(v) then
+							local ok_vc, vc = pcall(storeCarCharIsInNoSave, v)
+							if ok_vc and vc == car then
+								table.insert(my_passengers, id)
+							end
+						end
+					end
+				end
+			end
+			if #my_passengers == 0 then return 'Нету' end
+			local units = ''
+			for _, idd in ipairs(my_passengers) do
+				local nickname = sampGetPlayerNickname(idd)
+				if nickname then
+					local last_name = nickname:match(".*_(.*)")
+					if last_name then
+						units = units .. nickname:sub(1, 1) .. "." .. last_name .. ' '
+					else
+						units = units .. nickname .. ' '
+					end
+				end
+			end
+			return units ~= '' and units or 'Нету'
+		end
+	},
+	{
+		key = "switchCarSiren",
+		description = "Переключить мигалки",
+		category = "Транспорт",
+		mode = "all",
+		no_preview = true,
+		func = function()
+			if not doesCharExist(PLAYER_PED) or not isCharInAnyCar(PLAYER_PED) then return "Нету" end
+			local ok_car, car = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+			if not ok_car or not car then return "Нету" end
+			if getDriverOfCar(car) == PLAYER_PED then
+				switchCarSiren(car, not isCarSirenOn(car))
+				return '/me ' .. (isCarSirenOn(car) and 'включает' or 'выключает') .. ' мигалки'
+			else
+				return (isCarSirenOn(car) and 'Выключи' or 'Врубай') .. ' мигалки!'
+			end
+		end
+	},
+	-- Пост
+	{
+		key = "get_post_name",
+		description = "Название вашего поста",
+		category = "Пост",
+		mode = "all",
+		func = function() return MODULE.Post.name end
+	},
+	{
+		key = "get_post_code",
+		description = "Ваш текущий тен-код",
+		category = "Пост",
+		mode = "all",
+		func = function() return MODULE.Post.code end
+	},
+	{
+		key = "get_post_time",
+		description = "Время на посту",
+		category = "Пост",
+		mode = "all",
+		func = function()
+			local hours = math.floor(MODULE.Post.time / 3600)
+			local minutes = math.floor(( MODULE.Post.time % 3600) / 60)
+			local secs = MODULE.Post.time % 60
+			if hours > 0 then
+				return string.format("%02d:%02d:%02d", hours, minutes, secs)
+			else
+				return string.format("%02d:%02d", minutes, secs)
+			end
+		end
+	},
+	{
+		key = "get_post_format_time",
+		description = "Время на посту словами",
+		category = "Пост",
+		mode = "all",
+		func = function() return format_duration_words(MODULE.Post.time) end
+	},
+	-- Полиция
+	{
+		key = "get_form_su",
+		description = "Запрос на выдачу розыска",
+		category = "Полиция",
+		mode = "police",
+		func = function() return MODULE.SumMenu.form_su end
+	},
+	{
+		key = "get_patrool_mark",
+		description = "Макрировка патруля",
+		category = "Полиция",
+		mode = "police",
+		func = function()
+			local is_lssd = (modules.player.data.fraction == "РКШД" or modules.player.data.fraction_tag == "РКШД" or modules.player.data.fraction == "LSSD" or modules.player.data.fraction_tag == "LSSD")
+			if is_lssd then
+				return MODULE.Patrool.mark
+			else
+				return MODULE.Patrool.mark .. '-' .. select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			end
+		end
+	},
+	{
+		key = "get_patrool_code",
+		description = "Ваш текущий тен-код",
+		category = "Полиция",
+		mode = "police",
+		func = function() return MODULE.Patrool.code end
+	},
+	{
+		key = "get_patrool_time",
+		description = "Время патруля",
+		category = "Полиция",
+		mode = "police",
+		func = function()
+			local hours = math.floor(MODULE.Patrool.time / 3600)
+			local minutes = math.floor((MODULE.Patrool.time % 3600) / 60)
+			local secs = MODULE.Patrool.time % 60
+			if hours > 0 then
+				return string.format("%02d:%02d:%02d", hours, minutes, secs)
+			else
+				return string.format("%02d:%02d", minutes, secs)
+			end
+		end
+	},
+	{
+		key = "get_patrool_format_time",
+		description = "Время патруля словами",
+		category = "Полиция",
+		mode = "police",
+		func = function() return format_duration_words(MODULE.Patrool.time) end
+	},
+	-- БОЛЬНИЦА
+	{
+		key = "get_price_heal",
+		description = "Цена лечения игрока",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			if sampGetCurrentServerName():find("Vice City") then
+				return settings.mh.price.heal_vc
+			else
+				return settings.mh.price.heal
+			end
+		end
+	},
+	{
+		key = "get_price_actorheal",
+		description = "Цена лечения охранника",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			if u8(sampGetCurrentServerName()):find("Vice City") then
+				return settings.mh.price.healactor_vc
+			else
+				return settings.mh.price.healactor
+			end
+		end
+	},
+	{
+		key = "get_price_medosm",
+		description = "Цена медосмотра",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.medosm
+		end
+	},
+	{
+		key = "get_price_mticket",
+		description = "Цена военного билета",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.mticket
+		end
+	},
+	{
+		key = "get_price_healbad",
+		description = "Цена лечения от ломки",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.healbad
+		end
+	},
+	{
+		key = "get_price_ant",
+		description = "Цена антибиотиков",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.ant
+		end
+	},
+	{
+		key = "get_price_recept",
+		description = "Цена рецепта",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.recept
+		end
+	},
+	{
+		key = "get_price_med7",
+		description = "Цена медкарты (7 дней)",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.med7
+		end
+	},
+	{
+		key = "get_price_med14",
+		description = "Цена медкарты (14 дней)",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.med14
+		end
+	},
+	{
+		key = "get_price_med30",
+		description = "Цена медкарты (30 дней)",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.med30
+		end
+	},
+	{
+		key = "get_price_med60",
+		description = "Цена медкарты (60 дней)",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return settings.mh.price.med60
+		end
+	},
+	{
+		key = "get_medcard_days",
+		description = "Выбранный срок медкарты",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return MODULE.MedCard.days[0]
+		end
+	},
+	{
+		key = "get_medcard_status",
+		description = "Статус медкарты",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return MODULE.MedCard.status[0]
+		end
+	},
+	{
+		key = "get_medcard_price",
+		description = "Цена выбранной медкарты",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			if MODULE.MedCard.days[0] == 0 then
+				return settings.mh.price.med7
+			elseif MODULE.MedCard.days[0] == 1 then
+				return settings.mh.price.med14
+			elseif MODULE.MedCard.days[0] == 2 then
+				return settings.mh.price.med30
+			elseif MODULE.MedCard.days[0] == 3 then
+				return settings.mh.price.med60
+			else
+				return 1000
+			end
+		end
+	},
+	{
+		key = "get_recepts",
+		description = "Количество рецептов",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return MODULE.Recept.recepts[0]
+		end
+	},
+	{
+		key = "get_ants",
+		description = "Количество антибиотиков",
+		category = "Больница",
+		mode = "hospital",
+		func = function()
+			return MODULE.Antibiotik.ants[0]
+		end
+	},
+	-- Лицензии
+	{
+		key = "get_price_avto1",
+		description = "Цена лицензии авто (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.avto1 end
+	},
+	{
+		key = "get_price_avto2",
+		description = "Цена лицензии авто (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.avto2 end
+	},
+	{
+		key = "get_price_avto3",
+		description = "Цена лицензии авто (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.avto3 end
+	},
+	{
+		key = "get_price_moto1",
+		description = "Цена лицензии мото (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.moto1 end
+	},
+	{
+		key = "get_price_moto2",
+		description = "Цена лицензии мото (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.moto2 end
+	},
+	{
+		key = "get_price_moto3",
+		description = "Цена лицензии мото (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.moto3 end
+	},
+	{
+		key = "get_price_fish1",
+		description = "Цена лицензии рыбалки (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.fish1 end
+	},
+	{
+		key = "get_price_fish2",
+		description = "Цена лицензии рыбалки (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.fish2 end
+	},
+	{
+		key = "get_price_fish3",
+		description = "Цена лицензии рыбалки (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.fish3 end
+	},
+	{
+		key = "get_price_swim1",
+		description = "Цена лицензии плавания (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.swim1 end
+	},
+	{
+		key = "get_price_swim2",
+		description = "Цена лицензии плавания (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.swim2 end
+	},
+	{
+		key = "get_price_swim3",
+		description = "Цена лицензии плавания (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.swim3 end
+	},
+	{
+		key = "get_price_gun1",
+		description = "Цена лицензии оружия (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.gun1 end
+	},
+	{
+		key = "get_price_gun2",
+		description = "Цена лицензии оружия (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.gun2 end
+	},
+	{
+		key = "get_price_gun3",
+		description = "Цена лицензии оружия (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.gun3 end
+	},
+	{
+		key = "get_price_hunt1",
+		description = "Цена лицензии охоты (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.hunt1 end
+	},
+	{
+		key = "get_price_hunt2",
+		description = "Цена лицензии охоты (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.hunt2 end
+	},
+	{
+		key = "get_price_hunt3",
+		description = "Цена лицензии охоты (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.hunt3 end
+	},
+	{
+		key = "get_price_klad1",
+		description = "Цена лицензии на клады (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.klad1 end
+	},
+	{
+		key = "get_price_klad2",
+		description = "Цена лицензии на клады (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.klad2 end
+	},
+	{
+		key = "get_price_klad3",
+		description = "Цена лицензии на клады (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.klad3 end
+	},
+	{
+		key = "get_price_taxi1",
+		description = "Цена лицензии такси (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.taxi1 end
+	},
+	{
+		key = "get_price_taxi2",
+		description = "Цена лицензии такси (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.taxi2 end
+	},
+	{
+		key = "get_price_taxi3",
+		description = "Цена лицензии такси (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.taxi3 end
+	},
+	{
+		key = "get_price_mexa1",
+		description = "Цена лицензии механика (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.mexa1 end
+	},
+	{
+		key = "get_price_mexa2",
+		description = "Цена лицензии механика (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.mexa2 end
+	},
+	{
+		key = "get_price_mexa3",
+		description = "Цена лицензии механика (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.mexa3 end
+	},
+	{
+		key = "get_price_fly1",
+		description = "Цена лицензии пилота (1)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.fly1 end
+	},
+	{
+		key = "get_price_fly2",
+		description = "Цена лицензии пилота (2)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.fly2 end
+	},
+	{
+		key = "get_price_fly3",
+		description = "Цена лицензии пилота (3)",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.fly3 end
+	},
+	{
+		key = "get_price_train1",
+		description = "Цена лицензии машиниста",
+		category = "Лицензии",
+		mode = "lc",
+		func = function() return settings.lc.price.train1 end
+	},
+}
+for _, tag in ipairs(MODULE.Binder.tags) do MODULE.Binder.tag[tag.key] = tag.func end
+-----------------------------------------[ MoonMonet & Colors ]-------------------------------------
+function rgbToHex(rgb)
+	return string.format("%02X%02X%02X", bit.band(bit.rshift(rgb, 16), 0xFF), bit.band(bit.rshift(rgb, 8), 0xFF), bit.band(rgb, 0xFF))
+end
+function color_to_float3(u32color)
+    local temp = imgui.ColorConvertU32ToFloat4(u32color)
+    return temp.z, temp.y, temp.x
+end
+if settings.general.helper_theme == 0 and monet_ok then
+	message_color = settings.general.moonmonet_theme_color
+	message_color_hex = '{' ..  rgbToHex(settings.general.moonmonet_theme_color) .. '}'
+	MODULE.Main.msgcolor[0], MODULE.Main.msgcolor[1], MODULE.Main.msgcolor[2] = color_to_float3(settings.general.moonmonet_theme_color)
+	MODULE.Main.mmcolor[0], MODULE.Main.mmcolor[1], MODULE.Main.mmcolor[2] = color_to_float3(settings.general.moonmonet_theme_color)
+else
+	if settings.general.helper_theme == 0 then
+		print('Библиотека MoonMonet не найдена, используется стандартная Dark Theme')
+		settings.general.helper_theme = 1
+		MODULE.Main.theme[0] = 1
+	end
+	message_color = settings.general.message_color
+	message_color_hex = '{' ..  rgbToHex(settings.general.message_color) .. '}'
+	MODULE.Main.msgcolor[0], MODULE.Main.msgcolor[1], MODULE.Main.msgcolor[2] = color_to_float3(settings.general.message_color)
+	MODULE.Main.mmcolor[0], MODULE.Main.mmcolor[1], MODULE.Main.mmcolor[2] = color_to_float3(settings.general.moonmonet_theme_color)
+	save_settings()
+end
+-------------------------------------------[ Mimgui Hotkey ]----------------------------------------
+local hotkeys = {}
+if hotkey_ok and not isMode('') then
+	hotkey.Text.NoKey = u8'< click and select keys >'
+	hotkey.Text.WaitForKey = u8'< wait keys >'
+	function getNameKeysFrom(keys)
+		local result, keys = pcall(decodeJson, keys)
+		if not result or type(keys) ~= 'table' then return '' end
+		local keysStr = {}
+		for _, keyId in ipairs(keys) do
+			local keyName = vkeys_ok and vkeys.id_to_name(keyId) or ''
+			table.insert(keysStr, keyName)
+		end
+		return table.concat(keysStr, ' + ') or ''
+	end
+	function loadHotkeys()
+		MainMenuHotKey = hotkey.RegisterHotKey('Open MainMenu', false, decodeJson(settings.general.bind_mainmenu), function()
+			MODULE.Main.Window[0] = not MODULE.Main.Window[0]
+		end)
+		CommandStopHotKey = hotkey.RegisterHotKey('Stop Command', false, decodeJson(settings.general.bind_command_stop), function() 
+			sampProcessChatInput('/stop')
+		end)
+		FastMenuHotKey = hotkey.RegisterHotKey('Open FastMenu', false, decodeJson(settings.general.bind_fastmenu), function() 
+			local valid, ped = getCharPlayerIsTargeting(PLAYER_HANDLE)
+			if valid and doesCharExist(ped) then
+				local result, id = sampGetPlayerIdByCharHandle(ped)
+				if result and id ~= -1 and not MODULE.LeaderFastMenu.Window[0] then
+					show_fast_menu(id)
+				end
+			end
+		end)
+		LeaderFastMenuHotKey = hotkey.RegisterHotKey('Open LeaderFastMenu', false, decodeJson(settings.general.bind_leader_fastmenu), function() 
+			if modules.player.data.fraction_rank_number >= 9 then 
+				local valid, ped = getCharPlayerIsTargeting(PLAYER_HANDLE)
+				if valid and doesCharExist(ped) then
+					local result, id = sampGetPlayerIdByCharHandle(ped)
+					if result and id ~= -1 and not MODULE.FastMenu.Window[0] then
+						show_leader_fast_menu(id)
+					end
+				end
+			end
+		end)
+		ActionHotKey = hotkey.RegisterHotKey('Action Key', false, decodeJson(settings.general.bind_action), function()
+			if MODULE.Binder.state.isPause and MODULE.CommandPause.Window[0] then
+				MODULE.Binder.state.isPause = false
+				MODULE.CommandPause.Window[0] = false
+			elseif modules.player.data.fraction_rank_number >= 9 and MODULE.GiveRank.Window[0] then
+				MODULE.GiveRank.Window[0] = false
+			elseif MODULE.MedCard.Window[0] then
+				MODULE.MedCard.Window[0] = false
+			elseif MODULE.Recept.Window[0] then
+				MODULE.Recept.Window[0] = false
+			elseif MODULE.Antibiotik.Window[0] then
+				MODULE.Antibiotik.Window[0] = false
+			elseif MODULE.HealChat.bool and MODULE.HealChat.player_id and not sampIsCursorActive() then
+				find_and_use_command("/heal {id}", MODULE.HealChat.player_id)
+				MODULE.HealChat.bool = false
+				MODULE.HealChat.player_id = nil
+			end
+		end)
+		for _, command in ipairs(modules.commands.data.commands.my) do
+			createHotkeyForCommand(command)
+		end
+		for _, command in ipairs(modules.commands.data.commands_manage.my) do
+			createHotkeyForCommand(command)
+		end
+	end
+	function createHotkeyForCommand(command)
+		local hotkeyName = command.cmd .. "HotKey"
+		if hotkeys[hotkeyName] then
+			hotkey.RemoveHotKey(hotkeyName)
+		end
+		if command.arg == "" and command.bind ~= nil and command.bind ~= '{}' and command.bind ~= '[]' then
+			hotkeys[hotkeyName] = hotkey.RegisterHotKey(hotkeyName, false, decodeJson(command.bind), function()
+				if not sampIsCursorActive() then sampProcessChatInput('/' .. command.cmd) end
+			end)
+			print('Создан хоткей для команды /' .. command.cmd .. ' на клавишу ' .. getNameKeysFrom(command.bind))
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Создан хоткей для команды ' .. message_color_hex .. '/' .. command.cmd .. ' {ffffff}на клавишу '  .. message_color_hex .. getNameKeysFrom(command.bind), message_color)
+		end
+	end
+	addEventHandler('onWindowMessage', function(msg, key, lparam)
+		if msg == 641 or msg == 642 or lparam == -1073741809 then hotkey.ActiveKeys = {} end
+		if msg == 0x0005 then hotkey.ActiveKeys = {} end
+	end)
+end
+----------------------------------------------[ RP WEAPON  ]------------------------------------------
+function initialize_weapon()
+	local isFemale = (modules.player.data.sex == "Женщина")
+	local data = modules.weapon.data
+	data.byId = {}
+    data.gunActions = {on = {}, off = {}, partOn = {}, partOff = {}}
+    for i, weapon in pairs(data.rp_weapon) do
+        local rpTakeType = data.rpTakeNames[weapon.rpTake]
+		local id = weapon.id
+		data.byId[id] = weapon
+        data.gunActions.partOn[id] = rpTakeType[1]
+        data.gunActions.partOff[id] = rpTakeType[2]
+        if id == 3 or (id > 15 and id < 19) or (id == 90 or id == 91) then
+            data.gunActions.on[id] = isFemale and "сняла" or "снял"
+        else
+            data.gunActions.on[id] = isFemale and "достала" or "достал"
+        end
+        if id == 3 or (id > 15 and id < 19) or (id > 38 and id < 41) or (id == 90 or id == 91) then
+            data.gunActions.off[id] = isFemale and "повесила" or "повесил"
+        else
+           	data.gunActions.off[id] = isFemale and "убрала" or "убрал"
+        end
+    end
+end
+function get_name_weapon(id)
+    if modules.weapon.data and modules.weapon.data.byId and modules.weapon.data.byId[id] then
+        return modules.weapon.data.byId[id].name
+    end
+    return "оружие"
+end
+function isExistsWeapon(id)
+    return modules.weapon.data.byId[id] ~= nil
+end
+function isEnableWeapon(id)
+	local w = modules.weapon.data.byId[id]
+	return w and w.enable or false
+end
+function handleNewWeapon(weaponId)
+    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обнаружено новое оружие с ID ' .. message_color_hex .. weaponId .. '{ffffff}. Ему автоматически назначено имя "оружие" и расположение "спина"', message_color)
+    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Изменить название или расположение оружия можно через настройки функций', message_color)
+    table.insert(modules.weapon.data.rp_weapon, {id = weaponId, name = "оружие", enable = true, rpTake = 1})
+	save_module('weapon')
+    initialize_weapon()
+end
+function processWeaponChange(oldGun, nowGun)
+	if not isExistsWeapon(oldGun) then handleNewWeapon(oldGun) end
+	if not isExistsWeapon(nowGun) then handleNewWeapon(nowGun) end
+    if not modules.weapon.data.gunActions.off[oldGun] or not modules.weapon.data.gunActions.on[nowGun] then
+        sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Инициализация оружия...', message_color)
+		initialize_weapon()
+		return
+    end
+    local actions = modules.weapon.data.gunActions
+    if oldGun == 0 and nowGun == 0 then
+        return
+    elseif oldGun == 0 and not isEnableWeapon(nowGun) then
+        return
+    elseif nowGun == 0 and not isEnableWeapon(oldGun) then
+        return
+    elseif not isEnableWeapon(oldGun) and isEnableWeapon(nowGun) then
+        sampSendChat(string.format("/me %s %s %s", actions.on[nowGun], get_name_weapon(nowGun), actions.partOn[nowGun]))
+    elseif isEnableWeapon(oldGun) and not isEnableWeapon(nowGun) then
+        sampSendChat(string.format("/me %s %s %s", actions.off[oldGun], get_name_weapon(oldGun), actions.partOff[oldGun]))
+    elseif oldGun == 0 then
+        sampSendChat(string.format("/me %s %s %s", actions.on[nowGun], get_name_weapon(nowGun), actions.partOn[nowGun]))
+    elseif nowGun == 0 then
+        sampSendChat(string.format("/me %s %s %s", actions.off[oldGun], get_name_weapon(oldGun), actions.partOff[oldGun]))
+    elseif isEnableWeapon(oldGun) and isEnableWeapon(nowGun) then
+		sampSendChat(string.format("/me %s %s %s, после чего %s %s %s",
+			actions.off[oldGun],
+			get_name_weapon(oldGun),
+			actions.partOff[oldGun],
+			actions.on[nowGun],
+			get_name_weapon(nowGun),
+			actions.partOn[nowGun]
+		))
+    end
+end
+------------------------------------------------[ CRUISE ]------------------------------------------
+function cruise_deactivate(reason)
+    local cc = MODULE.CruiseControl
+    local was_active = cc.active or cc.pursuit_active or cc.wait_point or cc.driving
+
+	cc.active           = false
+    cc.pursuit_active   = false
+    cc.pursuit_target_id = -1
+    cc.driving          = false
+    cc.wait_point       = false
+    cc.stuck_t          = 0
+    cc.last_drive_set   = 0
+    cc.last_deactivate_time = os.clock()
+    cc.hud_speed      	= 0
+    cc.hud_start_dist 	= 0
+    cc.hud_last_t     	= 0
+    cc.escape_phase 	= 0
+    cc.phase_start  	= 0
+
+    if cc.point then cc.last_auto_point = { x = cc.point.x, y = cc.point.y } end
+    pcall(clearCharTasks, PLAYER_PED)
+    if isCharInAnyCar(PLAYER_PED) then
+        local ok, car = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+        if ok and car then pcall(taskWarpCharIntoCarAsDriver, PLAYER_PED, car) end
+    end
+    if was_active and reason and reason ~= '' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff} ' .. reason, message_color) end
+    return was_active
+end
+------------------------------------------------[ Variables ]---------------------------------------
+local isUpdateChecked = false
+local _ch_nm = (modules.crosshair and modules.crosshair.data and modules.crosshair.data.font_name) or 'Arial'
+local _ch_sz = (modules.crosshair and modules.crosshair.data and modules.crosshair.data.font_size) or 15
+_G.__crosshair_font = renderCreateFont(_ch_nm, _ch_sz, 1)
+------------------------------------------------[ Functions ]---------------------------------------
+function main()
+    CHAT_PREFIX = '[' .. (settings.general.chat_prefix or 'Arizona Helper') .. ']'
+	if settings.general.piemenu and pie_ok then MODULE.PieMenu.Window[0] = true end
+	local function edgo_lower(s)
+		if type(s) ~= "string" then return "" end
+		return s:rlower()
+	end
+	MODULE.Edgo.lower = edgo_lower
+	local function edgo_is_fbi()
+		if type(isMode) == "function" and isMode("fbi") then return true end
+		local fr, ft = modules.player.data.fraction, modules.player.data.fraction_tag
+		return ft == "ФБР" or fr == "FBI" or fr == "ФБР"
+	end
+	local function edgo_go_phone()
+		local b = MODULE.Edgo.badge
+		b.phase = "phone"; b.order = nil; b.org_pos = 0
+		MODULE.Edgo.sched("open", nil, 0)
+	end
+	local function edgo_go_members_or_phone()
+		local b = MODULE.Edgo.badge
+		if b.use_members then
+			b.phase = "members"; b.last_active_time = os.clock()
+			MODULE.Edgo.send_cmd("/members")
+		else
+			edgo_go_phone()
+		end
+	end	
+	local function edgo_open_app(appId)
+		local str = ('launchedApp|%s'):format(appId)
+		local bs = raknetNewBitStream()
+		raknetBitStreamWriteInt8(bs, 220); raknetBitStreamWriteInt8(bs, 18)
+		raknetBitStreamWriteInt16(bs, #str); raknetBitStreamWriteString(bs, str)
+		raknetBitStreamWriteInt32(bs, 0); raknetSendBitStream(bs); raknetDeleteBitStream(bs)
+	end
+	local function edgo_str(buf) return u8:decode(ffi.string(buf)):gsub("^%s+", ""):gsub("%s+$", "") end
+	local function edgo_num(s) return tonumber(type(s) == "string" and s or tostring(s or "")) end
+	function MODULE.Edgo.collect()
+		return {
+			online = MODULE.Edgo.Online[0], id = edgo_num(edgo_str(MODULE.Edgo.id_buf)),
+			nick = edgo_str(MODULE.Edgo.nick_buf), year = edgo_str(MODULE.Edgo.year_buf),
+			org = edgo_str(MODULE.Edgo.org_buf), rank = edgo_str(MODULE.Edgo.rank_buf),
+			phone = edgo_str(MODULE.Edgo.phone_buf), status = edgo_str(MODULE.Edgo.status_buf),
+		}
+	end
+	function MODULE.Edgo.validate(d)
+		if d.online then
+			if not d.id then return false, 'Введите корректный ID игрока.' end
+			if not sampIsPlayerConnected(d.id) then return false, 'Игрок с ID ' .. d.id .. ' не в сети (режим Online).' end
+		else
+			if d.nick == '' and d.year == '' and d.org == '' and d.rank == '' and d.phone == '' and d.status == '' then
+				return false, 'Режим Offline: заполните хотя бы одно поле.'
+			end
+		end
+		return true
+	end
+	function MODULE.Edgo.target_name(d) return d.online and sampGetPlayerNickname(d.id) .. '[' .. d.id .. ']' or (d.nick ~= '' and d.nick or '(по данным паспорта)') end
+	function MODULE.Edgo.ru_name(d)
+		if d.online then return translate(sampGetPlayerNickname(d.id)) or sampGetPlayerNickname(d.id) end
+		if d.nick:find('[A-Za-z]') and d.nick:find('_') then return translate(d.nick) or d.nick end
+		return d.nick
+	end
+	local function rp_sex()
+		local f = modules.player.data.sex == "Женщина"
+		return (f and "а" or ""), (f and "ла" or "ёл")
+	end
+	function MODULE.Edgo.say(line) table.insert(MODULE.Edgo.rp_queue, { line = line }) end
+	function MODULE.Edgo.done() table.insert(MODULE.Edgo.rp_queue, { done = true }) end
+	local function edgo_send_raw(bytes)
+		local bs = raknetNewBitStream()
+		for i = 1, #bytes do raknetBitStreamWriteInt8(bs, bytes[i]) end
+		raknetSendBitStream(bs); raknetDeleteBitStream(bs)
+	end
+	function MODULE.Edgo.sched(t, payload, delay_ms)
+		local q = MODULE.Edgo.queue
+		q.type = t; q.payload = payload or {}
+		q.timestamp = os.clock() * 1000 + (delay_ms or 0); q.active = true
+	end
+	function MODULE.Edgo.stop_badge(reason)
+		MODULE.Edgo.close_phone()
+		local b = MODULE.Edgo.badge
+		MODULE.Edgo._num_suppress_id = b.target_id
+		MODULE.Edgo._num_suppress_until = os.clock() + 6
+		b.closing = true; b.order = nil; b.org_pos = 0
+		MODULE.Edgo.queue.active = false; MODULE.Edgo.cmd_queue = {}; MODULE.Edgo.rp_queue = {}
+		MODULE.Binder.state.isActive = false
+		lua_thread.create(function() wait(1000); local bb = MODULE.Edgo.badge; bb.active = false; bb.closing = false; bb.phase = "phone" end)
+		if reason then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}' .. reason, message_color) end
+	end
+	function MODULE.Edgo.clean(s) return s:gsub('%{......%}', ''):gsub('<<', ''):gsub('>>', ''):gsub('^%s*(.-)%s*$', '%1') end
+	function MODULE.Edgo.org_tag(name)
+		if not name or name == "" then return name or "-" end
+		if not MODULE.Edgo.ORG_TAG then return name end
+		local low = edgo_lower(name)
+		for k, tag in pairs(MODULE.Edgo.ORG_TAG) do
+			local kl = edgo_lower(k)
+			if kl == low or low:find(kl, 1, true) or kl:find(low, 1, true) then return tag end
+		end
+		return name
+	end
+	local RP_START_LINES = {
+		bodycam_offline = 	'/me загрузил%s в КПК сохранённую запись нательной камеры и передал%s фрагмент на опознание по архиву ЭБГО.',
+		bodycam_online = {
+							'/me достал%s из нательной камеры SD-накопитель и, вставив его в КПК, система запросила объект опознания.',
+							'/me проведя пальцем по экрану, выделил%s лицо человека на фрагменте и передал%s его на опознание в ЭБГО.',
+		},
+		voiced = {
+							'/me выш%s в эфир рации департамента и получил%s запись переговоров.',
+							'/me загрузил%s образец голоса в ЭБГО и запустил%s идентификацию.',
+		},	
+		voice = 			'/me загрузил%s в ЭБГО сохранённый образец голоса и запустил%s поиск совпадений по базе.',
+		unsu =				'/me запросил%s у диспетчера данные о снятии розыска с гражданина и, получив их, запустил%s пробив по базе.',
+		offline = 			'/me вручную ввёл%s в систему имеющиеся данные и запросил%s сверку по архиву ЭБГО.',
+		online = 			'/me открыл%s в системе ЭБГО раздел сотрудников организаций и запустил%s поиск по базе.',
+	}
+	function MODULE.Edgo.rp_start(mode, who, offline)
+		if not settings.mj.edgo_rp_enabled then return end
+		local p, g = rp_sex()
+		MODULE.Edgo.say('/me достал'..p..' из кармана служебный КПК и, включив его, на дисплее отобразилась система "ЭБГО".')
+		local lines
+		if mode == 'bodycam' then lines = offline and RP_START_LINES.bodycam_offline or RP_START_LINES.bodycam_online
+		elseif mode == 'voiced' then lines = RP_START_LINES.voiced
+		elseif mode == 'voice' then lines = RP_START_LINES.voice
+		elseif mode == 'unsu' then lines = RP_START_LINES.unsu
+		else lines = offline and RP_START_LINES.offline or RP_START_LINES.online end
+		
+		if type(lines) == 'table' then
+			for _, line in ipairs(lines) do MODULE.Edgo.say(line:format(p, p)) end
+		else
+			MODULE.Edgo.say(lines:format(p, p))
+		end
+	end
+	local function edgo_init_badge(mode, d)
+		local b = MODULE.Edgo.badge
+		local who = d.online and sampGetPlayerNickname(d.id) .. '[' .. d.id .. ']' or MODULE.Edgo.ru_name(d)
+		b.active = true; b.closing = false; b.mode = mode
+		b.target_id = d.online and d.id or -1
+		b.match_nick = d.online and sampGetPlayerNickname(d.id) or ""
+		b.display_name = who
+		b.target_color = d.online and ("%06X"):format(bit.band(sampGetPlayerColor(d.id), 0xFFFFFF)) or nil
+		b.order = nil; b.org_pos = 0; b.full_org_name = "..."; b.result_org = "..."
+		b.found = false; b.result = nil; b.phone_opened = false
+		b.use_members = edgo_is_fbi(); b.last_active_time = os.clock(); b.retry_count = 0; b.phase = 'leaders'
+		return b, who
+	end
+	function MODULE.Edgo.start_unsu(arg)
+		if MODULE.Edgo.badge.active or MODULE.Binder.state.isActive then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив уже идёт, дождитесь завершения.', message_color); play_sound(); return
+		end
+		local d = { online = false, id = -1 }
+		if type(arg) == 'number' then
+			if sampIsPlayerConnected(arg) then d.online = true; d.id = arg end
+		else
+			for id = 0, 999 do
+				if sampIsPlayerConnected(id) and sampGetPlayerNickname(id) == arg then
+					d.online = true; d.id = id; break
+				end
+			end
+		end
+		if not d.online then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Игрок не в сети. Используйте Offline-пробив с ручным вводом данных.', message_color); play_sound(); return
+		end
+		MODULE.Edgo.Window[0] = false; MODULE.Binder.state.isActive = true
+		MODULE.Edgo.rp_queue = {}; MODULE.Edgo.cmd_queue = {}; MODULE.Edgo.last_send = 0
+		local b, who = edgo_init_badge('unsu', d)
+		if settings.mj.edgo_rp_enabled then info_stop_command() end
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} запущен.', message_color)
+		MODULE.Edgo.rp_start('unsu', who, false); MODULE.Edgo.send_cmd('/leaders')
+	end
+	function MODULE.Edgo.emit_result(mode, who, r, org_raw)
+		MODULE.Edgo.close_phone()
+		local has_phone  = r and r.phone  and r.phone  ~= "" and r.phone  ~= "-"
+		local has_status = r and r.status and r.status ~= "" and r.status ~= "-"
+		local phone  = has_phone and r.phone or "-"
+		local status = has_status and r.status or "В штате"
+		local year = (r and r.year and r.year ~= "" and r.year ~= "-") and r.year or nil
+		local found_gov = org_raw and org_raw ~= "" and org_raw ~= "-"
+		if not settings.mj.edgo_rp_enabled then
+			if found_gov then
+				local org = MODULE.Edgo.org_tag(org_raw)
+				local rank = (r and r.rank ~= "" and r.rank) or "-"
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} найден в организации: ' .. message_color_hex .. org .. '{ffffff}, на должности: ' .. message_color_hex .. rank .. '{ffffff}.', message_color)
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} по базе ЭБГО на гос. службе не числится. Контакт: ' .. message_color_hex .. phone .. '{ffffff}.', message_color)
+			end
+			MODULE.Binder.state.isActive = false
+			MODULE.Edgo.stop_badge(nil)
+			return
+		end
+		local p = rp_sex()
+		if mode == 'bodycam' then MODULE.Edgo.say('/do КПК выдал результат опознания.') end
+		if found_gov then
+			local org = MODULE.Edgo.org_tag(org_raw)
+			local rank = (r and r.rank ~= "" and r.rank) or "-"
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} найден в организации: ' .. message_color_hex .. org .. '{ffffff}, на должности: ' .. message_color_hex .. rank .. '{ffffff}.', message_color)
+			MODULE.Edgo.say('/do ЭБГО: по гражданину ' .. who .. ' найдено совпадение.')
+			MODULE.Edgo.say('/do Организация: ' .. org .. ', должность: ' .. rank .. '.')
+			local extra = {}
+			if year then table.insert(extra, 'год рождения: ' .. year) end
+			if has_phone then table.insert(extra, 'контакт: ' .. r.phone) end
+			if has_status then table.insert(extra, 'статус: ' .. r.status) end
+			if #extra > 0 then MODULE.Edgo.say('/do Дополнительно: ' .. table.concat(extra, ', ') .. '.') end
+		else
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} по базе ЭБГО на гос. службе не числится. Контакт: ' .. message_color_hex .. phone .. '{ffffff}.', message_color)
+			MODULE.Edgo.say('/do ЭБГО: запрос по гражданину ' .. who .. ' обработан.')
+			MODULE.Edgo.say('/do Гражданин: ' .. who .. ', контакт: ' .. phone .. ', статус: ' .. status .. '.')
+			if year then MODULE.Edgo.say('/do Год рождения: ' .. year .. '.') end
+		end
+		MODULE.Edgo.say('/me ознакомившись с результатами, убрал'..p..' служебный КПК обратно.')
+		MODULE.Edgo.done()
+	end
+	local function edgo_notfound_basic(b)
+		b.closing = true
+		MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "В штате", rank = "-" }, "", b.target_id)
+	end
+	local function edgo_parse_leader_line(raw, target_id)
+		local cleaned = MODULE.Edgo.clean(raw)
+		local name, idstr = cleaned:match("([%w_]+)%s*%[(%d+)%]")
+		if not name or tonumber(idstr) ~= target_id then return nil end
+		local org = cleaned:match("[%-%–]%s*([^\t]+)") or "-"
+		org = org:gsub("^%s+", ""):gsub("%s+$", "")
+		local phone = cleaned:match("ТЕЛ[:%s]+(%d+)") or cleaned:match("%[%(]%s*(%d+)") or ""
+		return { org = org, phone = phone }
+	end
+	local function edgo_org_order(target_color)
+		local ORGS = MODULE.Edgo.ORGS
+		local ORG_TAG = MODULE.Edgo.ORG_TAG
+		if not ORGS then return {} end
+		local tag_to_full = {}
+		for full_name, tag in pairs(ORG_TAG) do
+			tag_to_full[tag:upper()] = full_name
+		end
+		local target_full_name = nil
+		if target_color then
+			for _, o in ipairs(ORGS) do
+				if o.color:upper() == target_color then
+					target_full_name = tag_to_full[o.name:upper()]
+					break
+				end
+			end
+		end
+		local prio, rest = {}, {}
+		for _, o in ipairs(ORGS) do
+			local full_name = tag_to_full[o.name:upper()]
+			local is_prio = false
+			if target_color and o.color:upper() == target_color then
+				is_prio = true
+			elseif target_full_name and full_name then
+				local low_full = edgo_lower(full_name)
+				local low_target = edgo_lower(target_full_name)
+				if low_full == low_target then
+					is_prio = true
+				end
+			end
+			if is_prio then
+				table.insert(prio, o)
+			else
+				table.insert(rest, o)
+			end
+		end
+		local order = {}
+		for _, o in ipairs(prio) do table.insert(order, o) end
+		for _, o in ipairs(rest) do table.insert(order, o) end
+		return #order == 0 and ORGS or order
+	end
+	local function edgo_advance_org(id)
+		local b = MODULE.Edgo.badge
+		b.org_pos = b.org_pos + 1
+		if b.order == nil or b.org_pos > #b.order then
+			sampSendDialogResponse(id, 0, 0, ""); edgo_notfound_basic(b)
+		else
+			sampSendDialogResponse(id, 0, 0, "")
+			lua_thread.create(function() wait(80) if b.active then MODULE.Edgo.sched('open', nil, 0) end end)
+		end
+	end
+	local function edgo_parse_members(text, target_id, match_nick)
+		local low_match = edgo_lower(match_nick or "")
+		for line in (text or ""):gmatch("[^\r\n]+") do
+			local cl = MODULE.Edgo.clean(line)
+			local lcl = edgo_lower(cl)
+			local hit = false
+			if target_id > 0 and cl:match("([%w_]+)%(" .. target_id .. "%)") then hit = true
+			elseif low_match ~= "" and lcl:find(low_match .. "(", 1, true) then hit = true end
+			if hit then
+				local rank = nil
+				if target_id > 0 then 
+					rank = cl:match("%(" .. target_id .. "%)%s*([^%(]+)%(%d+%)") 
+				end
+				if (not rank or rank:match("^%s*$")) and target_id > 0 then
+					rank = cl:match("%(" .. target_id .. "%)%s*([^%[%]]+)%[")
+				end
+				if (not rank or rank:match("^%s*$")) and target_id > 0 then
+					rank = cl:match("%[%d+%]%s+(%S+)%s+([%w_]+)%(" .. target_id .. "%)")
+				end
+				if (not rank or rank:match("^%s*$")) and target_id > 0 then
+					if cl:find("([%w_]+)%(" .. target_id .. "%)") then
+						local last_bracket_content = nil
+						for content in cl:gmatch("%[%s*([^%[%]]-)%s*%]") do
+							last_bracket_content = content
+						end
+						if last_bracket_content then
+							last_bracket_content = last_bracket_content:gsub("^%s+", ""):gsub("%s+$", "")
+							local low_content = edgo_lower(last_bracket_content)
+							if last_bracket_content ~= "" 
+							and not last_bracket_content:match("^%d+$") 
+							and not low_content:find("работает", 1, true) 
+							and not low_content:find("не работает", 1, true)
+							and not low_content:find("афк", 1, true) 
+							and not low_content:find("спец", 1, true) then
+								rank = last_bracket_content
+							end
+						end
+					end
+				end
+				if (not rank or rank:match("^%s*$")) and low_match ~= "" then
+					rank = lcl:match(low_match .. "%(%d+%)%s*([^%(]+)%(%d+%)")
+				end
+				rank = (rank or ""):gsub("^%s+", ""):gsub("%s+$", "")
+				return (rank ~= "") and rank or "-"
+			end
+		end
+		return nil
+	end
+	local function edgo_handle_dialog(id, style, title, text)
+		local b = MODULE.Edgo.badge
+		if not (b and b.active) then return false end
+		b.last_active_time = os.clock(); b.retry_count = 0
+		if b.closing then
+			sampSendDialogResponse(id, 0, 0, ""); return false
+		end
+		local lines = {}
+		for line in (text or ""):gmatch("[^\r\n]+") do table.insert(lines, line) end
+		local low_text = edgo_lower(text or "")
+		local low_title = edgo_lower(title or "")
+		local _ht = low_title
+		local detected_type = nil
+		if low_title:find("лидер", 1, true) or low_title:find("руководит", 1, true) then
+			detected_type = 'leaders'
+		elseif low_title:find("заместит", 1, true) then
+			detected_type = 'zams'
+		elseif low_title:find("сотрудники онлайн", 1, true) or low_title:find("%(в сети", 1, true) or low_title:find("в сети всего", 1, true) then
+			detected_type = 'members'
+		end
+		local effective_phase = detected_type or b.phase
+		local _is_own_members = _ht:find("(в сети", 1, true) or _ht:find("в сети всего", 1, true)
+		local _is_lead_dialog = (not _is_own_members) and (_ht:find("лидер", 1, true) or _ht:find("заместит", 1, true) or _ht:find("руководит", 1, true))
+		if _is_lead_dialog or effective_phase == 'leaders' or effective_phase == 'zams' then
+			local role_from_header = nil
+			if _ht:find("лидер", 1, true) or _ht:find("руководит", 1, true) then role_from_header = "Руководитель"
+			elseif _ht:find("заместит", 1, true) then role_from_header = "Заместитель" end
+			local hit = nil
+			for _, line in ipairs(lines) do
+				local r = edgo_parse_leader_line(MODULE.Edgo.clean(line), b.target_id)
+				if r then hit = r; break end
+			end
+			sampSendDialogResponse(id, 1, 0, "")
+			if hit then
+				b.closing = true
+				local role = role_from_header or ((effective_phase == 'leaders') and "Руководитель" or "Заместитель")
+				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = hit.phone, status = "В штате", rank = role }, hit.org, b.target_id)
+			else
+				local cur = b.phase
+				lua_thread.create(function()
+					wait(250)
+					if not b.active or b.phase ~= cur then return end
+					if cur == 'leaders' then 
+						b.phase = 'zams'; b.last_active_time = os.clock(); MODULE.Edgo.send_cmd('/zams')
+					elseif cur == 'zams' then 
+						edgo_go_members_or_phone()
+					end
+				end)
+			end
+			return false
+		end
+		local is_members_dialog = low_title:find("сотрудники онлайн", 1, true) ~= nil
+		if is_members_dialog or _is_own_members or effective_phase == 'members' then
+			local hit_rank = edgo_parse_members(text, b.target_id, b.match_nick)
+			if hit_rank then
+				b.found = true; b.closing = true
+				sampSendDialogResponse(id, 0, 0, "")
+				local org_for_result = (b.phase == 'members') and "ФБР" or (b.full_org_name or "...")
+				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "В штате", rank = hit_rank }, org_for_result, b.target_id)
+				return false
+			end
+			local count, next_btn = 0, -1
+			for line in (text or ""):gmatch("[^\r\n]+") do
+				count = count + 1
+				local ll = edgo_lower(line)
+				if ll:find("следующая", 1, true) or ll:find(">>>", 1, true) or ll:find("вперед", 1, true) then
+					next_btn = count - 2
+				end
+			end
+			if next_btn >= 0 then
+				sampSendDialogResponse(id, 1, next_btn, "")
+			else
+				if b.phase == 'members' then
+					sampSendDialogResponse(id, 0, 0, ""); edgo_go_phone()
+				else
+					edgo_advance_org(id)
+				end
+			end
+			return false
+		end
+		local is_emp = (style == 5 and low_title:find("сотрудники онлайн", 1, true)) or (low_text:find("сотрудник", 1, true) and low_text:find("ранг", 1, true))
+		local is_empty = low_text:find("0 игроков", 1, true) or low_text:find("всего в онлайне: 0", 1, true)
+		local is_orglist = (id == 8744) or (style == 2 and not is_emp and not is_empty)
+		if is_emp or is_empty then
+			if is_empty then 
+				edgo_advance_org(id); return false 
+			end
+			local offset = (style == 4 or style == 5) and 1 or 0
+			local next_btn = -1
+			local low_match = edgo_lower(b.match_nick or "")
+			for i, line in ipairs(lines) do
+				local raw = MODULE.Edgo.clean(line)
+				if not (offset == 1 and i == 1) then
+					local hit = false
+					if b.target_id > 0 and raw:match("[%w_]+%(" .. b.target_id .. "%)") then hit = true
+					elseif low_match ~= "" and edgo_lower(raw):find(low_match .. "(", 1, true) then hit = true end
+					if hit then
+						b.found = true; b.result = MODULE.Edgo.format_found(raw); b.result_org = b.full_org_name
+						b.closing = true; sampSendDialogResponse(id, 0, 0, "")
+						MODULE.Edgo.request_number(b.mode, b.display_name, b.result, b.full_org_name, b.target_id)
+						return false
+					end
+					if raw:find("Следующая", 1, true) or raw:find(">>>") or raw:find("лед") then
+						next_btn = (i - 1) - offset
+					end
+				end
+			end
+			if next_btn ~= -1 then 
+				sampSendDialogResponse(id, 1, next_btn, "")
+			else 
+				edgo_advance_org(id)
+			end
+			return false
+		end
+		if is_orglist then
+			if b.order == nil then 
+				b.order = edgo_org_order(b.target_color); b.org_pos = 1 
+			end
+			local is_orglist_dialog = low_text:find("<< список собеседований", 1, true) or 
+									low_text:find("<< полиция", 1, true) or
+									low_text:find("<< больница", 1, true) or
+									low_text:find("<< правительство", 1, true)
+			if is_orglist_dialog then
+				local item = b.order[b.org_pos]
+				if item == nil then 
+					sampSendDialogResponse(id, 0, 0, ""); edgo_notfound_basic(b)
+				else 
+					b.full_org_name = item.name
+					sampSendDialogResponse(id, 1, item.index, "")
+				end
+			else
+				local hit_rank = edgo_parse_members(text, b.target_id, b.match_nick)
+				if hit_rank then
+					b.found = true; b.closing = true
+					sampSendDialogResponse(id, 0, 0, "")
+					MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "В штате", rank = hit_rank }, b.full_org_name, b.target_id)
+				else
+					b.org_pos = b.org_pos + 1
+					if b.org_pos > #b.order then
+						sampSendDialogResponse(id, 0, 0, ""); edgo_notfound_basic(b)
+					else
+						sampSendDialogResponse(id, 0, 0, "")
+						lua_thread.create(function() wait(80) if b.active then MODULE.Edgo.sched('open', nil, 0) end end)
+					end
+				end
+			end
+			return false
+		end
+		return false
+	end
+	MODULE.Edgo.handle_dialog = edgo_handle_dialog
+	function MODULE.Edgo.request_number(mode, who, r, org_raw, target_id)
+		MODULE.Edgo._num_token = (MODULE.Edgo._num_token or 0) + 1
+		local token = MODULE.Edgo._num_token
+		MODULE.Edgo.pending_number = { token = token, mode = mode, who = who, r = r, org_raw = org_raw, target_id = target_id }
+		sampSendChat('/number ' .. tostring(target_id)); MODULE.Edgo.last_send = os.clock() * 1000
+		lua_thread.create(function()
+			wait(3500)
+			local pn = MODULE.Edgo.pending_number
+			if pn and pn.token == token then MODULE.Edgo.pending_number = nil; MODULE.Edgo.emit_result(pn.mode, pn.who, pn.r, pn.org_raw) end
+		end)
+	end
+	function MODULE.Edgo.try_consume_number(text)
+		local pn = MODULE.Edgo.pending_number
+		if not pn then return false end
+		local c = (text or ""):gsub('%{......%}', '')
+		local id_in = c:match('%[(%d+)%]')
+		local num = c:match(':%s*(%d+)%s*$')
+		if id_in and num and tonumber(id_in) == pn.target_id then
+			pn.r.phone = num; MODULE.Edgo.pending_number = nil
+			MODULE.Edgo.emit_result(pn.mode, pn.who, pn.r, pn.org_raw)
+			return true
+		end
+		return false
+	end
+	local function edgo_run_scan(mode)
+		if MODULE.Edgo.badge.active then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив уже идёт, дождитесь завершения.', message_color); play_sound(); return
+		end
+		if MODULE.Binder.state.isActive then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound(); return
+		end
+		local _now = os.clock()
+		if MODULE.Edgo.last_scan_time and (_now - MODULE.Edgo.last_scan_time) < 5 then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив можно запускать не чаще раза в 5 секунд.', message_color); play_sound(); return
+		end
+		MODULE.Edgo.last_scan_time = _now
+		local d = MODULE.Edgo.collect()
+		local ok, err = MODULE.Edgo.validate(d)
+		if not ok then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}' .. err, message_color); play_sound(); return end
+		local who = MODULE.Edgo.ru_name(d)
+		MODULE.Edgo.Window[0] = false; MODULE.Binder.state.isActive = true
+		MODULE.Edgo.rp_queue = {}; MODULE.Edgo.cmd_queue = {}; MODULE.Edgo.last_send = 0
+		if not d.online then
+			local b = MODULE.Edgo.badge
+			b.active = true; b.closing = true; b.mode = mode; b.phase = 'offline'
+			b.display_name = who; b.target_id = -1; b.match_nick = ""; b.last_active_time = os.clock()
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} по введённым данным.', message_color)
+			MODULE.Edgo.rp_start(mode, who, true)
+			MODULE.Edgo.emit_result(mode, who, { phone = d.phone, status = d.status, rank = d.rank, year = d.year }, d.org)
+			return
+		end
+		if not d.id or not sampIsPlayerConnected(d.id) then
+			MODULE.Binder.state.isActive = false
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Введите корректный ID игрока в сети.', message_color); play_sound(); return
+		end
+		local b, who_full = edgo_init_badge(mode, d)
+		if settings.mj.edgo_rp_enabled then info_stop_command() end
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who_full .. '{ffffff} запущен.', message_color)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Происходит поиск организации гражданина ' .. message_color_hex .. who_full .. '{ffffff}. Может занять некоторое время.', message_color)
+		MODULE.Edgo.rp_start(mode, who, false); MODULE.Edgo.send_cmd('/leaders')
+	end
+	MODULE.Edgo.run_badge = function() edgo_run_scan('badge') end
+	MODULE.Edgo.run_voice = function() edgo_run_scan('voice') end
+	MODULE.Edgo.run_voiced = function() edgo_run_scan('voiced') end
+	MODULE.Edgo.run_bodycam = function() edgo_run_scan('bodycam') end
+	function MODULE.Edgo.run_history()
+		if not MODULE.Edgo.Online[0] then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}История имён доступна только в режиме Online (по ID игрока).', message_color); play_sound(); return
+		end
+		if MODULE.Binder.state.isActive then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound(); return
+		end
+		local d = MODULE.Edgo.collect()
+		local token
+		if d.online then
+			if not d.id or not sampIsPlayerConnected(d.id) then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Введите корректный ID игрока в сети.', message_color); play_sound(); return
+			end
+			token = sampGetPlayerNickname(d.id)
+		else
+			token = d.nick
+			if token == "" then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для истории имён введите никнейм (Name_Surname) в поле "Имя и фамилия".', message_color); play_sound(); return
+			end
+		end
+		local now = os.time()
+		if now - (MODULE.Edgo.last_history_check or 0) < 15 then
+			local rem = 15 - (now - (MODULE.Edgo.last_history_check or 0))
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Историю имён можно проверять не чаще раза в 15 секунд. Повторите через ' .. rem .. ' сек.', message_color)
+			play_sound(); return
+		end
+		MODULE.Edgo.last_history_check = now
+		local who = MODULE.Edgo.ru_name(d)
+		MODULE.Edgo.Window[0] = false; MODULE.Binder.state.isActive = true
+		if settings.mj.edgo_rp_enabled then info_stop_command() end
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '[' .. tostring(d.id or -1) .. ']{ffffff} запущен.', message_color)
+		local H = MODULE.Edgo.history
+		H.active = true; H.finished = false; H.got = nil; H.waiting_result = false
+		H.token = token; H.display_name = who
+		lua_thread.create(function()
+			local p = rp_sex()
+			local rp_on = settings.mj.edgo_rp_enabled
+			if rp_on then
+				sampSendChat('/me достал'..p..' служебный КПК, запустил'..p..' ЭБГО и, пройдя авторизацию, открыл'..p..' архивный раздел истории имён.'); wait(4000)
+				sampSendChat('/me инициировал'..p..' запрос архивной истории гражданина.'); wait(4000)
+			else
+				wait(500)
+			end
+			H.waiting_result = true
+			H.result_time = os.time()
+			sampSendChat('/phone'); wait(500); edgo_open_app(33); wait(500); sampSendChat('/phone')
+			while H.active and not H.finished and (os.time() - H.result_time) < 12 do wait(100) end
+			H.active = false; H.waiting_result = false
+			if H.got and H.got ~= "" then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff}, ранее известен как: ' .. message_color_hex .. H.got .. '{ffffff}.', message_color)
+				if rp_on then wait(4000) end
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Смен никнеймов ' .. message_color_hex .. who .. '{ffffff} в архиве ЭБГО: ' .. tostring(H.count or 0) .. '.', message_color)
+				if rp_on then
+					sampSendChat('/do Архив ЭБГО: запрос по гражданину ' .. who .. ' обработан.'); wait(4000)
+					sampSendChat('/do Ранее был зарегистрирован как: ' .. H.got .. '.'); wait(4000)
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Архивных записей о смене имени гражданина ' .. message_color_hex .. who .. '{ffffff} не обнаружено.', message_color)
+				if rp_on then
+					sampSendChat('/do Архив ЭБГО: записей о прежних именах гражданина ' .. who .. ' не обнаружено.'); wait(4000)
+				end
+			end
+			if rp_on then sampSendChat('/me убрал'..p..' служебный КПК обратно.') end
+			MODULE.Binder.state.isActive = false
+		end)
+	end
+	function MODULE.Edgo.send_cmd(cmd) table.insert(MODULE.Edgo.cmd_queue, cmd) end
+	lua_thread.create(function()
+		while true do
+			wait(80)
+			if MODULE.Binder.state.isStop then
+				MODULE.Edgo.rp_queue = {}
+				MODULE.Binder.state.isStop = false
+				MODULE.Edgo.stop_badge('Пробив ЭБГО остановлен.')
+			elseif #MODULE.Edgo.rp_queue > 0 and (os.clock() * 1000 - MODULE.Edgo.last_send) >= (settings.mj.edgo_rp_cd or 3000) then
+				local e = table.remove(MODULE.Edgo.rp_queue, 1)
+				if e.done then MODULE.Edgo.stop_badge(nil)
+				else sampSendChat(e.line); MODULE.Edgo.last_send = os.clock() * 1000 end
+			end
+		end
+	end)
+	local function edgo_close_phone()
+		local b = MODULE.Edgo.badge
+		if b.phone_opened then b.phone_opened = false; MODULE.Edgo.last_send = os.clock() * 1000; sampSendChat('/phone') end
+	end
+	MODULE.Edgo.close_phone = edgo_close_phone
+	lua_thread.create(function()
+		while true do
+			wait(80)
+			local b = MODULE.Edgo.badge
+			if not (b and b.active) then
+				if #MODULE.Edgo.cmd_queue > 0 then MODULE.Edgo.cmd_queue = {} end
+			elseif #MODULE.Edgo.cmd_queue > 0 and (os.clock() * 1000 - MODULE.Edgo.last_send) >= MODULE.Edgo.RP_CD then
+				local c = table.remove(MODULE.Edgo.cmd_queue, 1)
+				sampSendChat(c); MODULE.Edgo.last_send = os.clock() * 1000
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(500)
+			local b = MODULE.Edgo.badge
+			if b and b.active and not b.closing and (b.phase == 'leaders' or b.phase == 'zams' or b.phase == 'members') and (os.clock() - b.last_active_time) > 5.0 then
+				b.last_active_time = os.clock()
+				if b.phase == 'leaders' then b.phase = 'zams'; MODULE.Edgo.send_cmd('/zams')
+				elseif b.phase == 'zams' then edgo_go_members_or_phone()
+				else edgo_go_phone() end
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(50)
+			local b = MODULE.Edgo.badge
+			if b and b.active then
+				local q = MODULE.Edgo.queue
+				if q.active and q.type == 'open' and os.clock() * 1000 >= q.timestamp then
+					q.active = false; b.phone_opened = true
+					edgo_send_raw({220, 0, 80, 64}); wait(0); edgo_send_raw(MODULE.Edgo.PACKET_APP32)
+				end
+				if not b.closing and (os.clock() - b.last_active_time) > 5.0 then
+					b.last_active_time = os.clock()
+					if b.phase == 'phone' then edgo_notfound_basic(b)
+					elseif b.phase == 'members' then edgo_go_phone()
+					elseif b.phase == 'leaders' then b.phase = 'zams'; MODULE.Edgo.send_cmd('/zams')
+					elseif b.phase == 'zams' then edgo_go_members_or_phone() end
+				end
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(250)
+			local cc = MODULE.CruiseControl
+			if cc.active or cc.pursuit_active then
+				local bad = not isCharInAnyCar(PLAYER_PED)
+				if not bad then
+					local ok, c = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+					if ok and c then bad = not isCarEngineOn(c) end
+				end
+				if bad then
+					cruise_deactivate('Потеря контроля над т/с, круиз-контроль отключён.')
+				end
+			end
+		end
+	end)
+	function update_lssd_patrol_settings()
+		local rank_num = modules.player.data.fraction_rank_number or 1
+		local prefix = rank_num >= 9 and 'US' or rank_num >= 7 and 'C' or rank_num == 6 and 'L' or rank_num == 5 and 'D' or rank_num == 4 and 'S' or ''
+		local mark = MODULE.Patrool.mark or ''
+		local num = mark:find('%-') and 100 or (tonumber(mark:match('%d+$')) or 100)
+		if num < 100 then num = 100 elseif num > 130 then num = 130 end
+		MODULE.Patrool.lssd_prefix = prefix
+		MODULE.Patrool.mark = prefix .. num
+	end
+	lua_thread.create(function()
+		while true do
+			wait(1000)
+			if settings.general.aflip_domkrat and isCharInAnyCar(PLAYER_PED) then
+				local car = storeCarCharIsInNoSave(PLAYER_PED)
+				if getDriverOfCar(car) == PLAYER_PED and isCarUpsidedown(car) then
+					if not MODULE.AutoFlipDomkrat.cooldown then
+						MODULE.AutoFlipDomkrat.cooldown = true
+						local delay_ms = (settings.general.aflip_domkrat_delay or 5) * 1000
+						wait(delay_ms)
+						if isCharInAnyCar(PLAYER_PED) and isCarUpsidedown(storeCarCharIsInNoSave(PLAYER_PED)) then
+							sampSendChat("/domkrat")
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Использую домкрат...', message_color)
+						end
+						MODULE.AutoFlipDomkrat.cooldown = false
+					end
+				end
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(settings.general.clicker_delay)
+			if settings.general.auto_clicker and MODULE.AutoClicker.active then
+				local command = "clickMinigame"
+				local bs = raknetNewBitStream()
+				raknetBitStreamWriteInt8(bs, 220)
+				raknetBitStreamWriteInt8(bs, 18)
+				raknetBitStreamWriteInt16(bs, #command)
+				raknetBitStreamWriteString(bs, command)
+				raknetBitStreamWriteInt32(bs, 0)
+				raknetSendBitStream(bs)
+				raknetDeleteBitStream(bs)
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(1000)
+			if settings.mj.auto_doklad_patrool and MODULE.Patrool.active and MODULE.Patrool.patrol_type == 2 and not MODULE.Patrool.process_doklad then
+				MODULE.Patrool.auto_doklad.time = MODULE.Patrool.auto_doklad.time + 1
+				local period_sec = (settings.mj.patrool_doklad_period or 5) * 60
+				if MODULE.Patrool.auto_doklad.time >= period_sec then
+					MODULE.Patrool.auto_doklad.time = 0
+					MODULE.Patrool.process_doklad = true
+					lua_thread.create(function()
+						MODULE.Binder.state.isActive = true
+						sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
+						wait(1500)
+						sampSendChat('/r Продолжаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. " (" .. MODULE.Binder.tag.get_square() .. ').')
+						wait(1500)
+						if MODULE.Binder.tag.get_car_units() ~= 'Нету' then
+							sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ' в составе юнита ' .. MODULE.Binder.tag.get_car_units() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
+						else
+							sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
+						end
+						MODULE.Binder.state.isActive = false
+						MODULE.Patrool.process_doklad = false
+					end)
+				end
+			else
+				if not MODULE.Patrool.active or not settings.mj.auto_doklad_patrool or MODULE.Patrool.patrol_type ~= 2 then
+					MODULE.Patrool.auto_doklad.time = 0
+				end
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(1000)
+			if settings.general.auto_doklad_post and MODULE.Post.active and not MODULE.Post.process_doklad then
+				MODULE.Post.auto_doklad.time = MODULE.Post.auto_doklad.time + 1
+				local period_sec = (settings.general.post_doklad_period or 5) * 60
+				if MODULE.Post.auto_doklad.time >= period_sec then
+					MODULE.Post.auto_doklad.time = 0
+					MODULE.Post.process_doklad = true
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. '. Пост: ' .. MODULE.Binder.tag.get_post_name() .. ', состояние ' .. MODULE.Binder.tag.get_post_code())
+					wait(1500)
+					sampSendChat('/r Нахожусь на посту уже ' .. MODULE.Binder.tag.get_post_format_time())
+					MODULE.Post.process_doklad = false
+				end
+			else
+				if not MODULE.Post.active or not settings.general.auto_doklad_post then
+					MODULE.Post.auto_doklad.time = 0
+				end
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			local md = modules.members.data
+			local period = md.update_period or 3
+			wait(period * 1000)
+			if MODULE.Members and MODULE.Members.Window[0]
+			   and md.auto_update
+			   and MODULE.Members.upd and MODULE.Members.upd.check
+			   and not MODULE.Members.info.check
+			   and not (MODULE.Members.flood_suppress_until and MODULE.Members.flood_suppress_until > 0 and os.time() <= MODULE.Members.flood_suppress_until)
+			   and not MODULE.Binder.state.isActive then
+				MODULE.Members.new = {}
+				MODULE.Members.info.check = true
+				MODULE.Members.flood_suppress_until = os.time() + 3
+				sampSendChat("/members")
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(1000)
+			local ok, is_spawned = pcall(sampIsLocalPlayerSpawned)
+			if settings.mj.awanted and ok and is_spawned and doesCharExist(PLAYER_PED) then
+				local my_x, my_y, my_z = getCharCoordinates(PLAYER_PED)
+				local _, my_id = sampGetPlayerIdByCharHandle(PLAYER_PED)
+				for id = 0, 999 do
+					if sampIsPlayerConnected(id) and id ~= my_id then
+						if not MODULE.Awanted.checked[id] then
+							local res, handle = sampGetCharHandleBySampPlayerId(id)
+							if res and doesCharExist(handle) then
+								local px, py, pz = getCharCoordinates(handle)
+								local dist = getDistanceBetweenCoords3d(my_x, my_y, my_z, px, py, pz)
+								if dist <= (settings.mj.scan_radius or 50) then
+									table.insert(MODULE.Awanted.queue, id)
+									MODULE.Awanted.checked[id] = true
+								end
+							end
+						end
+					end
+				end
+				if MODULE.Awanted.last_target ~= -1 and not sampIsPlayerConnected(MODULE.Awanted.last_target) then
+					MODULE.Awanted.last_target = -1
+				end
+				if MODULE.Awanted.last_target ~= -1
+				   and MODULE.Awanted.last_target_time
+				   and os.time() - MODULE.Awanted.last_target_time > (settings.mj.target_timeout or 10) then
+					MODULE.Awanted.last_target = -1
+				end
+				if #MODULE.Awanted.queue > 0 and not MODULE.Awanted.scanning then
+					local target_id = table.remove(MODULE.Awanted.queue, 1)
+					if sampIsPlayerConnected(target_id) then
+						MODULE.Awanted.scanning = true
+						MODULE.Awanted.last_target = target_id
+						MODULE.Awanted.last_target_time = os.time()
+						sampSendChat('/z ' .. target_id)
+						wait((settings.mj.scan_delay or 2) * 1000)
+						MODULE.Awanted.scanning = false
+					end
+				end
+				if os.time() - (MODULE.Awanted.last_reset or 0) >= (settings.mj.reset_interval or 45) then
+					MODULE.Awanted.checked = {}
+					MODULE.Awanted.last_reset = os.time()
+				end
+			else
+				MODULE.Awanted.queue = {}
+				MODULE.Awanted.checked = {}
+				MODULE.Awanted.scanning = false
+				MODULE.Awanted.last_target = -1
+			end
+		end
+	end)
+	lua_thread.create(function()
+		while true do
+			wait(1000)
+			if settings.mj.auto_update_wanteds and MODULE.Wanted.updwanteds.check and not MODULE.Wanted.checker then
+				local period = settings.mj.wanted_update_period or 10
+				local max_lvl = isMode('fbi') and 7 or 6
+				local last = MODULE.Wanted.updwanteds.last_time
+				if not last then
+					MODULE.Wanted.updwanteds.last_time = os.time()
+					last = MODULE.Wanted.updwanteds.last_time
+				end
+				local elapsed = os.time() - last
+				if elapsed >= period then
+					MODULE.Wanted.checker = true
+					MODULE.Wanted.new = {}
+					MODULE.Wanted.scan_cancel = false
+					MODULE.Wanted.updwanteds.last_time = os.time()
+					for i = max_lvl, 1, -1 do
+						if MODULE.Wanted.scan_cancel then break end
+						sampSendChat('/wanted ' .. i)
+						wait(1000)
+					end
+					MODULE.Wanted.checker = false
+					if not MODULE.Wanted.scan_cancel then
+						MODULE.Wanted.all = MODULE.Wanted.new
+						if #MODULE.Wanted.new == 0 then
+							MODULE.Wanted.Window[0] = false
+						else
+							MODULE.Wanted.Window[0] = true
+						end
+					end
+				end
+			end
+		end
+	end)
+	if not isSampLoaded() or not isSampfuncsLoaded() then return end
+    while not isSampAvailable() do wait(0) end
+	local start_check_update = os.clock()
+	check_update()
+	if settings.general.updater then
+		while not isUpdateChecked do
+			wait(0)
+			if (os.clock() - start_check_update > 5) and not MODULE.Update.Window[0] then
+				isUpdateChecked = true
+			end
+		end
+	end
+	check_resources()
+	delete_old_helpers()
+	if settings.general.fraction_mode == '' then
+		repeat wait(0) until sampIsLocalPlayerSpawned()
+		MODULE.Initial.Window[0] = true
+		return
+	end
+	initialize_commands()
+	initialize_vehicles()
+	initialize_weapon()
+	if hotkey_ok then loadHotkeys() end
+	if IS_MOBILE then render_buttons() end
+	if jit.arch == 'arm' and memory_ok then
+		memory.setint8(MONET_GTASA_BASE + 0x5E49EE, 0x00, true)
+		memory.setint8(MONET_GTASA_BASE + 0x5E49EE + 1, 0xBF, true)
+	end
+	welcome_message()
+	while true do
+		wait(0)
+		if IS_MOBILE and settings.general.mobile_fastmenu_button then
+			if tonumber(#get_players()) > 0 and not MODULE.FastMenu.Window[0] and not MODULE.FastMenuPlayers.Window[0] then
+				MODULE.FastMenuButton.Window[0] = true
+			else
+				MODULE.FastMenuButton.Window[0] = false
+			end
+		end
+		if MODULE.Post.active then
+			MODULE.Post.time = os.difftime(os.time(), MODULE.Post.start_time)
+		end
+		if settings.general.crosshair and memory_ok and isActiveCrosshairMode() then
+			local cd = modules.crosshair.data
+			local nm, sz = cd.font_name or 'Arial', cd.font_size or 15
+			if not _G.__crosshair_font or _G.__crosshair_font_nm ~= nm or _G.__crosshair_font_sz ~= sz then
+				_G.__crosshair_font, _G.__crosshair_font_nm, _G.__crosshair_font_sz = renderCreateFont(nm, sz, 1), nm, sz
+			end
+			local sx, sy = convertGameScreenCoordsToWindowScreenCoords(IS_MOBILE and 332.4 or 339.5, IS_MOBILE and 194.6 or 179.2)
+			local wx, wy, wz = convertScreenCoordsToWorld3D(sx, sy, 150)
+			local cx, cy, cz = getActiveCameraCoordinates()
+			local hit, ptr = processLineOfSight(cx, cy, cz, wx, wy, wz, false, false, true, false, false, false, false)
+			local enemy = false
+			if hit and isLineOfSightClear(cx, cy, cz, ptr.pos[1], ptr.pos[2], ptr.pos[3], true, true, false, true, true)
+			   and ptr.entityType == 3 and ptr.entity ~= getCharPointer(PLAYER_PED) then
+				enemy = true
+				if cd.check_weapon_range and modules.weapon and modules.weapon.data and modules.weapon.data.list then
+					local ppx, ppy, ppz = getCharCoordinates(PLAYER_PED)
+					MODULE.Crosshair.distance = getDistanceBetweenCoords3d(ppx, ppy, ppz, ptr.pos[1], ptr.pos[2], ptr.pos[3])
+					local wid, applied = getCurrentCharWeapon(PLAYER_PED), false
+					for _, w in ipairs(modules.weapon.data.list) do
+						if w.id == wid and w.range then
+							MODULE.Crosshair.currentWeaponRange = w.range + (cd.is_legendary_stripe and 8 or 0)
+							enemy = MODULE.Crosshair.distance <= MODULE.Crosshair.currentWeaponRange
+							if cd.show_weapon_range and _G.__crosshair_font then
+								local rgb = enemy and (cd.distance_color_in or {0,255,0}) or (cd.distance_color_out or {255,0,0})
+								renderFontDrawText(_G.__crosshair_font, string.format("%.1f / %.1f", MODULE.Crosshair.distance, MODULE.Crosshair.currentWeaponRange), sx - 60, sy + 55, join_argb(0xFF, rgb[1], rgb[2], rgb[3]))
+							end
+							applied = true
+							break
+						end
+					end
+					if not applied then enemy = true end
+				end
+			end
+			changeCrosshairColor(enemy and cd.enemy_color or cd.standart_color)
+		elseif memory_ok and MODULE.Crosshair.orig_saved then
+			crosshair_restore_original()
+		end
+		if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then sampToggleScoreboard(false) end
+		if isMode('police') or isMode('fbi') then
+			if MODULE.Patrool.active then
+				MODULE.Patrool.time = os.difftime(os.time(), MODULE.Patrool.start_time)
+				if settings.mj.auto_change_code_siren and isCharInAnyCar(PLAYER_PED) then
+					local currentSirenState = isCarSirenOn(storeCarCharIsInNoSave(PLAYER_PED))
+					if firstCheck then
+						lastSirenState = currentSirenState
+						firstCheck = false
+					end
+					if currentSirenState ~= lastSirenState then
+						lastSirenState = currentSirenState
+						local newCode = currentSirenState and {'CODE 3', 4} or {'CODE 4', 5}
+						sampAddChatMessage("[Arizona Helper | Ассистент] {ffffff}Проблесковые маячки " .. (currentSirenState and "активированы (CODE 3)." or "деактивированы (CODE 4)."), message_color)
+						MODULE.Patrool.ComboCode[0] = newCode[2]
+						MODULE.Patrool.code = newCode[1]
+					end
+				end
+			end	
+		end
+		-- if isMode('fd') then
+		-- 	if MODULE.Fires.isDialog and MODULE.Fires.dialogId ~= -1 then
+		-- 		local result, button, list, input = sampHasDialogRespond(999)
+		-- 		if result and button ~= -1 and list ~= -1 then
+		-- 			sampSendDialogResponse(MODULE.Fires.dialogId, button, list, item)
+		-- 			MODULE.Fires.dialogId = -1
+		-- 			MODULE.Fires.isDialog = false
+		-- 			if button ~= 0 then getFireLocation(tonumber(list)) end
+		-- 		end
+		-- 	end
+		-- end
+		if settings.general.rp_weapon then
+			local current = getCurrentCharWeapon(PLAYER_PED)
+			if modules.weapon.data.nowGun ~= current then
+				modules.weapon.data.oldGun = modules.weapon.data.nowGun
+				modules.weapon.data.nowGun = current
+				processWeaponChange(modules.weapon.data.oldGun, current)
+			end
+        end
+        local cc = MODULE.CruiseControl
+        local SPEED_KMH_TO_GAME = 0.375
+        local _speed = (settings.general.cruise_speed or 28) * SPEED_KMH_TO_GAME
+        local _ride    = settings.general.cruise_ride    or 0
+        local _drive   = settings.general.cruise_drive   or 2
+        local _radius  = settings.general.cruise_radius  or 15
+        local _stuck   = settings.general.cruise_stuck   or 4
+        local _aggr_on = (settings.general.cruise_aggressive ~= false)
+        if settings.general.cruise_auto_accept
+           and not cc.active and not cc.wait_point and not cc.pursuit_active
+           and (os.clock() - (cc.last_deactivate_time or 0)) > 1.0 then
+            if isCharInAnyCar(PLAYER_PED) then
+                local _car = storeCarCharIsInNoSave(PLAYER_PED)
+                if isCarEngineOn(_car) and getDriverOfCar(_car) == PLAYER_PED then
+                    local _ok, _bx, _by, _bz = getTargetBlipCoordinates()
+                    if _ok and not locateCharInCar2d(PLAYER_PED, _bx, _by, _radius, _radius, false) then
+                        local lap = cc.last_auto_point
+                        if not lap or math.abs(lap.x - _bx) > 1.0 or math.abs(lap.y - _by) > 1.0 then
+                            cc.last_auto_point = { x = _bx, y = _by }
+                            cc.point = {x = _bx, y = _by, z = _bz}
+                            cc.active = true; cc.driving = false; cc.last_drive_set = 0; cc.stuck_t = 0
+                            cc.drive_type = _drive
+                            cc.escape_phase = 0; cc.phase_start = 0; cc._aggr_tried = false
+                            sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-старт к метке на карте.', message_color)
+                        end
+                    end
+                end
+            end
+        end
+        if cc.wait_point then
+            local bool, x, y, z = getTargetBlipCoordinates()
+            if bool then
+                cc.point = {x = x, y = y, z = z}
+                cc.wait_point = false
+                cc.drive_type = _drive
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Координаты цели получены, маршрут строится.', message_color)
+                while isGamePaused() or isPauseMenuActive() do wait(0) end
+                lua_thread.create(function()
+                    sampSendChat('/me включает в своём т/с адаптивный круиз-контроль и настраивает GPS-навигатор.')
+                    wait(1500)
+                    sampSendChat('/do На экране загорается надпись "GPS-маршрут успешно проложен, можно ехать".')
+					cc.escape_phase = 0; cc.phase_start = 0; cc._aggr_tried = false
+                    cc.drive_type = settings.general.cruise_drive or 2
+                    cc.active = true
+                    cc.active = true
+                    wait(2000)
+                    sampSendChat('/do ' .. MODULE.Binder.tag.my_ru_nick() .. ' держит руки на руле, круиз-контроль поддерживает скорость т/с.')
+                end)
+            end
+        end
+        if cc.active then
+            local car = storeCarCharIsInNoSave(PLAYER_PED)
+            if not isCharInAnyCar(PLAYER_PED) then
+                cruise_deactivate('Вы покинули транспортное средство, движение остановлено.')
+            elseif not isCarEngineOn(car) then
+                cruise_deactivate('Двигатель заглушён, движение остановлено.')
+            elseif cc.pursuit_active then
+                local ok, bx, by, bz = getTargetBlipCoordinates()
+                if not ok then
+                    cruise_deactivate('Метка цели потеряна, преследование остановлено.')
+                else
+                    cc.point = {x = bx, y = by, z = bz}
+                    local now = os.clock()
+                    if not cc.driving or (now - (cc.last_drive_set or 0)) > 0.5 then
+                        taskCarDriveToCoord(PLAYER_PED, car, bx, by, bz, _speed, _ride, nil, _drive)
+                        cc.driving = true; cc.last_drive_set = now
+                    end
+                end
+            elseif locateCharInCar2d(PLAYER_PED, cc.point.x, cc.point.y, _radius, _radius, false) then
+                sampSendChat('/me приехав к пункту назначения, отключает в т/с адаптивный круиз-контроль.')
+                cruise_deactivate(nil)
+            else
+                local now = os.clock()
+                local cx, cy, cz = getCarCoordinates(car)
+                local moved = getDistanceBetweenCoords3d(cx, cy, cz, cc.stuck_x or 0, cc.stuck_y or 0, cc.stuck_z or 0)
+                if moved > 1.0 then
+                    cc.stuck_x, cc.stuck_y, cc.stuck_z = cx, cy, cz
+                    cc.stuck_t = now
+                    cc.escape_phase = 0
+                end
+                cc.stuck_t = cc.stuck_t or now
+                cc.escape_phase = cc.escape_phase or 0
+                local stuck_for = now - cc.stuck_t
+                local phase_for = now - (cc.phase_start or cc.stuck_t)
+                local in_escape = (cc.escape_phase ~= 0)
+                local use_ride  = _ride
+                local use_speed = (cc.escape_phase == 1) and (_speed * 0.5) or _speed
+                local use_drive = in_escape and 7 or cc.drive_type
+                if cc.driving and stuck_for > _stuck then
+                    if cc.escape_phase == 0 then
+                        cc.escape_phase = 1; cc.phase_start = now; cc.driving = false
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пытаюсь выбраться из препятствия...', message_color)
+                    elseif cc.escape_phase == 1 and phase_for > 3.0 then
+                        if _aggr_on then
+                            cc.escape_phase = 2; cc.phase_start = now; cc.drive_type = 7; cc.driving = false
+                            sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Перестраиваю маршрут (плотный трафик).', message_color)
+                        else
+                            cruise_deactivate('Не удалось проложить маршрут, движение остановлено.')
+                            return
+                        end
+                    elseif cc.escape_phase == 2 and phase_for > _stuck then
+                        cruise_deactivate('Не удалось проложить маршрут, движение остановлено.')
+                        return
+                    end
+                end
+                local upd_period = math.max(0.5, 1.5 - (_speed - 7) * 0.04)
+                if not cc.driving or (now - (cc.last_drive_set or 0)) > upd_period then
+                    taskCarDriveToCoord(PLAYER_PED, car, cc.point.x, cc.point.y, cc.point.z, use_speed, use_ride, nil, use_drive)
+                    cc.driving = true; cc.last_drive_set = now
+                end
+            end
+        end
+	end
+end
+function welcome_message()
+	if not sampIsLocalPlayerSpawned() then 
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для завершения загрузки хелпера войдите на сервер.', message_color)
+		repeat wait(0) until sampIsLocalPlayerSpawned()
+	end
+
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка хелпера успешно завершена!', message_color)
+	show_notify('info', 'Arizona Helper', "Загрузка хелпера успешно завершена!", 3000)
+	print('Полная загрузка хелпера успешно завершена!')
+
+	if hotkey_ok and settings.general.bind_mainmenu then	
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для открытия меню хелпера нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_mainmenu) .. ' {ffffff}или используйте команду ' .. message_color_hex .. '/helper', message_color)
+	else
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для открытия меню хелпера используйте команду ' .. message_color_hex .. '/helper', message_color)
+	end
+
+	if MODULE.Update then
+		MODULE.Update.can_show = true
+		MODULE.Update.show_notice()
+	end
+
+	if IS_MOBILE and modules.player.data.nick ~= '' then
+		CHECK_ID = true
+		sampSendChat('/id ' .. modules.player.data.nick)
+	end
+end
+function run_command_lines(chat_cmd, cmd_arg, cmd_text, cmd_waiting, args)
+	if not MODULE.Binder.state.isActive then
+		if MODULE.Binder.state.isStop then MODULE.Binder.state.isStop = false end
+		local arg_check = false
+		local id, number, arg
+		local modifiedText = cmd_text
+		local function apply_nick_formats(id)
+			modifiedText = modifiedText:gsub('%{get_nick%(%{id%}%)%}', sampGetPlayerNickname(id) or "")
+			modifiedText = modifiedText:gsub('%{get_rp_nick%(%{id%}%)%}', sampGetPlayerNickname(id):gsub('_',' ') or "")
+			modifiedText = modifiedText:gsub('%{get_ru_nick%(%{id%}%)%}', translate(sampGetPlayerNickname(id)) or "")
+		end
+		if cmd_arg == '{arg}' then
+			if args and args ~= '' then modifiedText = modifiedText:gsub('{arg}', args or ""); arg_check = true
+			else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [любое значение]', message_color); play_sound() end
+		elseif cmd_arg == '{id}' then
+			if isParamSampID(args) then id = tonumber(args); apply_nick_formats(id); modifiedText = modifiedText:gsub('%{id%}', id or ""); arg_check = true
+			else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока]', message_color); play_sound() end
+		elseif cmd_arg == '{id} {arg}' then
+			if args and args ~= '' then
+				id, arg = args:match('(%d+) (.+)')
+				if isParamSampID(id) and arg then id = tonumber(id); apply_nick_formats(id); modifiedText = modifiedText:gsub('%{id%}', id or ""); modifiedText = modifiedText:gsub('%{arg%}', arg or ""); arg_check = true
+				else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое значение]', message_color); play_sound() end
+			else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое значение]', message_color); play_sound() end
+		elseif cmd_arg == '{id} {number} {arg}' then
+			if args and args ~= '' then
+				id, number, arg = args:match('(%d+) (%d+) (.+)')
+				if isParamSampID(id) and number and arg then id = tonumber(id); apply_nick_formats(id); modifiedText = modifiedText:gsub('%{id%}', id or ""); modifiedText = modifiedText:gsub('%{number%}', number or ""); modifiedText = modifiedText:gsub('%{arg%}', arg or ""); arg_check = true
+				else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое число] [любое значение]', message_color); play_sound() end
+			else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое число] [любое значение]', message_color); play_sound() end
+		elseif cmd_arg == '' then
+			arg_check = true
+		end
+		if arg_check then
+			lua_thread.create(function()
+				MODULE.Binder.state.isActive = true
+				MODULE.Binder.state.isPause = false
+				if modifiedText:find('&.+&') then info_stop_command() end
+				local lines = {}
+				for line in string.gmatch(modifiedText, "[^&]+") do table.insert(lines, line) end
+				local ui_action = false
+				for line_index, line in ipairs(lines) do
+					if MODULE.Binder.state.isStop then
+						MODULE.Binder.state.isStop = false; MODULE.Binder.state.isActive = false
+						if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отыгровка команды /' .. chat_cmd .. " успешно остановлена!", message_color); break
+					elseif line == "{pause}" then
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда /' .. chat_cmd .. ' поставлена на паузу!', message_color)
+						if not IS_MOBILE then
+							if hotkey_ok and settings.general.bind_action then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для продолжения нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_action) .. ' {ffffff}или вызовите курсор открыв чат (T/F6)', message_color)
+							else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для продолжения вызовите курсор открыв чат (T/F6)', message_color) end
+						end
+						MODULE.Binder.state.isPause = true; MODULE.CommandPause.Window[0] = true
+						while MODULE.Binder.state.isPause do wait(0) end
+						if not MODULE.Binder.state.isStop then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Продолжаю отыгровку команды /' .. chat_cmd, message_color) end
+					elseif line:find('{wait%((%d+)%)}') then
+						wait(tonumber(string.match(line, '{wait%((%d+)%)}')))
+					elseif line == '{show_medcard_menu}' then ui_action = true; MODULE.MedCard.player_id = tonumber(id); MODULE.MedCard.cancel = false; MODULE.MedCard.Window[0] = true; while MODULE.MedCard.Window[0] do wait(0) end; if MODULE.MedCard.cancel then MODULE.MedCard.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{show_recept_menu}' then ui_action = true; MODULE.Recept.player_id = tonumber(id); MODULE.Recept.cancel = false; MODULE.Recept.Window[0] = true; while MODULE.Recept.Window[0] do wait(0) end; if MODULE.Recept.cancel then MODULE.Recept.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{show_ant_menu}' then ui_action = true; MODULE.Antibiotik.player_id = tonumber(id); MODULE.Antibiotik.cancel = false; MODULE.Antibiotik.Window[0] = true; while MODULE.Antibiotik.Window[0] do wait(0) end; if MODULE.Antibiotik.cancel then MODULE.Antibiotik.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{show_rank_menu}' then ui_action = true; MODULE.GiveRank.player_id = tonumber(id); MODULE.GiveRank.cancel = false; MODULE.GiveRank.Window[0] = true; while MODULE.GiveRank.Window[0] do wait(0) end; if MODULE.GiveRank.cancel then MODULE.GiveRank.cancel = false; MODULE.Binder.state.isStop = true end
+					elseif line == '{lmenu_vc_vize}' then MODULE.LeadTools.vc_vize.player_id = tonumber(id); MODULE.LeadTools.vc_vize.bool = true; sampSendChat("/lmenu")
+					elseif line == '{give_platoon}' then MODULE.LeadTools.platoon.player_id = tonumber(id); MODULE.LeadTools.platoon.check = true; sampSendChat("/platoon")
+					elseif line:find('%{sellrank%((%d+)%)%}') then MODULE.LeadTools.sell_rank.player_id = tonumber(string.match(line, '(%d+)')); MODULE.LeadTools.sell_rank.checker = true; sampSendChat('/lmenu')
+					elseif not MODULE.Binder.state.isStop then
+						if line_index ~= 1 and not ui_action then
+							local total_wait = cmd_waiting * 1000; local waited = 0
+							while waited < total_wait do
+								if MODULE.Binder.state.isStop then break end
+								if MODULE.DEBUG then local remaining = math.max(0, total_wait - waited) / 1000; printStringNow(string.format("%d/%d - %.1fs", line_index - 1, #lines, remaining), 105) end
+								wait(100); waited = waited + 100
+							end
+						end
+						if ui_action then ui_action = false end
+						if not MODULE.Binder.state.isStop then
+							for tag, replacement in pairs(MODULE.Binder.tag) do
+								if line:find("{" .. tag .. "}") then
+									local success, result = pcall(string.gsub, line, "{" .. tag .. "}", function() return replacement() end)
+									if success then line = result end
+								end
+							end
+							if MODULE.DEBUG then sampAddChatMessage('[SendChat] {ffffff}' .. line, message_color) end
+							sampSendChat(line)
+						end
+					end
+				end
+				MODULE.Binder.state.isActive = false
+				if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end
+			end)
+		end
+	else
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound()
+	end
+end
+function register_command(chat_cmd, cmd_arg, cmd_text, cmd_waiting)
+	if chat_cmd == 'afind' then return end
+	sampRegisterChatCommand(chat_cmd, function(args) run_command_lines(chat_cmd, cmd_arg, cmd_text, cmd_waiting, args) end)
+end
+function info_stop_command()
+	if IS_MOBILE and settings.general.mobile_stop_button then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для остановки отыгровки используйте команду ' .. message_color_hex .. '/stop {ffffff}или кнопку в нижней части экрана.', message_color)
+		MODULE.CommandStop.Window[0] = true
+	elseif hotkey_ok and settings.general.bind_command_stop then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для остановки отыгровки используйте команду ' .. message_color_hex .. '/stop {ffffff}или нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_command_stop) .. '{ffffff}.', message_color)
+	else
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для остановки отыгровки используйте команду ' .. message_color_hex .. '/stop{ffffff}.', message_color)
+	end
+end
+function find_and_use_command(cmd, cmd_arg)
+	for _, command in ipairs(modules.commands.data.commands.my) do
+		if command.enable and command.text:find(cmd) then
+			sampProcessChatInput("/" .. command.cmd .. " " .. cmd_arg)
+			return
+		end
+	end 
+	for _, command in ipairs(modules.commands.data.commands_manage.my) do
+		if command.enable and command.text:find(cmd) then
+			sampProcessChatInput("/" .. command.cmd .. " " .. cmd_arg)
+			return
+		end
+	end
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось найти бинд этой команды! Попробуйте сбросить настройки хелпера.', message_color)
+	play_sound()
+end
+CUSTOM_CMD_HANDLERS = {}
+function initialize_commands()
+    CUSTOM_CMD_HANDLERS.edgo = function()
+        MODULE.Edgo.Window[0] = not MODULE.Edgo.Window[0]
+    end
+    if is_custom_cmd_enabled('edgo') then sampRegisterChatCommand(get_custom_cmd('edgo'), CUSTOM_CMD_HANDLERS.edgo) end
+
+    CUSTOM_CMD_HANDLERS.helper = function()
+        MODULE.Main.Window[0] = not MODULE.Main.Window[0]
+    end
+    if is_custom_cmd_enabled('helper') then sampRegisterChatCommand(get_custom_cmd('helper'), CUSTOM_CMD_HANDLERS.helper) end
+
+    CUSTOM_CMD_HANDLERS.binder = function()
+        MODULE.Main.Window[0] = true
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Биндер находится во вкладке "Команды" - "RP команды".', message_color)
+    end
+    if is_custom_cmd_enabled('binder') then sampRegisterChatCommand(get_custom_cmd('binder'), CUSTOM_CMD_HANDLERS.binder) end
+
+    CUSTOM_CMD_HANDLERS.hm = show_fast_menu
+    if is_custom_cmd_enabled('hm') then sampRegisterChatCommand(get_custom_cmd('hm'), CUSTOM_CMD_HANDLERS.hm) end
+
+    CUSTOM_CMD_HANDLERS.stop = function()
+        if MODULE.Binder.state.isActive then
+            MODULE.Binder.state.isStop = true
+        else
+            sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}В данный момент нет активных команд или RP-отыгровок.', message_color)
+        end
+    end
+    if is_custom_cmd_enabled('stop') then sampRegisterChatCommand(get_custom_cmd('stop'), CUSTOM_CMD_HANDLERS.stop) end
+
+    CUSTOM_CMD_HANDLERS.fixsize = function()
+        settings.general.custom_dpi = 1.0
+        settings.general.autofind_dpi = false
+        save_settings()
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Размер интерфейса хелпера сброшен до стандартного значения. Выполняю перезапуск...', message_color)
+        reload_script = true
+        thisScript():reload()
+    end
+    if is_custom_cmd_enabled('fixsize') then sampRegisterChatCommand(get_custom_cmd('fixsize'), CUSTOM_CMD_HANDLERS.fixsize) end
+
+    CUSTOM_CMD_HANDLERS.pnv = function()
+        MODULE.NightVision = not MODULE.NightVision
+        setNightVision(MODULE.NightVision)
+        MODULE.InfraredVision = false
+        setInfraredVision(MODULE.InfraredVision)
+        local rp = get_custom_cmd_text('pnv', MODULE.NightVision and 1 or 2)
+        if rp and rp ~= '' then sampSendChat(rp) end
+    end
+    if is_custom_cmd_enabled('pnv') then sampRegisterChatCommand(get_custom_cmd('pnv'), CUSTOM_CMD_HANDLERS.pnv) end
+
+    CUSTOM_CMD_HANDLERS.irv = function()
+        MODULE.InfraredVision = not MODULE.InfraredVision
+        setInfraredVision(MODULE.InfraredVision)
+        MODULE.NightVision = false
+        setNightVision(MODULE.NightVision)
+        local rp = get_custom_cmd_text('irv', MODULE.InfraredVision and 1 or 2)
+        if rp and rp ~= '' then sampSendChat(rp) end
+    end
+    if is_custom_cmd_enabled('irv') then sampRegisterChatCommand(get_custom_cmd('irv'), CUSTOM_CMD_HANDLERS.irv) end
+
+	CUSTOM_CMD_HANDLERS.cruise = function()
+		local server = tonumber(getServerNumber())
+		if not (server == 0 or server < 200) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Данная функция поддерживается только на карте GTA San Andreas. Карты CRMP и Vice City не поддерживаются.', message_color)
+			play_sound(); return
+		end
+		if not settings.general.adaptive_cruise then return end
+		local cc = MODULE.Cruise
+		cc.speed_slider[0]  = settings.general.cruise_speed   or 28
+		cc.radius_slider[0] = settings.general.cruise_radius  or 15
+		cc.stuck_slider[0]  = settings.general.cruise_stuck   or 4
+		cc._auto_cb[0] = settings.general.cruise_auto_accept or false
+		cc._aggr_cb[0] = (settings.general.cruise_aggressive ~= false)
+		local ride_vals  = {0, 2, 3}
+		local drive_vals = {0, 5, 2, 4, 7}
+		local rv = settings.general.cruise_ride  or 0
+		local dv = settings.general.cruise_drive or 2
+		cc.ride_combo[0]  = 0; for i, v in ipairs(ride_vals)  do if v == rv then cc.ride_combo[0]  = i - 1 end end
+		cc.drive_combo[0] = 2; for i, v in ipairs(drive_vals) do if v == dv then cc.drive_combo[0] = i - 1 end end
+		cc.Window[0] = true
+	end
+	if is_custom_cmd_enabled('cruise') then sampRegisterChatCommand(get_custom_cmd('cruise'), CUSTOM_CMD_HANDLERS.cruise) end
+
+    CUSTOM_CMD_HANDLERS.debug = function()
+        MODULE.DEBUG = not MODULE.DEBUG
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отслеживание серверных данных ' .. (MODULE.DEBUG and 'включено.' or 'выключено.'), message_color)
+	end
+    if is_custom_cmd_enabled('debug') then sampRegisterChatCommand(get_custom_cmd('debug'), CUSTOM_CMD_HANDLERS.debug) end
+
+	if not isMode('none') then
+		CUSTOM_CMD_HANDLERS.members = function(arg)
+			if not MODULE.Binder.state.isActive then
+				if settings.general.nmembers then
+					local md = modules.members.data
+					local cd = md.open_cooldown or 2
+					local last = MODULE.Members.last_open_time or 0
+					local now = os.time()
+					local cd_left = cd - (now - last)
+					if MODULE.Members.info.check then
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь загрузки текущего списка сотрудников.', message_color)
+						return
+					end
+					if cd_left > 0 then
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Список можно открыть через ' .. cd_left .. ' сек.', message_color)
+						play_sound()
+						return
+					end
+					if MODULE.Members.Window[0] then
+						MODULE.Members.Window[0] = false
+						MODULE.Members.upd.check = false
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Меню списка сотрудников закрыто!', message_color)
+					else
+						MODULE.Members.new = {}
+						MODULE.Members.info.check = true
+						MODULE.Members.upd.check = true
+						MODULE.Members.flood_retries = 0
+						MODULE.Members.last_open_time = now
+						local delay = md.open_delay or 250
+						lua_thread.create(function()
+							wait(delay)
+							MODULE.Members.flood_suppress_until = os.time() + 3
+							sampSendChat("/members")
+						end)
+					end
+				else
+					sampSendChat("/members")
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+				play_sound()
+			end
+		end
+		if is_custom_cmd_enabled('members') then sampRegisterChatCommand(get_custom_cmd('members'), CUSTOM_CMD_HANDLERS.members) end
+
+        CUSTOM_CMD_HANDLERS.dep = function(arg)
+            if not MODULE.Binder.state.isActive then
+                MODULE.Departament.Window[0] = not MODULE.Departament.Window[0]
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+                play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('dep') then sampRegisterChatCommand(get_custom_cmd('dep'), CUSTOM_CMD_HANDLERS.dep) end
+
+        CUSTOM_CMD_HANDLERS.sob = function(arg)
+            if not MODULE.Binder.state.isActive then
+                if isParamSampID(arg) then
+                    MODULE.Sobes.player_id = tonumber(arg)
+                    MODULE.Sobes.Window[0] = not MODULE.Sobes.Window[0]
+                else
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. get_custom_cmd('sob') .. ' [ID игрока]', message_color)
+                    play_sound()
+                end
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+                play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('sob') then sampRegisterChatCommand(get_custom_cmd('sob'), CUSTOM_CMD_HANDLERS.sob) end
+    end
+
+    if isMode('police') or isMode('fbi') then
+        CUSTOM_CMD_HANDLERS.forensic = function()
+            if not MODULE.Binder.state.isActive then
+                MODULE.Forensic.Window[0] = not MODULE.Forensic.Window[0]
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+                play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('forensic') then sampRegisterChatCommand(get_custom_cmd('forensic'), CUSTOM_CMD_HANDLERS.forensic) end
+
+		CUSTOM_CMD_HANDLERS.sum = function(arg)
+            if not MODULE.Binder.state.isActive then
+                if isParamSampID(arg) then
+                    if #modules.smart_uk.data ~= 0 then
+                        MODULE.SumMenu.player_id = tonumber(arg)
+                        MODULE.SumMenu.Window[0] = true
+                    else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сначала загрузите/заполните систему умного розыска в ' .. message_color_hex .. '/helper - Функции ' .. modules.player.data.fraction_tag, message_color)
+                        play_sound()
+                    end
+                else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. get_custom_cmd('sum') .. ' [ID игрока]', message_color)
+                    play_sound()
+                end
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+                play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('sum') then sampRegisterChatCommand(get_custom_cmd('sum'), CUSTOM_CMD_HANDLERS.sum) end
+
+        CUSTOM_CMD_HANDLERS.tsm = function(arg)
+            if not MODULE.Binder.state.isActive then
+                if isParamSampID(arg) then
+                    if #modules.smart_pdd.data ~= 0 then
+                        MODULE.TsmMenu.player_id = tonumber(arg)
+                        MODULE.TsmMenu.Window[0] = true
+                    else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сначала загрузите/заполните систему умных штрафов в ' .. message_color_hex .. '/helper - Функции ' .. modules.player.data.fraction_tag, message_color)
+                        play_sound()
+                    end
+                else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. get_custom_cmd('tsm') .. ' [ID игрока]', message_color)
+                    play_sound()
+                end
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+                play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('tsm') then sampRegisterChatCommand(get_custom_cmd('tsm'), CUSTOM_CMD_HANDLERS.tsm) end
+
+		local afind_active = false
+        local afind_target_id = -1
+        local function afind_handler(arg)
+            arg = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+            if arg == 'stop' then
+                afind_active = false; MODULE.Afind.active = false; MODULE.Afind.in_building = false; afind_target_id = -1
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-поиск остановлен.', message_color)
+                return
+            end
+            local target_id = tonumber(arg)
+            if not target_id or not sampIsPlayerConnected(target_id) then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. get_custom_cmd('afind') .. ' [ID игрока]{ffffff}. Для остановки используйте ' .. message_color_hex .. '/' .. get_custom_cmd('afind') .. ' stop', message_color)                play_sound(); return
+            end
+            if afind_active then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-поиск уже активен для ID ' .. message_color_hex .. afind_target_id .. '{ffffff}. Для остановки используйте /' .. get_custom_cmd('afind') .. ' stop', message_color)                play_sound(); return
+            end
+            afind_active = true; MODULE.Afind.active = true; MODULE.Afind.target_id = target_id
+            MODULE.Afind.target_nick = sampGetPlayerNickname(target_id) or ""; MODULE.Afind.in_building = false
+            MODULE.Afind.building_since = 0; MODULE.Afind.last_building_msg = 0; afind_target_id = target_id
+            sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-поиск игрока ' .. message_color_hex .. sampGetPlayerNickname(target_id) .. '[' .. message_color_hex .. target_id .. ']{ffffff} запущен.', message_color)
+            lua_thread.create(function()
+                local my_id = target_id
+                local function still_mine() return afind_active and afind_target_id == my_id end
+				local afind_data = get_custom_cmd_data('afind')
+				local rp_text = (afind_data and afind_data.text) or ''
+				if rp_text ~= '' then
+					local sex_suffix = MODULE.Binder.tag.sex()
+					local fraction = modules.player.data.fraction_tag or "организации"
+					local processed = rp_text:gsub('{sex}', sex_suffix):gsub('{fraction}', fraction):gsub('{fraction_tag}', fraction):gsub('{id}', tostring(my_id))
+					local waiting_ms = math.floor(tonumber((afind_data and afind_data.waiting) or 2) * 1000)
+					if waiting_ms < 0 then waiting_ms = 0 end
+					local segs = {}
+					for seg in processed:gmatch("[^&\n]+") do local t = seg:match("^%s*(.-)%s*$"); if t and t ~= "" then table.insert(segs, t) end end
+					for i, line in ipairs(segs) do
+						if not still_mine() then break end
+						local wait_time = line:match("^%{wait%((%d+)%)%}$")
+						if wait_time then wait(tonumber(wait_time))
+						else sampSendChat(line); local nxt = segs[i + 1]; local nxt_is_wait = nxt and nxt:match("^%{wait%((%d+)%)%}$"); if not nxt_is_wait then wait(waiting_ms) end end
+					end
+				end
+                local function afind_get_distance_to(tid)
+                    if not sampIsPlayerConnected(tid) then return nil end
+                    local mx, my, mz = getCharCoordinates(PLAYER_PED)
+                    for _, h in pairs(getAllChars()) do
+                        if doesCharExist(h) then
+                            local ok_id, hid = sampGetPlayerIdByCharHandle(h)
+                            if ok_id and tonumber(hid) == tid then
+                                local tx, ty, tz = getCharCoordinates(h)
+                                return getDistanceBetweenCoords3d(mx, my, mz, tx, ty, tz)
+                            end
+                        end
+                    end
+                    return nil
+                end
+                while still_mine() and sampIsPlayerConnected(my_id) do
+                    sampSendChat('/find ' .. my_id)
+                    local cd_ms = math.floor((settings.mj.afind_find_cd or 3) * 1000)
+                    if cd_ms < 500 then cd_ms = 500 end
+                    local waited = 0
+                    local approached = false
+                    while waited < cd_ms and still_mine() do
+                        if settings.mj.afind_auto_stop ~= false then
+                            local d = afind_get_distance_to(my_id)
+                            if d and d <= (settings.mj.afind_stop_radius or 10) then
+                                approached = true
+                                break
+                            end
+                        end
+						wait(100)
+                        waited = waited + 100
+                    end
+                    if approached then
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы приблизились к цели ' .. message_color_hex .. (MODULE.Afind.target_nick or '') .. '[' .. tostring(my_id) .. ']{ffffff}. Авто-поиск остановлен.', message_color)
+                        afind_active = false; MODULE.Afind.active = false; MODULE.Afind.in_building = false; afind_target_id = -1
+                        break
+                    end
+                end
+                if afind_target_id == my_id then
+                    if afind_active then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Цель отключилась от сервера. Авто-поиск остановлен.', message_color) end
+                    afind_active = false; MODULE.Afind.active = false; MODULE.Afind.in_building = false; afind_target_id = -1
+                end
+            end)
+        end
+        CUSTOM_CMD_HANDLERS.afind = afind_handler
+        if is_custom_cmd_enabled('afind') then sampRegisterChatCommand(get_custom_cmd('afind'), CUSTOM_CMD_HANDLERS.afind) end
+        local _orig_sampUnregisterChatCommand = sampUnregisterChatCommand
+        function sampUnregisterChatCommand(name)
+            if name == get_custom_cmd('afind') then return end
+            return _orig_sampUnregisterChatCommand(name)
+        end
+        CUSTOM_CMD_HANDLERS.wanted = function(arg)
+            if MODULE.Wanted.checker then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. get_custom_cmd('wanted') .. ' {ffffff}заблокирована во время сканирования ' .. message_color_hex .. '/' .. get_custom_cmd('wanteds') .. '{ffffff}. Дождитесь окончания сканирования.', message_color)
+                play_sound()
+                return
+            end
+            sampSendChat('/wanted ' .. arg)
+            sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Рекомендуется использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('wanteds') .. ' {ffffff}для автоматического сканирования всего списка розыска.', message_color)
+        end
+        if is_custom_cmd_enabled('wanted') then sampRegisterChatCommand(get_custom_cmd('wanted'), CUSTOM_CMD_HANDLERS.wanted) end
+        CUSTOM_CMD_HANDLERS.wanteds = function(arg)
+            if MODULE.Wanted.Window[0] or MODULE.Wanted.updwanteds.stop then
+                MODULE.Wanted.Window[0] = false; MODULE.Wanted.checker = false; MODULE.Wanted.updwanteds.stop = false; MODULE.Wanted.updwanteds.check = false
+                MODULE.Wanted.scan_cancel = true
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Меню списка преступников закрыто!', message_color)
+            elseif not MODULE.Wanted.checker then
+                lua_thread.create(function()
+                    local max_lvl = isMode('fbi') and 7 or 6
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сканирование /wanted, ожидайте ' .. message_color_hex .. max_lvl .. ' {ffffff}секунд...', message_color)
+                    show_notify('info', 'Arizona Helper', "Сканирование /wanted...", 2500)
+                    MODULE.Wanted.new = {}; MODULE.Wanted.checker = true; MODULE.Wanted.scan_cancel = false
+                    for i = max_lvl, 1, -1 do
+                        if MODULE.Wanted.scan_cancel then break end
+                        printStringNow("CHECK WANTED " .. i, 1000); sampSendChat('/wanted ' .. i); wait(1000)
+                    end
+                    MODULE.Wanted.checker = false
+                    if MODULE.Wanted.scan_cancel then return end
+                    if #MODULE.Wanted.new == 0 then
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сейчас на сервере нету игроков в розыске!', message_color)
+                    else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сканирование списка /wanted окончено! Найдено преступников: ' .. message_color_hex .. #MODULE.Wanted.new, message_color)
+                        MODULE.Wanted.all = MODULE.Wanted.new; MODULE.Wanted.updwanteds.stop = false; MODULE.Wanted.updwanteds.last_time = os.time(); MODULE.Wanted.updwanteds.check = true; MODULE.Wanted.Window[0] = true
+                    end
+                end)
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения сканирования!', message_color); play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('wanteds') then sampRegisterChatCommand(get_custom_cmd('wanteds'), CUSTOM_CMD_HANDLERS.wanteds) end
+
+        CUSTOM_CMD_HANDLERS.patrool = function(arg)
+            MODULE.Patrool.Window[0] = not MODULE.Patrool.Window[0]
+        end
+        if is_custom_cmd_enabled('patrool') then sampRegisterChatCommand(get_custom_cmd('patrool'), CUSTOM_CMD_HANDLERS.patrool) end
+    end
+    if not (isMode('ghetto') or isMode('mafia') or isMode('judge')) then
+        CUSTOM_CMD_HANDLERS.post = function(arg)
+            if not MODULE.Binder.state.isActive then
+                MODULE.Post.Window[0] = not MODULE.Post.Window[0]
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('post') then sampRegisterChatCommand(get_custom_cmd('post'), CUSTOM_CMD_HANDLERS.post) end
+    end
+    if isMode('prison') then
+        CUSTOM_CMD_HANDLERS.pum = function(arg)
+            if not MODULE.Binder.state.isActive then
+                if isParamSampID(arg) then
+                    if #modules.smart_rptp.data ~= 0 then
+                        MODULE.PumMenu.player_id = tonumber(arg); MODULE.PumMenu.Window[0] = true
+                    else
+                        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сначала загрузите/заполните систему умного срока в ' .. message_color_hex .. '/helper - Функции ' .. modules.player.data.fraction_tag, message_color); play_sound()
+                    end
+                else
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. get_custom_cmd('pum') .. ' [ID игрока]', message_color)
+                end
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound()
+            end
+        end
+        if is_custom_cmd_enabled('pum') then sampRegisterChatCommand(get_custom_cmd('pum'), CUSTOM_CMD_HANDLERS.pum) end
+    end
+    if isMode('gov') then
+        CUSTOM_CMD_HANDLERS.zeks = function()
+            if settings.gov.custom_zeks then
+                if MODULE.Zeks.Window[0] or MODULE.Zeks.updzeks.stop then
+                    MODULE.Zeks.Window[0] = false; MODULE.Zeks.checker = false; MODULE.Zeks.updzeks.stop = false; MODULE.Zeks.updzeks.check = false
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Меню списка заключенных закрыто!', message_color)
+                elseif not MODULE.Zeks.checker then
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сканирование /' .. get_custom_cmd('zeks') .. '...', message_color)
+                    show_notify('info', 'Arizona Helper', "Сканирование /' .. get_custom_cmd('zeks') .. '...", 2500)
+                    MODULE.Zeks.new = {}; MODULE.Zeks.checker = true; sampSendChat('/zeks')
+                else
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения сканирования!', message_color); play_sound()
+                end
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы можете включить кастомное меню /' .. get_custom_cmd('zeks') .. ' с авто-обновлением в ' .. message_color_hex .. '/helper - Функции Право', message_color)
+                sampSendChat('/zeks')
+            end
+        end
+        if is_custom_cmd_enabled('zeks') then sampRegisterChatCommand(get_custom_cmd('zeks'), CUSTOM_CMD_HANDLERS.zeks) end
+    end
+    for _, command in ipairs(modules.commands.data.commands.my) do
+        if command.cmd ~= 'afind' then
+            if command.enable then register_command(command.cmd, command.arg, command.text, tonumber(command.waiting))
+            else sampUnregisterChatCommand(command.cmd) end
+        end
+    end
+	if modules.player.data.fraction_rank_number >= 6 then
+		CUSTOM_CMD_HANDLERS.frp = function()
+			if modules.player.data.fraction_rank_number < 6 then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда /' .. get_custom_cmd('frp') .. ' доступна с 6 ранга!', message_color)
+				return
+			end
+			lua_thread.create(function()
+				local sent = 0
+				local radius = settings.mj.frp_radius or 5
+				for _, h in pairs(getAllChars()) do
+					_, id = sampGetPlayerIdByCharHandle(h); _, m = sampGetPlayerIdByCharHandle(PLAYER_PED); id = tonumber(id)
+					if id ~= -1 and id ~= m and doesCharExist(h) and sampIsPlayerConnected(id) then
+						local x, y, z = getCharCoordinates(h); local mx, my, mz = getCharCoordinates(PLAYER_PED)
+						if getDistanceBetweenCoords3d(mx, my, mz, x, y, z) <= radius then
+							sampSendChat("/fractionrp " .. id); sent = sent + 1; wait(1000)
+						end
+					end
+				end
+				if sent == 0 then
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Рядом (в радиусе ' .. radius .. 'м) нет игроков для выдачи /fractionrp.', message_color)
+				end
+			end)
+		end
+		if is_custom_cmd_enabled('frp') then sampRegisterChatCommand(get_custom_cmd('frp'), CUSTOM_CMD_HANDLERS.frp) end
+	end
+    if modules.player.data.fraction_rank_number >= 9 then
+        CUSTOM_CMD_HANDLERS.lm = show_leader_fast_menu
+        if is_custom_cmd_enabled('lm') then sampRegisterChatCommand(get_custom_cmd('lm'), CUSTOM_CMD_HANDLERS.lm) end
+
+        CUSTOM_CMD_HANDLERS.spcar = function()
+            if not MODULE.Binder.state.isActive then
+                lua_thread.create(function()
+                    MODULE.Binder.state.isActive = true; info_stop_command()
+                    sampSendChat("/rb Внимание! Через 15 секунд будет спавн транспорта организации."); wait(1500)
+                    if MODULE.Binder.state.isStop then MODULE.Binder.state.isStop = false; MODULE.Binder.state.isActive = false; if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end; sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отыгровка команды /spcar успешно остановлена!', message_color); return end
+                    sampSendChat("/rb Займите транспорт, иначе он будет заспавнен."); wait(13500)
+                    if MODULE.Binder.state.isStop then MODULE.Binder.state.isStop = false; MODULE.Binder.state.isActive = false; if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end; sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отыгровка команды /spcar успешно остановлена!', message_color); return end
+                    MODULE.LeadTools.spawncar = true; sampSendChat("/lmenu"); MODULE.Binder.state.isActive = false
+                    if IS_MOBILE and settings.general.mobile_stop_button then MODULE.CommandStop.Window[0] = false end
+                end)
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Дождитесь завершения предыдущей команды.', message_color)
+            end
+        end
+        if is_custom_cmd_enabled('spcar') then sampRegisterChatCommand(get_custom_cmd('spcar'), CUSTOM_CMD_HANDLERS.spcar) end
+
+        CUSTOM_CMD_HANDLERS.fcleaner = function(arg)
+            if arg:find('(%d+)') then
+                MODULE.LeadTools.cleaner.players_to_kick = {}; MODULE.LeadTools.cleaner.day_afk = tonumber(arg); MODULE.LeadTools.cleaner.uninvite = true; sampSendChat('/lmenu')
+            else
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. get_custom_cmd('fcleaner') .. ' [кол-во дней афк для кика]', message_color)
+            end
+        end
+        if is_custom_cmd_enabled('fcleaner') then sampRegisterChatCommand(get_custom_cmd('fcleaner'), CUSTOM_CMD_HANDLERS.fcleaner) end
+
+        for _, command in ipairs(modules.commands.data.commands_manage.my) do
+            if command.enable then register_command(command.cmd, command.arg, command.text, tonumber(command.waiting)) end
+        end
+    end
+	if not IS_MOBILE and hotkey_ok then
+		for _, item in ipairs(modules.custom_commands.data) do
+			if item.enable and (item.arg or '') == '' and item.bind and item.bind ~= '{}' and item.bind ~= '[]' then
+				local k = item.key
+				hotkeys[k .. "HotKey"] = hotkey.RegisterHotKey(k .. "HotKey", false, decodeJson(item.bind), function()
+					if not sampIsCursorActive() then sampProcessChatInput('/' .. get_custom_cmd(k)) end
+				end)
+			end
+		end
+	end
+	for _, item in ipairs(modules.custom_commands.data) do
+		local key = item.key
+		if CUSTOM_CMD_HANDLERS[key] and is_custom_cmd_enabled(key) then
+			register_custom_command(key)
+		end
+	end
+end
+local cyrilic_characters = {
+    [168] = 'Ё', [184] = 'ё', [192] = 'А', [193] = 'Б', [194] = 'В', [195] = 'Г', [196] = 'Д',
+	[197] = 'Е', [198] = 'Ж', [199] = 'З', [200] = 'И', [201] = 'Й', [202] = 'К', [203] = 'Л',
+	[204] = 'М', [205] = 'Н', [206] = 'О', [207] = 'П', [208] = 'Р', [209] = 'С', [210] = 'Т',
+	[211] = 'У', [212] = 'Ф', [213] = 'Х', [214] = 'Ц', [215] = 'Ч', [216] = 'Ш', [217] = 'Щ',
+	[218] = 'Ъ', [219] = 'Ы', [220] = 'Ь', [221] = 'Э', [222] = 'Ю', [223] = 'Я', [224] = 'а',
+	[225] = 'б', [226] = 'в', [227] = 'г', [228] = 'д', [229] = 'е', [230] = 'ж', [231] = 'з',
+	[232] = 'и', [233] = 'й', [234] = 'к', [235] = 'л', [236] = 'м', [237] = 'н', [238] = 'о',
+	[239] = 'п', [240] = 'р', [241] = 'с', [242] = 'т', [243] = 'у', [244] = 'ф', [245] = 'х',
+	[246] = 'ц', [247] = 'ч', [248] = 'ш', [249] = 'щ', [250] = 'ъ', [251] = 'ы', [252] = 'ь',
+	[253] = 'э', [254] = 'ю', [255] = 'я',
+}
+function string.rlower(s)
+	if s:len() == 0 then return s end
+	s = s:lower()
+	local output = ''
+	for i = 1, s:len() do
+		local ch = s:byte(i)
+		if ch >= 192 and ch <= 223 then
+			output = output .. cyrilic_characters[ch + 32]
+		elseif ch == 168 then
+			output = output .. cyrilic_characters[184]
+		else
+			output = output .. string.char(ch)
+		end
+	end
+	return output
+end
+function string.rupper(s)
+	if s:len() == 0 then return s end
+	s = s:upper()
+	local output = ''
+	for i = 1, s:len() do
+		local ch = s:byte(i)
+		if ch >= 224 and ch <= 255 then
+			output = output .. cyrilic_characters[ch - 32]
+		elseif ch == 184 then
+			output = output .. cyrilic_characters[168]
+		else
+			output = output .. string.char(ch)
+		end
+	end
+	return output
+end
+function translate(name)
+	if name and name:match('%a+') then
+		name = name:gsub("^%[%d+%]", "")
+		local translit_table = {
+			['ph'] = 'ф',['Ph'] = 'Ф',['Ch'] = 'Ч',['ch'] = 'ч',['Th'] = 'Т', ['liy'] = 'лий',
+			['th'] = 'т',['Sh'] = 'Ш',['sh'] = 'ш',['Ae'] = 'Э',['ae'] = 'э', ['ame'] = 'ейм',
+			['size'] = 'сайз', ['Jj'] = 'Джейджей',['Whi'] = 'Вай',['lack'] = 'лэк', ['ane'] = 'ейн',
+			['whi'] = 'вай',['Ck'] = 'К',['ck'] = 'к',['Kh'] = 'Х',['kh'] = 'х', ['Alex'] = 'Алекс',
+			['hn'] = 'н',['Hen'] = 'Ген',['Zh'] = 'Ж',['zh'] = 'ж',['Yu'] = 'Ю', ['Jason'] = 'Джейсон',
+			['yu'] = 'ю',['Yo'] = 'Ё',['yo'] = 'ё',['Cz'] = 'Ц',['cz'] = 'ц', ['Babe'] = 'Бэйби',
+			['ia'] = 'я', ['ea'] = 'и',['Ya'] = 'Я', ['ya'] = 'я', ['ove'] = 'ав',['ci'] = 'ци',
+			['ay'] = 'эй', ['rise'] = 'райз',['oo'] = 'у', ['Oo'] = 'У', ['rown'] = 'раун',
+			['Ee'] = 'И', ['ee'] = 'и', ['Un'] = 'Ан', ['un'] = 'ан', ['Ci'] = 'Ци',
+			['yse'] = 'уз', ['cate'] = 'кейт', ['eow'] = 'яу', ['yev'] = 'уев', ['Alexei'] = 'Алексей',
+		}
+		local char_table = {
+			['B'] = 'Б',['Z'] = 'З',['T'] = 'Т',['Y'] = 'Й',['P'] = 'П',['J'] = 'Дж',['X'] = 'Кс',['G'] = 'Г',
+			['V'] = 'В',['H'] = 'Х',['N'] = 'Н',['E'] = 'Е',['I'] = 'И',['D'] = 'Д',['O'] = 'О',['K'] = 'К',['F'] = 'Ф',
+			['y`'] = 'ы',['e`'] = 'э',['A'] = 'А',['C'] = 'К',['L'] = 'Л',['M'] = 'М',['W'] = 'В',['Q'] = 'К',
+			['U'] = 'А',['R'] = 'Р',['S'] = 'С',['zm'] = 'зьм',['h'] = 'х',['q'] = 'к',['y'] = 'и',['a'] = 'а',
+			['w'] = 'в',['b'] = 'б',['v'] = 'в',['g'] = 'г',['d'] = 'д',['e'] = 'е',['z'] = 'з',['i'] = 'и',
+			['j'] = 'ж',['k'] = 'к',['l'] = 'л',['m'] = 'м',['n'] = 'н',['o'] = 'о',['p'] = 'п',['r'] = 'р',
+			['s'] = 'с',['t'] = 'т',['u'] = 'у',['f'] = 'ф',['x'] = 'x',['c'] = 'к',['``'] = 'ъ',['`'] = 'ь',['_'] = ' '
+		}
+		local function apply(tbl)
+			local keys = {}
+			for k in pairs(tbl) do keys[#keys + 1] = k end
+			table.sort(keys, function(a, b) return #a > #b end)
+			for _, k in ipairs(keys) do
+				name = name:gsub(k, tbl[k])
+			end
+		end
+		apply(translit_table)
+		apply(char_table)
+		return name
+	end
+	return name
+end
+---------------------------------------[ Note Search ]------------------------------------------
+local function centered_color(id, col)
+	local dpi = settings.general.custom_dpi
+	local w = MODULE.Main.color_w or (40 * dpi)
+	local x = imgui.GetCursorPosX()
+	local avail = imgui.GetContentRegionAvail().x
+	imgui.SetCursorPosX(x + math.max(0, (avail - w) / 2))
+	local ch = imgui.ColorEdit3(id, col, imgui.ColorEditFlags.NoInputs)
+	MODULE.Main.color_w = imgui.GetItemRectSize().x
+	return ch
+end
+local function su8(v)
+	if type(v) ~= 'string' then v = tostring(v) end
+	local ok, r = pcall(u8, v)
+	return (ok and r) or v
+end
+local function render_note_text(text, query)
+	local avail = imgui.GetContentRegionAvail().x
+	local has_q = (query or '') ~= ''
+	local lq = has_q and string.rlower(query) or nil
+	local col_hit = imgui.ImVec4(1.0, 0.75, 0.0, 1.0)
+	local function push_words(src, out)
+		local i, n = 1, #src
+		while i <= n do
+			local s, e = src:find('%S+', i)
+			if not s then
+				if #out > 0 then out[#out].txt = out[#out].txt .. src:sub(i) end
+				break
+			end
+			table.insert(out, { txt = src:sub(i, s - 1) .. src:sub(s, e), hit = false })
+			i = e + 1
+		end
+	end
+	for line in (text .. '\n'):gmatch('([^\n]*)\n') do
+		local tokens = {}
+		local lower = has_q and string.rlower(line) or nil
+		if not (lower and lower:find(lq, 1, true)) then
+			push_words(line, tokens)
+		else
+			local pos = 1
+			while true do
+				local s, e = lower:find(lq, pos, true)
+				if not s then
+					if pos <= #line then push_words(line:sub(pos), tokens) end
+					break
+				end
+				if s > pos then push_words(line:sub(pos, s - 1), tokens) end
+				table.insert(tokens, { txt = line:sub(s, e), hit = true })
+				pos = e + 1
+			end
+		end
+		if #tokens == 0 then
+			imgui.Text('')
+		else
+			local first_in_line, cur_w = true, 0
+			for _, tk in ipairs(tokens) do
+				local txt = su8(tk.txt)
+				local w = imgui.CalcTextSize(txt).x
+				if not first_in_line and cur_w + w > avail then
+					first_in_line, cur_w = true, 0
+				end
+				if first_in_line then
+					first_in_line = false
+				else
+					imgui.SameLine(0, 0)
+				end
+				if tk.hit then
+					imgui.TextColored(col_hit, txt)
+				else
+					imgui.Text(txt)
+				end
+				cur_w = cur_w + w
+			end
+		end
+	end
+end
+local function note_matches_search(note, q_cp)
+	if (q_cp or '') == '' then return true end
+	local lq = string.rlower(q_cp)
+	local function h(s)
+		return type(s) == 'string' and string.rlower(s):find(lq, 1, true) ~= nil
+	end
+	return h(note.note_name) or h(note.note_text)
+end
+---------------------------------------[ CMD Search ]------------------------------------------
+local function cmd_matches_search(cmd, desc, raw)
+	raw = (raw ~= nil) and raw or ffi.string(MODULE.Main.cmd_search or '')
+	if raw == '' then return true end
+	cmd, desc = (cmd or ''), (desc or '')
+	local q_ascii = raw:lower()
+	local q_cp = q_ascii
+	local ok_q, dec_q = pcall(function() return u8:decode(raw) end)
+	if ok_q and type(dec_q) == 'string' and dec_q ~= '' then q_cp = string.rlower(dec_q) end
+	local function hit(h)
+		if type(h) ~= 'string' or h == '' then return false end
+		if h:find(q_ascii, 1, true) then return true end
+		if string.rlower(h):find(q_cp, 1, true) then return true end
+		local ok_h, dec_h = pcall(function() return u8:decode(h) end)
+		if ok_h and type(dec_h) == 'string' and string.rlower(dec_h):find(q_cp, 1, true) then return true end
+		return false
+	end
+	return hit(cmd) or hit(desc)
+end
+---------------------------------------[ Other ]------------------------------------------
+function isParamSampID(id)
+	id = tonumber(id) or nil
+	if not id or id < 0 or id > 999 or id % 1 ~= 0 then return false end
+	if id == MODULE.Binder.tag.my_id() then return true end
+	return sampIsPlayerConnected(id)
+end
+function play_sound()
+	local path_audio = config_dir .. "/Resourse/notify.mp3"
+	if doesFileExist(path_audio) then
+		local notify_sound = loadAudioStream(path_audio)
+		setAudioStreamState(notify_sound, 1)
+	end
+end
+function show_fast_menu(id)
+	if isParamSampID(id) then 
+		MODULE.FastMenu.player_id = tonumber(id)
+		MODULE.FastMenu.Window[0] = true
+	else
+		if hotkey_ok and settings.general.bind_fastmenu then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/hm [ID игрока] {ffffff}или наведитесь на игрока через ' .. message_color_hex .. 'ПКМ + ' .. getNameKeysFrom(settings.general.bind_fastmenu), message_color) 
+		else
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/hm [ID игрока]', message_color)
+		end 
+		play_sound()
+	end 
+end
+function show_leader_fast_menu(id)
+	if isParamSampID(id) then
+		MODULE.LeaderFastMenu.player_id = tonumber(id)
+		MODULE.LeaderFastMenu.Window[0] = true
+	else
+		if hotkey_ok and settings.general.bind_leader_fastmenu then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/lm [ID игрока] {ffffff}или наведитесь на игрока через ' .. message_color_hex .. 'ПКМ + ' .. getNameKeysFrom(settings.general.bind_leader_fastmenu), message_color) 
+		else
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/lm [ID игрока]', message_color)
+		end 
+		play_sound()
+	end
+end
+function get_players()
+	local myId = MODULE.Binder.tag.my_id()
+	local mx, my, mz = getCharCoordinates(PLAYER_PED)
+	local playersInRange = {}
+	for i, ped in pairs(getAllChars()) do
+		local result, id = sampGetPlayerIdByCharHandle(ped)
+		if result and id and id ~= myId and id ~= -1 and not sampGetPlayerNickname(id):find('^Player_') and not sampGetPlayerNickname(id):find('^' .. modules.player.data.nick) then
+			local x, y, z = getCharCoordinates(ped)
+			if getDistanceBetweenCoords3d(mx, my, mz, x, y, z) <= 8 then
+				table.insert(playersInRange, id)
+			end
+		end
+	end
+	return playersInRange
+end
+function openLink(link)
+	if IS_MOBILE then
+		ffi.cdef[[ void _Z12AND_OpenLinkPKc(const char* link); ]]
+		ffi.load('GTASA')._Z12AND_OpenLinkPKc(link)
+	else
+		os.execute("explorer " .. link)
+	end
+end
+local servers = {
+	{name = 'Unknown server', number = '00'},
+	-- Arizona
+	{name = 'Phoenix', number = '01'},
+	{name = 'Tucson', number = '02'},
+	{name = 'Scottdale', number = '03'},
+	{name = 'Chandler', number = '04'},
+	{name = 'Brainburg', number = '05'},
+	{name = 'SaintRose', number = '06'},
+	{name = 'Mesa', number = '07'},
+	{name = 'Red Rock', number = '08'},
+	{name = 'Yuma', number = '09'},
+	{name = 'Surprise', number = '10'},
+	{name = 'Prescott', number = '11'},
+	{name = 'Glendale', number = '12'},
+	{name = 'Kingman', number = '13'},
+	{name = 'Winslow', number = '14'},
+	{name = 'Payson', number = '15'},
+	{name = 'Gilbert', number = '16'},
+	{name = 'Show Low', number = '17'},
+	{name = 'Casa Grande', number = '18'},
+	{name = 'Page', number = '19'},
+	{name = 'Sun City', number = '20'},
+	{name = 'Queen Creek', number = '21'},
+	{name = 'Sedona', number = '22'},
+	{name = 'Holiday', number = '23'},
+	{name = 'Wednesday', number = '24'},
+	{name = 'Yava', number = '25'},
+	{name = 'Faraway', number = '26'},
+	{name = 'Bumble Bee', number = '27'},
+	{name = 'Christmas', number = '28'},
+	{name = 'Mirage', number = '29'},
+	{name = 'Love', number = '30'},
+	{name = 'Drake', number = '31'},
+	{name = 'Space', number = '32'},
+	-- Arizona Mobile
+	{name = 'Mobile III', number = '103'},
+	{name = 'Mobile II', number = '102'},
+	{name = 'Mobile I', number = '101'},
+	-- Arizona VC
+	{name = 'Vice City'	, number = '200'},
+	--Rodina RP
+	{name = 'Центральный округ'	, number = '301'},
+	{name = 'Южный округ', number = '302'},
+	{name = 'Северный округ', number = '303'},
+	{name = 'Восточный округ', number = '304'},
+	{name = 'Западный округ', number = '305'},
+	{name = 'Приморский округ', number = '306'},
+	{name = 'Федеральный округ', number = '307'},
+	--Rodina RP Mobile
+	{name = 'Москва', number = '401'},
+	{name = 'Санкт Петербург', number = '402'},
+}
+function getServerNumber()
+	local name = sampGetCurrentServerName():gsub('%-', ' ')
+	for _, s in ipairs(servers) do
+		if name:find(s.name) then
+			return s.number
+		end
+	end
+	return '00'
+end
+function getServerName(number)
+	for _, s in ipairs(servers) do
+		if tostring(number) == tostring(s.number) then
+			return s.name
+		end
+	end
+	return ''
+end
+function sampGetPlayerIdByNickname(nick)
+	if not nick then return -1 end
+	local myid = MODULE.Binder.tag.my_id()
+	if IS_MOBILE then
+		if nick == modules.player.data.nick then return myid end
+	else
+		if sampGetPlayerNickname(myid):find(nick, 1, true) then return myid end
+	end
+	for i = 0, 999 do
+	    if sampIsPlayerConnected(i) and sampGetPlayerNickname(i):find(nick, 1, true) then
+		   return i
+	    end
+	end
+	return -1
+end
+local car_colors = {
+	[0] = "чёрного", [1] = "белого", [2] = "бирюзового", [3] = "бордового", [4] = "хвойного", [5] = "пурпурного", [6] = "жёлтого", [7] = "голубого", [8] = "серого", 
+	[9] = "оливкового", [10] = "синего", [11] = "серого", [12] = "голубого", [13] = "графитового", [14] = "светлого", [15] = "светлого", [16] = "хвойного", [17] = "бордового", 
+	[18] = "бордового", [19] = "серого", [20] = "синего", [21] = "бордового", [22] = "бордового", [23] = "серого", [24] = "графитового", [25] = "серого", [26] = "светлого", 
+	[27] = "тусклого", [28] = "синего", [29] = "светлого", [30] = "бордового", [31] = "бордового", [32] = "голубоватого", [33] = "серого", [34] = "тусклого", 
+	[35] = "коричневого", [36] = "синего", [37] = "хвойного", [38] = "серого", [39] = "синего", [40] = "тёмного", [41] = "коричневого", [42] = "коричневого",
+	[43] = "бордового", [44] = "хвойного", [45] = "бордового", [46] = "бежевого", [47] = "оливкового", [48] = "оливкового", [49] = "серого", [50] = "серебристого", 
+	[51] = "хвойного", [52] = "синего", [53] = "синего", [54] = "синего", [55] = "коричневого", [56] = "голубого", [57] = "оливкового", [58] = "тёмнокрасного", 
+	[59] = "синего", [60] = "светлого", [61] = "оранжевого", [62] = "тёмнокрасного", [63] = "серебристого", [64] = "светлого", [65] = "оливкового", [66] = "коричневого", 
+	[67] = "аВНГльтового", [68] = "оливкового", [69] = "кварцевого", [70] = "тёмнокрасного", [71] = "светлого", [72] = "тёмносерого", [73] = "оливкового", [74] = "бордового", 
+	[75] = "синего", [76] = "оливкового", [77] = "оранжевого", [78] = "бордового", [79] = "синего", [80] = "розового", [81] = "оливкового", [82] = "тёмнокрасного", 
+	[83] = "бирюзового", [84] = "коричневого", [85] = "розового", [86] = "хвойного", [87] = "синего", [88] = "винного", [89] = "оливкового", [90] = "светлого", 
+	[91] = "тёмносинего", [92] = "тёмносерого", [93] = "голубоватого", [94] = "синего", [95] = "синего", [96] = "светлого", [97] = "аВНГльтового", [98] = "голубоватого", 
+	[99] = "коричневого", [100] = "бриллиантового", [101] = "кобальтового", [102] = "коричневого", [103] = "синего", [104] = "коричневого", [105] = "серого", [106] = "синего", 
+	[107] = "оливкового", [108] = "бриллиантового", [109] = "серого", [110] = "оливкового", [111] = "серого", [112] = "серого", [113] = "коричневого", [114] = "зелёного", 
+	[115] = "тёмнокрасного", [116] = "синего", [117] = "бордового", [118] = "голубого", [119] = "коричневого", [120] = "оливкового", [121] = "бордового", [122] = "тёмносерого", 
+	[123] = "коричневого", [124] = "тёмнокрасного", [125] = "синего", [126] = "розового", [127] = "чёрного", [128] = "зелёного", [129] = "бордового", [130] = "синего",
+	[131] = "коричневого", [132] = "тёмнокрасного", [133] = "чёрного", [134] = "фиолетового", [135] = "яркосинего", [136] = "аметистового", [137] = "зелёного", [138] = "серого",
+	[139] = "пурпурного", [140] = "светлого", [141] = "тёмносерого", [142] = "оливкового", [143] = "фиолетового", [144] = "фиолетового", [145] = "зелёного", [146] = "пурпурного", 
+	[147] = "фиолетового", [148] = "оливкового", [149] = "тёмного", [150] = "тёмнозелёного", [151] = "зеленого", [152] = "синего", [153] = "зелёного", [154] = "салатового", 
+	[155] = "бирюзового", [156] = "коричневого", [157] = "светлого", [158] = "оранжевого", [159] = "коричневого", [160] = "тёмнозелёного", [161] = "винного", [162] = "синего",
+	[163] = "графитового", [164] = "чёрного", [165] = "бирюзового", [166] = "бирюзового", [167] = "фиолетового", [168] = "бордового", [169] = "фиолетового", [170] = "фиолетового", 
+	[171] = "фиолетового", [172] = "хвойного", [173] = "коричневого", [174] = "коричневого", [175] = "коричневого", [176] = "пурпурного", [177] = "пурпурного", [178] = "пурпурного", 
+	[179] = "фиолетового", [180] = "коричневого", [181] = "красного", [182] = "оранжевого", [183] = "оливкового", [184] = "голубого", [185] = "чёрного", [186] = "чёрного", 
+	[187] = "зелёного", [188] = "зелёного", [189] = "зелёного", [190] = "пурпурного", [191] = "салатового", [192] = "светлого", [193] = "светлого", [194] = "оливкового", 
+	[195] = "оливкового", [196] = "серого", [197] = "оливкового", [198] = "синего", [199] = "оливкового", [200] = "странного", [201] = "синего", [202] = "зелёного", [203] = "синего",
+	[204] = "голубого", [205] = "синего", [206] = "тёмносинего", [207] = "голубого", [208] = "синего", [209] = "синего", [210] = "синего", [211] = "фиолетового", 
+	[212] = "оранжевого", [213] = "светлого", [214] = "оливкового", [215] = "чёрного", [216] = "оранжевого", [217] = "бирюзового", [218] = "бледно-розового", [219] = "оранжевого", 
+	[220] = "розового", [221] = "оливкового", [222] = "оранжевого", [223] = "синего", [224] = "бордового", [225] = "хвойного", [226] = "салатового", [227] = "зелёного", 
+	[228] = "бледного", [229] = "салатового", [230] = "бордового", [231] = "коричневого", [232] = "розового", [233] = "пурпурного", [234] = "тёмнозелёного", [235] = "оливкового",
+	[236] = "хвойного", [237] = "пурпурного", [238] = "оранжевого", [239] = "коричневого", [240] = "голубого", [241] = "зеленого", [242] = "фиолетового", [243] = "зелёного", 
+	[244] = "коричневого", [245] = "хвойного", [246] = "голубого", [247] = "синего", [248] = "бордового", [249] = "бордового", [250] = "серого", [251] = "серого", [252] = "чёрного", 
+	[253] = "серого", [254] = "коричневого", [255] = "синего"
+}
+local _veh_warn_next = 0
+function get_vehicle_name(id)
+    local map = modules.vehicles.byId
+    if map and map[id] then
+        return map[id]
+    end
+    local now = os.time()
+    if now >= _veh_warn_next then
+        _veh_warn_next = now + 60
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось получить модель т/c ' .. id .. ' ID, обновляю конфиг транспорта...', message_color)
+        if not download_file then
+            download_file = 'vehicles'
+            local server = tonumber(getServerNumber()) or 0
+            local url = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/SmartVEH/Vehicles' .. (server > 300 and 'Rodina.json' or '.json') downloadFileFromUrlToPath(url, modules.vehicles.path)
+        end
+    end
+    return 'транспортного средства'
+end
+function get_near_car(only_with_driver)
+    if not sampIsLocalPlayerSpawned() then return 'транспортного средства' end
+    local ok_pos, mx, my, mz = pcall(getCharCoordinates, PLAYER_PED)
+    if not ok_pos or not mx then return 'транспортного средства' end
+    local my_car = nil
+    if isCharInAnyCar(PLAYER_PED) then my_car = storeCarCharIsInNoSave(PLAYER_PED) end
+    local closest_car = nil
+    local closest_distance = 50
+    local ok_all, all = pcall(getAllVehicles)
+    if not ok_all or type(all) ~= 'table' then return 'транспортного средства' end
+    for _, vehicle in ipairs(all) do
+        if vehicle and vehicle ~= my_car and doesVehicleExist(vehicle) then
+            local dominated = false
+            if only_with_driver then
+                local ok_d, driver = pcall(getDriverOfCar, vehicle)
+                if not ok_d or not driver or not doesCharExist(driver) then
+                    dominated = true
+                end
+            end
+            if not dominated then
+                local ok_vc, vx, vy, vz = pcall(getCarCoordinates, vehicle)
+                if ok_vc and vx and vy and vz then
+                    local distance = getDistanceBetweenCoords3d(mx, my, mz, vx, vy, vz)
+                    if distance < closest_distance then
+                        closest_distance = distance
+                        closest_car = vehicle
+                    end
+                end
+            end
+        end
+    end
+    if not closest_car then return 'транспортного средства' end
+    local CarColorName = ''
+    local ok_c, clr1 = pcall(getCarColours, closest_car)
+    if ok_c and clr1 and car_colors[clr1] then
+        CarColorName = ' ' .. car_colors[clr1] .. ' цвета'
+    end
+    local plateText = ''
+    if type(modules.vehicles.cache) == 'table' then
+        for _, plate in pairs(modules.vehicles.cache) do
+            local result, veh = sampGetCarHandleBySampVehicleId(plate.carID)
+            if result and veh == closest_car then
+                plateText = ' c номерами ' .. (plate.number or '?')
+                break
+            end
+        end
+    end
+    return (get_vehicle_name(getCarModel(closest_car)) .. CarColorName .. plateText)
+end
+function initialize_vehicles()
+    modules.vehicles.byId = modules.vehicles.byId or {}
+	local seen = {}
+	for _, v in ipairs(modules.vehicles.data) do
+		if v.model_id and v.name and not seen[v.model_id] then
+			modules.vehicles.byId[v.model_id] = v.name
+			seen[v.model_id] = true
+		end
+	end
+    if modules.vehicles._update_triggered then return end
+    modules.vehicles._update_triggered = true
+    modules.vehicles._silent_update = true
+    local server = tonumber(getServerNumber()) or 0
+    local url = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/SmartVEH/Vehicles' .. (server > 300 and 'Rodina.json' or '.json')
+    download_file = 'vehicles'
+    downloadFileFromUrlToPath(url, modules.vehicles.path)
+end
+function get_area(x, y, z)
+	local streets = {
+		{"Гольф-клуб Ависпа", -2667.810, -302.135, -28.831, -2646.400, -262.320, 71.169},
+		{"Аэропорт СФ", -1315.420, -405.388, 15.406, -1264.400, -209.543, 25.406},
+		{"Гольф-клуб Ависпа", -2550.040, -355.493, 0.000, -2470.040, -318.493, 39.700},
+		{"Аэропорт СФ", -1490.330, -209.543, 15.406, -1264.400, -148.388, 25.406},
+		{"Гарсия", -2395.140, -222.589, -5.3, -2354.090, -204.792, 200.000},
+		{"Тенистые ручьи", -1632.830, -2263.440, -3.0, -1601.330, -2231.790, 200.000},
+		{"Восточный ЛС", 2381.680, -1494.030, -89.084, 2421.030, -1454.350, 110.916},
+		{"Грузовой склад ЛВ", 1236.630, 1163.410, -89.084, 1277.050, 1203.280, 110.916},
+		{"Блэкфилдский перекрёсток", 1277.050, 1044.690, -89.084, 1315.350, 1087.630, 110.916},
+		{"Гольф-клуб Ависпа", -2470.040, -355.493, 0.000, -2270.040, -318.493, 46.100},
+		{"Темпл драйв", 1252.330, -926.999, -89.084, 1357.000, -910.170, 110.916},
+		{"Вокзал ЛС", 1692.620, -1971.800, -20.492, 1812.620, -1932.800, 79.508},
+		{"Грузовой склад ЛВ", 1315.350, 1044.690, -89.084, 1375.600, 1087.630, 110.916},
+		{"Лос-Флорес", 2581.730, -1454.350, -89.084, 2632.830, -1393.420, 110.916},
+		{"Азартный район", 2437.390, 1858.100, -39.084, 2495.090, 1970.850, 60.916},
+		{"Истербэйский химзавод", -1132.820, -787.391, 0.000, -956.476, -768.027, 200.000},
+		{"Центральный район СФ", 1370.850, -1170.870, -89.084, 1463.900, -1130.850, 110.916},
+		{"Восточная Эспаланда", -1620.300, 1176.520, -4.5, -1580.010, 1274.260, 200.000},
+		{"Станция Маркет", 787.461, -1410.930, -34.126, 866.009, -1310.210, 65.874},
+		{"Вокзал ЛВ", 2811.250, 1229.590, -39.594, 2861.250, 1407.590, 60.406},
+		{"Перекрёсток Монтгомери", 1582.440, 347.457, 0.000, 1664.620, 401.750, 200.000},
+		{"Мост Фредерик", 2759.250, 296.501, 0.000, 2774.250, 594.757, 200.000},
+		{"Станция Йеллоу-Белл", 1377.480, 2600.430, -21.926, 1492.450, 2687.360, 78.074},
+		{"Центральный район СФ", 1507.510, -1385.210, 110.916, 1582.550, -1325.310, 335.916},
+		{"Отель Ночные волки", 2185.330, -1210.740, -89.084, 2281.450, -1154.590, 110.916},
+		{"Гора Вайнвуд", 1318.130, -910.170, -89.084, 1357.000, -768.027, 110.916},
+		{"Гольф-клуб Ависпа", -2361.510, -417.199, 0.000, -2270.040, -355.493, 200.000},
+		{"Больница Джефферсон", 1996.910, -1449.670, -89.084, 2056.860, -1350.720, 110.916},
+		{"Западаное шоссе", 1236.630, 2142.860, -89.084, 1297.470, 2243.230, 110.916},
+		{"Джефферсон", 2124.660, -1494.030, -89.084, 2266.210, -1449.670, 110.916},
+		{"Северное шоссе ЛВ", 1848.400, 2478.490, -89.084, 1938.800, 2553.490, 110.916},
+		{"Родео драйв", 422.680, -1570.200, -89.084, 466.223, -1406.050, 110.916},
+		{"Вокзал СФ", -2007.830, 56.306, 0.000, -1922.000, 224.782, 100.000},
+		{"Центральный район СФ", 1391.050, -1026.330, -89.084, 1463.900, -926.999, 110.916},
+		{"Западный Редсандс", 1704.590, 2243.230, -89.084, 1777.390, 2342.830, 110.916},
+		{"Маленькая Мексика", 1758.900, -1722.260, -89.084, 1812.620, -1577.590, 110.916},
+		{"Блэкфилдский перекрёсток", 1375.600, 823.228, -89.084, 1457.390, 919.447, 110.916},
+		{"Аэропорт ЛС", 1974.630, -2394.330, -39.084, 2089.000, -2256.590, 60.916},
+		{"Бекон-Хилл", -399.633, -1075.520, -1.489, -319.033, -977.516, 198.511},
+		{"Родео драйв", 334.503, -1501.950, -89.084, 422.680, -1406.050, 110.916},
+		{"Гора Вайнвуд", 225.165, -1369.620, -89.084, 334.503, -1292.070, 110.916},
+		{"Центральный район СФ", 1724.760, -1250.900, -89.084, 1812.620, -1150.870, 110.916},
+		{"Стрип", 2027.400, 1703.230, -89.084, 2137.400, 1783.230, 110.916},
+		{"Центральный район СФ", 1378.330, -1130.850, -89.084, 1463.900, -1026.330, 110.916},
+		{"Блэкфилдский перекрёсток", 1197.390, 1044.690, -89.084, 1277.050, 1163.390, 110.916},
+		{"Автовокзал", 1073.220, -1842.270, -89.084, 1323.900, -1804.210, 110.916},
+		{"Монтгомери", 1451.400, 347.457, -6.1, 1582.440, 420.802, 200.000},
+		{"Фостерская долина", -2270.040, -430.276, -1.2, -2178.690, -324.114, 200.000},
+		{"Блэкфилд", 1325.600, 596.349, -89.084, 1375.600, 795.010, 110.916},
+		{"Аэропорт ЛС", 2051.630, -2597.260, -39.084, 2152.450, -2394.330, 60.916},
+		{"Гора Вайнвуд", 1096.470, -910.170, -89.084, 1169.130, -768.027, 110.916},
+		{"Гольф-корт Йеллоубелл", 1457.460, 2723.230, -89.084, 1534.560, 2863.230, 110.916},
+		{"Стрип", 2027.400, 1783.230, -89.084, 2162.390, 1863.230, 110.916},
+		{"Джефферсон", 2056.860, -1210.740, -89.084, 2185.330, -1126.320, 110.916},
+		{"Гора Вайнвуд", 952.604, -937.184, -89.084, 1096.470, -860.619, 110.916},
+		{"Эль-Кебрадос", -1372.140, 2498.520, 0.000, -1277.590, 2615.350, 200.000},
+		{"Лас-Колинас", 2126.860, -1126.320, -89.084, 2185.330, -934.489, 110.916},
+		{"Лас-Колинас", 1994.330, -1100.820, -89.084, 2056.860, -920.815, 110.916},
+		{"Гора Вайнвуд", 647.557, -954.662, -89.084, 768.694, -860.619, 110.916},
+		{"Грузовой склад ЛВ", 1277.050, 1087.630, -89.084, 1375.600, 1203.280, 110.916},
+		{"Северное шоссе ЛВ", 1377.390, 2433.230, -89.084, 1534.560, 2507.230, 110.916},
+		{"Уиллоуфилд", 2201.820, -2095.000, -89.084, 2324.000, -1989.900, 110.916},
+		{"Северное шоссе ЛВ", 1704.590, 2342.830, -89.084, 1848.400, 2433.230, 110.916},
+		{"Темпл драйв", 1252.330, -1130.850, -89.084, 1378.330, -1026.330, 110.916},
+		{"Маленькая Мексика", 1701.900, -1842.270, -89.084, 1812.620, -1722.260, 110.916},
+		{"Квинс", -2411.220, 373.539, 0.000, -2253.540, 458.411, 200.000},
+		{"Аэропорт ЛВ", 1515.810, 1586.400, -12.500, 1729.950, 1714.560, 87.500},
+		{"Гора Вайнвуд", 225.165, -1292.070, -89.084, 466.223, -1235.070, 110.916},
+		{"Темпл драйв", 1252.330, -1026.330, -89.084, 1391.050, -926.999, 110.916},
+		{"Восточный ЛС", 2266.260, -1494.030, -89.084, 2381.680, -1372.040, 110.916},
+		{"Восточное шоссе ЛВ", 2623.180, 943.235, -89.084, 2749.900, 1055.960, 110.916},
+		{"Уиллоуфилд", 2541.700, -1941.400, -89.084, 2703.580, -1852.870, 110.916},
+		{"Лас-Колинас", 2056.860, -1126.320, -89.084, 2126.860, -920.815, 110.916},
+		{"Восточное шоссе ЛВ", 2625.160, 2202.760, -89.084, 2685.160, 2442.550, 110.916},
+		{"Родео драйв", 225.165, -1501.950, -89.084, 334.503, -1369.620, 110.916},
+		{"Пустынный округ", -365.167, 2123.010, -3.0, -208.570, 2217.680, 200.000},
+		{"Восточное шоссе ЛВ", 2536.430, 2442.550, -89.084, 2685.160, 2542.550, 110.916},
+		{"Родео драйв", 334.503, -1406.050, -89.084, 466.223, -1292.070, 110.916},
+		{"Вайнвуд", 647.557, -1227.280, -89.084, 787.461, -1118.280, 110.916},
+		{"Родео драйв", 422.680, -1684.650, -89.084, 558.099, -1570.200, 110.916},
+		{"Северное шоссе ЛВ", 2498.210, 2542.550, -89.084, 2685.160, 2626.550, 110.916},
+		{"Центральный район СФ", 1724.760, -1430.870, -89.084, 1812.620, -1250.900, 110.916},
+		{"Родео драйв", 225.165, -1684.650, -89.084, 312.803, -1501.950, 110.916},
+		{"Джефферсон", 2056.860, -1449.670, -89.084, 2266.210, -1372.040, 110.916},
+		{"Туманный округ", 603.035, 264.312, 0.000, 761.994, 366.572, 200.000},
+		{"Темпл драйв", 1096.470, -1130.840, -89.084, 1252.330, -1026.330, 110.916},
+		{"Красный ж/д мост", -1087.930, 855.370, -89.084, -961.950, 986.281, 110.916},
+		{"Пляж Верона", 1046.150, -1722.260, -89.084, 1161.520, -1577.590, 110.916},
+		{"Центральный банк ЛС", 1323.900, -1722.260, -89.084, 1440.900, -1577.590, 110.916},
+		{"Гора Вайнвуд", 1357.000, -926.999, -89.084, 1463.900, -768.027, 110.916},
+		{"Родео драйв", 466.223, -1570.200, -89.084, 558.099, -1385.070, 110.916},
+		{"Гора Вайнвуд", 911.802, -860.619, -89.084, 1096.470, -768.027, 110.916},
+		{"Гора Вайнвуд", 768.694, -954.662, -89.084, 952.604, -860.619, 110.916},
+		{"Южное шоссе ЛВ", 2377.390, 788.894, -89.084, 2537.390, 897.901, 110.916},
+		{"Айдлвуд", 1812.620, -1852.870, -89.084, 1971.660, -1742.310, 110.916},
+		{"Порт ЛС", 2089.000, -2394.330, -89.084, 2201.820, -2235.840, 110.916},
+		{"Коммерческий район", 1370.850, -1577.590, -89.084, 1463.900, -1384.950, 110.916},
+		{"Северное шоссе ЛВ", 2121.400, 2508.230, -89.084, 2237.400, 2663.170, 110.916},
+		{"Темпл драйв", 1096.470, -1026.330, -89.084, 1252.330, -910.170, 110.916},
+		{"Глен Парк", 1812.620, -1449.670, -89.084, 1996.910, -1350.720, 110.916},
+		{"Аэропорт ЛВ", -1242.980, -50.096, 0.000, -1213.910, 578.396, 200.000},
+		{"Мост Мартина", -222.179, 293.324, 0.000, -122.126, 476.465, 200.000},
+		{"Стрип", 2106.700, 1863.230, -89.084, 2162.390, 2202.760, 110.916},
+		{"Уиллоуфилд", 2541.700, -2059.230, -89.084, 2703.580, -1941.400, 110.916},
+		{"Канал Марина", 807.922, -1577.590, -89.084, 926.922, -1416.250, 110.916},
+		{"Аэропорт ЛВ", 1457.370, 1143.210, -89.084, 1777.400, 1203.280, 110.916},
+		{"Айдлвуд", 1812.620, -1742.310, -89.084, 1951.660, -1602.310, 110.916},
+		{"Восточная Эспаланда", -1580.010, 1025.980, -6.1, -1499.890, 1274.260, 200.000},
+		{"Центральный район СФ", 1370.850, -1384.950, -89.084, 1463.900, -1170.870, 110.916},
+		{"Мост Мако", 1664.620, 401.750, 0.000, 1785.140, 567.203, 200.000},
+		{"Родео драйв", 312.803, -1684.650, -89.084, 422.680, -1501.950, 110.916},
+		{"Площадь Першинг", 1440.900, -1722.260, -89.084, 1583.500, -1577.590, 110.916},
+		{"Гора Вайнвуд", 687.802, -860.619, -89.084, 911.802, -768.027, 110.916},
+		{"Мост Гант", -2741.070, 1490.470, -6.1, -2616.400, 1659.680, 200.000},
+		{"Лас-Колинас", 2185.330, -1154.590, -89.084, 2281.450, -934.489, 110.916},
+		{"Гора Вайнвуд", 1169.130, -910.170, -89.084, 1318.130, -768.027, 110.916},
+		{"Северное шоссе ЛВ", 1938.800, 2508.230, -89.084, 2121.400, 2624.230, 110.916},
+		{"Коммерческий район", 1667.960, -1577.590, -89.084, 1812.620, -1430.870, 110.916},
+		{"КПП ЛС-СФ", 72.648, -1544.170, -89.084, 225.165, -1404.970, 110.916},
+		{"Рока Эскаланте", 2536.430, 2202.760, -89.084, 2625.160, 2442.550, 110.916},
+		{"КПП ЛС-СФ", 72.648, -1684.650, -89.084, 225.165, -1544.170, 110.916},
+		{"Центральный Рынок", 952.663, -1310.210, -89.084, 1072.660, -1130.850, 110.916},
+		{"Лас-Колинас", 2632.740, -1135.040, -89.084, 2747.740, -945.035, 110.916},
+		{"Гора Вайнвуд", 861.085, -674.885, -89.084, 1156.550, -600.896, 110.916},
+		{"Кингс", -2253.540, 373.539, -9.1, -1993.280, 458.411, 200.000},
+		{"Восточный Редсандс", 1848.400, 2342.830, -89.084, 2011.940, 2478.490, 110.916},
+		{"Центральный район СФ", -1580.010, 744.267, -6.1, -1499.890, 1025.980, 200.000},
+		{"Автовокзал", 1046.150, -1804.210, -89.084, 1323.900, -1722.260, 110.916},
+		{"Гора Вайнвуд", 647.557, -1118.280, -89.084, 787.461, -954.662, 110.916},
+		{"Океанское побережье", -2994.490, 277.411, -9.1, -2867.850, 458.411, 200.000},
+		{"Грингласский колледж", 964.391, 930.890, -89.084, 1166.530, 1044.690, 110.916},
+		{"Глен Парк", 1812.620, -1100.820, -89.084, 1994.330, -973.380, 110.916},
+		{"Грузовой склад ЛВ", 1375.600, 919.447, -89.084, 1457.370, 1203.280, 110.916},
+		{"Пустынный округ", -405.770, 1712.860, -3.0, -276.719, 1892.750, 200.000},
+		{"Пляж Верона", 1161.520, -1722.260, -89.084, 1323.900, -1577.590, 110.916},
+		{"Восточный ЛС", 2281.450, -1372.040, -89.084, 2381.680, -1135.040, 110.916},
+		{"Дворец Калигулы", 2137.400, 1703.230, -89.084, 2437.390, 1783.230, 110.916},
+		{"Айдлвуд", 1951.660, -1742.310, -89.084, 2124.660, -1602.310, 110.916},
+		{"Пилигрим", 2624.400, 1383.230, -89.084, 2685.160, 1783.230, 110.916},
+		{"Айдлвуд", 2124.660, -1742.310, -89.084, 2222.560, -1494.030, 110.916},
+		{"Квинс", -2533.040, 458.411, 0.000, -2329.310, 578.396, 200.000},
+		{"Центральный район СФ", -1871.720, 1176.420, -4.5, -1620.300, 1274.260, 200.000},
+		{"Коммерческий район", 1583.500, -1722.260, -89.084, 1758.900, -1577.590, 110.916},
+		{"Восточный ЛС", 2381.680, -1454.350, -89.084, 2462.130, -1135.040, 110.916},
+		{"Канал Марина", 647.712, -1577.590, -89.084, 807.922, -1416.250, 110.916},
+		{"Гора Вайнвуд", 72.648, -1404.970, -89.084, 225.165, -1235.070, 110.916},
+		{"Вайнвуд", 647.712, -1416.250, -89.084, 787.461, -1227.280, 110.916},
+		{"Восточный ЛС", 2222.560, -1628.530, -89.084, 2421.030, -1494.030, 110.916},
+		{"Родео драйв", 558.099, -1684.650, -89.084, 647.522, -1384.930, 110.916},
+		{"Истерский Тоннель", -1709.710, -833.034, -1.5, -1446.010, -730.118, 200.000},
+		{"Родео драйв", 466.223, -1385.070, -89.084, 647.522, -1235.070, 110.916},
+		{"Восточный Редсандс", 1817.390, 2202.760, -89.084, 2011.940, 2342.830, 110.916},
+		{"Азартный район", 2162.390, 1783.230, -89.084, 2437.390, 1883.230, 110.916},
+		{"БК Рифа", 1971.660, -1852.870, -89.084, 2222.560, -1742.310, 110.916},
+		{"Перекрёсток Монтгомери", 1546.650, 208.164, 0.000, 1745.830, 347.457, 200.000},
+		{"Уиллоуфилд", 2089.000, -2235.840, -89.084, 2201.820, -1989.900, 110.916},
+		{"Темпл драйв", 952.663, -1130.840, -89.084, 1096.470, -937.184, 110.916},
+		{"Прикл Пайн", 1848.400, 2553.490, -89.084, 1938.800, 2863.230, 110.916},
+		{"Аэропорт ЛС", 1400.970, -2669.260, -39.084, 2189.820, -2597.260, 60.916},
+		{"Белый мост", -1213.910, 950.022, -89.084, -1087.930, 1178.930, 110.916},
+		{"Белый мост", -1339.890, 828.129, -89.084, -1213.910, 1057.040, 110.916},
+		{"Красный ж/д мост", -1339.890, 599.218, -89.084, -1213.910, 828.129, 110.916},
+		{"Красный ж/д мост", -1213.910, 721.111, -89.084, -1087.930, 950.022, 110.916},
+		{"Пляж Верона", 930.221, -2006.780, -89.084, 1073.220, -1804.210, 110.916},
+		{"Зелёный утёс", 1073.220, -2006.780, -89.084, 1249.620, -1842.270, 110.916},
+		{"Гора Вайнвуд", 787.461, -1130.840, -89.084, 952.604, -954.662, 110.916},
+		{"Гора Вайнвуд", 787.461, -1310.210, -89.084, 952.663, -1130.840, 110.916},
+		{"Коммерческий район", 1463.900, -1577.590, -89.084, 1667.960, -1430.870, 110.916},
+		{"Центральный Рынок", 787.461, -1416.250, -89.084, 1072.660, -1310.210, 110.916},
+		{"Западный Рокшор", 2377.390, 596.349, -89.084, 2537.390, 788.894, 110.916},
+		{"Северное шоссе ЛВ", 2237.400, 2542.550, -89.084, 2498.210, 2663.170, 110.916},
+		{"Восточный пляж ЛС", 2632.830, -1668.130, -89.084, 2747.740, -1393.420, 110.916},
+		{"Мост Фаллоу", 434.341, 366.572, 0.000, 603.035, 555.680, 200.000},
+		{"Уиллоуфилд", 2089.000, -1989.900, -89.084, 2324.000, -1852.870, 110.916},
+		{"Чайнатаун", -2274.170, 578.396, -7.6, -2078.670, 744.170, 200.000},
+		{"Скалистый массив ЛВ", -208.570, 2337.180, 0.000, 8.430, 2487.180, 200.000},
+		{"БК Ацтеки", 2324.000, -2145.100, -89.084, 2703.580, -2059.230, 110.916},
+		{"Истербэйский химзавод", -1132.820, -768.027, 0.000, -956.476, -578.118, 200.000},
+		{"Казино Висадж", 1817.390, 1703.230, -89.084, 2027.400, 1863.230, 110.916},
+		{"Океанское побережье", -2994.490, -430.276, -1.2, -2831.890, -222.589, 200.000},
+		{"Гора Вайнвуд", 321.356, -860.619, -89.084, 687.802, -768.027, 110.916},
+		{"Нефтяной комплекс", 176.581, 1305.450, -3.0, 338.658, 1520.720, 200.000},
+		{"Гора Вайнвуд", 321.356, -768.027, -89.084, 700.794, -674.885, 110.916},
+		{"Пилигрим", 2162.390, 1883.230, -89.084, 2437.390, 2012.180, 110.916},
+		{"БК Вагос", 2747.740, -1668.130, -89.084, 2959.350, -1498.620, 110.916},
+		{"Джефферсон", 2056.860, -1372.040, -89.084, 2281.450, -1210.740, 110.916},
+		{"Центральный район СФ", 1463.900, -1290.870, -89.084, 1724.760, -1150.870, 110.916},
+		{"Центральный район СФ", 1463.900, -1430.870, -89.084, 1724.760, -1290.870, 110.916},
+		{"Белый мост", -1499.890, 696.442, -179.615, -1339.890, 925.353, 20.385},
+		{"Южное шоссе ЛВ", 1457.390, 823.228, -89.084, 2377.390, 863.229, 110.916},
+		{"Восточный ЛС", 2421.030, -1628.530, -89.084, 2632.830, -1454.350, 110.916},
+		{"Грингласский колледж", 964.391, 1044.690, -89.084, 1197.390, 1203.220, 110.916},
+		{"Лас-Колинас", 2747.740, -1120.040, -89.084, 2959.350, -945.035, 110.916},
+		{"Гора Вайнвуд", 737.573, -768.027, -89.084, 1142.290, -674.885, 110.916},
+		{"Порт ЛС", 2201.820, -2730.880, -89.084, 2324.000, -2418.330, 110.916},
+		{"Восточный ЛС", 2462.130, -1454.350, -89.084, 2581.730, -1135.040, 110.916},
+		{"Грув", 2222.560, -1722.330, -89.084, 2632.830, -1628.530, 110.916},
+		{"Гольф-клуб Ависпа", -2831.890, -430.276, -6.1, -2646.400, -222.589, 200.000},
+		{"Уиллоуфилд", 1970.620, -2179.250, -89.084, 2089.000, -1852.870, 110.916},
+		{"Северная Эспланада", -1982.320, 1274.260, -4.5, -1524.240, 1358.900, 200.000},
+		{"Казино Шулер", 1817.390, 1283.230, -89.084, 2027.390, 1469.230, 110.916},
+		{"Порт ЛС", 2201.820, -2418.330, -89.084, 2324.000, -2095.000, 110.916},
+		{"Мотель Последний грош", 1823.080, 596.349, -89.084, 1997.220, 823.228, 110.916},
+		{"Бэйсайнд-Марина", -2353.170, 2275.790, 0.000, -2153.170, 2475.790, 200.000},
+		{"Кингс", -2329.310, 458.411, -7.6, -1993.280, 578.396, 200.000},
+		{"Эль-Корона", 1692.620, -2179.250, -89.084, 1812.620, -1842.270, 110.916},
+		{"Блэкфилдская часовня", 1375.600, 596.349, -89.084, 1558.090, 823.228, 110.916},
+		{"Казино Розовый клюв", 1817.390, 1083.230, -89.084, 2027.390, 1283.230, 110.916},
+		{"Западное шоссе", 1197.390, 1163.390, -89.084, 1236.630, 2243.230, 110.916},
+		{"Лос-Флорес", 2581.730, -1393.420, -89.084, 2747.740, -1135.040, 110.916},
+		{"Казино Висадж", 1817.390, 1863.230, -89.084, 2106.700, 2011.830, 110.916},
+		{"Прикл Пайн", 1938.800, 2624.230, -89.084, 2121.400, 2861.550, 110.916},
+		{"Пляж Верона", 851.449, -1804.210, -89.084, 1046.150, -1577.590, 110.916},
+		{"Перекрёсток Робада", -1119.010, 1178.930, -89.084, -862.025, 1351.450, 110.916},
+		{"Линден-Сайд", 2749.900, 943.235, -89.084, 2923.390, 1198.990, 110.916},
+		{"Порт ЛС", 2703.580, -2302.330, -89.084, 2959.350, -2126.900, 110.916},
+		{"Уиллоуфилд", 2324.000, -2059.230, -89.084, 2541.700, -1852.870, 110.916},
+		{"Кингс", -2411.220, 265.243, -9.1, -1993.280, 373.539, 200.000},
+		{"Коммерческий район", 1323.900, -1842.270, -89.084, 1701.900, -1722.260, 110.916},
+		{"Гора Вайнвуд", 1269.130, -768.027, -89.084, 1414.070, -452.425, 110.916},
+		{"Канал Марина", 647.712, -1804.210, -89.084, 851.449, -1577.590, 110.916},
+		{"Бэттери Пойнт", -2741.070, 1268.410, -4.5, -2533.040, 1490.470, 200.000},
+		{"Казино 4 Дракона", 1817.390, 863.232, -89.084, 2027.390, 1083.230, 110.916},
+		{"Блэкфилд", 964.391, 1203.220, -89.084, 1197.390, 1403.220, 110.916},
+		{"Северное шоссе ЛВ", 1534.560, 2433.230, -89.084, 1848.400, 2583.230, 110.916},
+		{"Гольф-корт Йеллоубелл", 1117.400, 2723.230, -89.084, 1457.460, 2863.230, 110.916},
+		{"Айдлвуд", 1812.620, -1602.310, -89.084, 2124.660, -1449.670, 110.916},
+		{"Западный Редсандс", 1297.470, 2142.860, -89.084, 1777.390, 2243.230, 110.916},
+		{"Автошкола", -2270.040, -324.114, -1.2, -1794.920, -222.589, 200.000},
+		{"Высокогорная лесопилка", 967.383, -450.390, -3.0, 1176.780, -217.900, 200.000},
+		{"Лас-Барранкас", -926.130, 1398.730, -3.0, -719.234, 1634.690, 200.000},
+		{"Казино Пираты", 1817.390, 1469.230, -89.084, 2027.400, 1703.230, 110.916},
+		{"Зал суда", -2867.850, 277.411, -9.1, -2593.440, 458.411, 200.000},
+		{"Гольф-клуб Ависпа", -2646.400, -355.493, 0.000, -2270.040, -222.589, 200.000},
+		{"Стрип", 2027.400, 863.229, -89.084, 2087.390, 1703.230, 110.916},
+		{"Хашбери", -2593.440, -222.589, -1.0, -2411.220, 54.722, 200.000},
+		{"Аренда авиатранспорта ЛС", 1852.000, -2394.330, -89.084, 2089.000, -2179.250, 110.916},
+		{"Комплекс Уайтвуд", 1098.310, 1726.220, -89.084, 1197.390, 2243.230, 110.916},
+		{"Водохранилище ЛВ", -789.737, 1659.680, -89.084, -599.505, 1929.410, 110.916},
+		{"Эль-Корона", 1812.620, -2179.250, -89.084, 1970.620, -1852.870, 110.916},
+		{"Центральный район СФ", -1700.010, 744.267, -6.1, -1580.010, 1176.520, 200.000},
+		{"Фостерская долина", -2178.690, -1250.970, 0.000, -1794.920, -1115.580, 200.000},
+		{"Лас-Пайасадас", -354.332, 2580.360, 2.0, -133.625, 2816.820, 200.000},
+		{"Валле Окултадо", -936.668, 2611.440, 2.0, -715.961, 2847.900, 200.000},
+		{"Блэкфилдский перекрёсток", 1166.530, 795.010, -89.084, 1375.600, 1044.690, 110.916},
+		{"Гэнтон", 2222.560, -1852.870, -89.084, 2632.830, -1722.330, 110.916},
+		{"АэроВокзал СФ СФ", -1213.910, -730.118, 0.000, -1132.820, -50.096, 200.000},
+		{"Восточный Редсандс", 1817.390, 2011.830, -89.084, 2106.700, 2202.760, 110.916},
+		{"Восточная Эспаланда", -1499.890, 578.396, -79.615, -1339.890, 1274.260, 20.385},
+		{"Дворец Калигулы", 2087.390, 1543.230, -89.084, 2437.390, 1703.230, 110.916},
+		{"Казино Рояль", 2087.390, 1383.230, -89.084, 2437.390, 1543.230, 110.916},
+		{"Гора Вайнвуд", 72.648, -1235.070, -89.084, 321.356, -1008.150, 110.916},
+		{"Азартный район", 2437.390, 1783.230, -89.084, 2685.160, 2012.180, 110.916},
+		{"Гора Вайнвуд", 1281.130, -452.425, -89.084, 1641.130, -290.913, 110.916},
+		{"Центральный район СФ", -1982.320, 744.170, -6.1, -1871.720, 1274.260, 200.000},
+		{"Хэнкипэнки поинт", 2576.920, 62.158, 0.000, 2759.250, 385.503, 200.000},
+		{"Военный склад ГСМ", 2498.210, 2626.550, -89.084, 2749.900, 2861.550, 110.916},
+		{"Шоссе Гарри-Голд", 1777.390, 863.232, -89.084, 1817.390, 2342.830, 110.916},
+		{"Тоннель Бэйсайд", -2290.190, 2548.290, -89.084, -1950.190, 2723.290, 110.916},
+		{"Порт ЛС", 2324.000, -2302.330, -89.084, 2703.580, -2145.100, 110.916},
+		{"Гора Вайнвуд", 321.356, -1044.070, -89.084, 647.557, -860.619, 110.916},
+		{"Промсклад Рэндольфа", 1558.090, 596.349, -89.084, 1823.080, 823.235, 110.916},
+		{"Восточный пляж ЛС", 2632.830, -1852.870, -89.084, 2959.350, -1668.130, 110.916},
+		{"Пролив Флинт-Уотер", -314.426, -753.874, -89.084, -106.339, -463.073, 110.916},
+		{"Блуберри", 19.607, -404.136, 3.8, 349.607, -220.137, 200.000},
+		{"Вокзал ЛВ", 2749.900, 1198.990, -89.084, 2923.390, 1548.990, 110.916},
+		{"Глен Парк", 1812.620, -1350.720, -89.084, 2056.860, -1100.820, 110.916},
+		{"Центральный район СФ", -1993.280, 265.243, -9.1, -1794.920, 578.396, 200.000},
+		{"Западный Редсандс", 1377.390, 2243.230, -89.084, 1704.590, 2433.230, 110.916},
+		{"Гора Вайнвуд", 321.356, -1235.070, -89.084, 647.522, -1044.070, 110.916},
+		{"Мост Гант", -2741.450, 1659.680, -6.1, -2616.400, 2175.150, 200.000},
+		{"Большой кратер ЛВ", -90.218, 1286.850, -3.0, 153.859, 1554.120, 200.000},
+		{"Пересечение Флинт", -187.700, -1596.760, -89.084, 17.063, -1276.600, 110.916},
+		{"Лас-Колинас", 2281.450, -1135.040, -89.084, 2632.740, -945.035, 110.916},
+		{"Ж/Д депо ЛВ", 2749.900, 1548.990, -89.084, 2923.390, 1937.250, 110.916},
+		{"Казино Изумрудный остров", 2011.940, 2202.760, -89.084, 2237.400, 2508.230, 110.916},
+		{"Скалистый массив ЛВ", -208.570, 2123.010, -7.6, 114.033, 2337.180, 200.000},
+		{"Санта-Флора", -2741.070, 458.411, -7.6, -2533.040, 793.411, 200.000},
+		{"Севилльский бульвар", 2703.580, -2126.900, -89.084, 2959.350, -1852.870, 110.916},
+		{"Центральный Рынок", 926.922, -1577.590, -89.084, 1370.850, -1416.250, 110.916},
+		{"Квинс", -2593.440, 54.722, 0.000, -2411.220, 458.411, 200.000},
+		{"Пересечение Пилсон", 1098.390, 2243.230, -89.084, 1377.390, 2507.230, 110.916},
+		{"Спальный район ЛВ", 2121.400, 2663.170, -89.084, 2498.210, 2861.550, 110.916},
+		{"Пилигрим", 2437.390, 1383.230, -89.084, 2624.400, 1783.230, 110.916},
+		{"Блэкфилд", 964.391, 1403.220, -89.084, 1197.390, 1726.220, 110.916},
+		{"Радиотелескоп", -410.020, 1403.340, -3.0, -137.969, 1681.230, 200.000},
+		{"Диллимор", 580.794, -674.885, -9.5, 861.085, -404.790, 200.000},
+		{"Эль-Кебрадос", -1645.230, 2498.520, 0.000, -1372.140, 2777.850, 200.000},
+		{"Северная Эспланада", -2533.040, 1358.900, -4.5, -1996.660, 1501.210, 200.000},
+		{"Аэропорт СФ", -1499.890, -50.096, -1.0, -1242.980, 249.904, 200.000},
+		{"Изумрудная деревня", 1916.990, -233.323, -100.000, 2131.720, 13.800, 200.000},
+		{"КПП ЛС-ЛВ", 1414.070, -768.027, -89.084, 1667.610, -452.425, 110.916},
+		{"Восточный пляж ЛС", 2747.740, -1498.620, -89.084, 2959.350, -1120.040, 110.916},
+		{"Пролив Сан-Андреас", 2450.390, 385.503, -100.000, 2759.250, 562.349, 200.000},
+		{"Тенистые ручьи", -2030.120, -2174.890, -6.1, -1820.640, -1771.660, 200.000},
+		{"Больница ЛС", 1072.660, -1416.250, -89.084, 1370.850, -1130.850, 110.916},
+		{"Западный Рокшор", 1997.220, 596.349, -89.084, 2377.390, 823.228, 110.916},
+		{"Прикл Пайн", 1534.560, 2583.230, -89.084, 1848.400, 2863.230, 110.916},
+		{"Порт Истер Бейзин", -1794.920, -50.096, -1.04, -1499.890, 249.904, 200.000},
+		{"Конопляная долина", -1166.970, -1856.030, 0.000, -815.624, -1602.070, 200.000},
+		{"Грузовой склад ЛВ", 1457.390, 863.229, -89.084, 1777.400, 1143.210, 110.916},
+		{"Прикл Пайн", 1117.400, 2507.230, -89.084, 1534.560, 2723.230, 110.916},
+		{"Блуберри", 104.534, -220.137, 2.3, 349.607, 152.236, 200.000},
+		{"Скалистый массив ЛВ", -464.515, 2217.680, 0.000, -208.570, 2580.360, 200.000},
+		{"Центральный район СФ", -2078.670, 578.396, -7.6, -1499.890, 744.267, 200.000},
+		{"Восточный Рокшор", 2537.390, 676.549, -89.084, 2902.350, 943.235, 110.916},
+		{"Залив СФ", -2616.400, 1501.210, -3.0, -1996.660, 1659.680, 200.000},
+		{"Парадизо", -2741.070, 793.411, -6.1, -2533.040, 1268.410, 200.000},
+		{"Азартный район", 2087.390, 1203.230, -89.084, 2640.400, 1383.230, 110.916},
+		{"Стрип-клуб ЛВ", 2162.390, 2012.180, -89.084, 2685.160, 2202.760, 110.916},
+		{"Джанипер Хилл", -2533.040, 578.396, -7.6, -2274.170, 968.369, 200.000},
+		{"Джанипер Холлоу", -2533.040, 968.369, -6.1, -2274.170, 1358.900, 200.000},
+		{"Банковское отделение ЛВ", 2237.400, 2202.760, -89.084, 2536.430, 2542.550, 110.916},
+		{"Восточное шоссе ЛВ", 2685.160, 1055.960, -89.084, 2749.900, 2626.550, 110.916},
+		{"Пляж Верона", 647.712, -2173.290, -89.084, 930.221, -1804.210, 110.916},
+		{"Фостерская долина", -2178.690, -599.884, -1.2, -1794.920, -324.114, 200.000},
+		{"Арко-дель-оесте", -901.129, 2221.860, 0.000, -592.090, 2571.970, 200.000},
+		{"Автосалон ЛС", -792.254, -698.555, -5.3, -452.404, -380.043, 200.000},
+		{"Зловещий дворец", -1209.670, -1317.100, 114.981, -908.161, -787.391, 251.981},
+		{"Дамба Шермана", -968.772, 1929.410, -3.0, -481.126, 2155.260, 200.000},
+		{"Северная Эспланада", -1996.660, 1358.900, -4.5, -1524.240, 1592.510, 200.000},
+		{"Финансовый район", -1871.720, 744.170, -6.1, -1701.300, 1176.420, 300.000},
+		{"Гарсия", -2411.220, -222.589, -1.14, 2173.040, 265.243, 200.000},
+		{"Монтгомери", 1119.510, 119.526, -3.0, 1451.400, 493.323, 200.000},
+		{"Т/Ц Ручей", 2749.900, 1937.250, -89.084, 2921.620, 2669.790, 110.916},
+		{"Аэропорт ЛС", 1249.620, -2394.330, -89.084, 1852.000, -2179.250, 110.916},
+		{"Пляж Санта-Мария", 72.648, -2173.290, -89.084, 342.648, -1684.650, 110.916},
+		{"КПП ЛС-ЛВ", 1463.900, -1150.870, -89.084, 1812.620, -768.027, 110.916},
+		{"Эйнджел-Пайн", -2324.940, -2584.290, -6.1, -1964.220, -2212.110, 200.000},
+		{"Заброшенный аэродром", 37.032, 2337.180, -3.0, 435.988, 2677.900, 200.000},
+		{"Октан-Спрингс", 338.658, 1228.510, 0.000, 664.308, 1655.050, 200.000},
+		{"Пилигрим Кам-э-Лот", 2087.390, 943.235, -89.084, 2623.180, 1203.230, 110.916},
+		{"Западный Редсандс", 1236.630, 1883.110, -89.084, 1777.390, 2142.860, 110.916},
+		{"Пляж Санта-Мария", 342.648, -2173.290, -89.084, 647.712, -1684.650, 110.916},
+		{"Зелёный утёс", 1249.620, -2179.250, -89.084, 1692.620, -1842.270, 110.916},
+		{"Аэропорт ЛВ", 1236.630, 1203.280, -89.084, 1457.370, 1883.110, 110.916},
+		{"Округ Флинт", -594.191, -1648.550, 0.000, -187.700, -1276.600, 200.000},
+		{"Зелёный утёс", 930.221, -2488.420, -89.084, 1249.620, -2006.780, 110.916},
+		{"Паломино Крик", 2160.220, -149.004, 0.000, 2576.920, 228.322, 200.000},
+		{"Военная база ЛС", 2373.770, -2697.090, -89.084, 2809.220, -2330.460, 110.916},
+		{"Аэропорт СФ", -1213.910, -50.096, -4.5, -947.980, 578.396, 200.000},
+		{"Комплекс Уайтвуд", 883.308, 1726.220, -89.084, 1098.310, 2507.230, 110.916},
+		{"Калтон Хейтс", -2274.170, 744.170, -6.1, -1982.320, 1358.900, 200.000},
+		{"Военная база СФ", -1794.920, 249.904, -9.1, -1242.980, 578.396, 200.000},
+		{"Залив ЛС", -321.744, -2224.430, -89.084, 44.615, -1724.430, 110.916},
+		{"Доэрти", 2173.040, -222.589, -1.0, -1794.920, 265.243, 200.000},
+		{"Гора Чилиад", -2178.690, -2189.910, -47.917, -2030.120, -1771.660, 576.083},
+		{"Форт-Карсон", -376.233, 826.326, -3.0, 123.717, 1220.440, 200.000},
+		{"Автобазар", -2178.690, -1115.580, 0.000, -1794.920, -599.884, 200.000},
+		{"Океанское побережье", -2994.490, -222.589, -1.0, -2593.440, 277.411, 200.000},
+		{"Ферн-Ридж", 508.189, -139.259, 0.000, 1306.660, 119.526, 200.000},
+		{"Бэйсайд", -2741.070, 2175.150, 0.000, -2353.170, 2722.790, 200.000},
+		{"Аэропорт ЛВ", 1457.370, 1203.280, -89.084, 1777.390, 1883.110, 110.916},
+		{"Ферма Блуберри", -319.676, -220.137, 0.000, 104.534, 293.324, 200.000},
+		{"Палисады", -2994.490, 458.411, -6.1, -2741.070, 1339.610, 200.000},
+		{"Скала Норстар", 2285.370, -768.027, 0.000, 2770.590, -269.740, 200.000},
+		{"Карьер Хантер", 337.244, 710.840, -115.239, 860.554, 1031.710, 203.761},
+		{"Аэропорт ЛС", 1382.730, -2730.880, -89.084, 2201.820, -2394.330, 110.916},
+		{"Поклонная гора", -2994.490, -811.276, 0.000, -2178.690, -430.276, 200.000},
+		{"Залив СФ", -2616.400, 1659.680, -3.0, -1996.660, 2175.150, 200.000},
+		{"Тюрьма строгого режима", -91.586, 1655.050, -50.000, 421.234, 2123.010, 250.000},
+		{"Гора Чилиад", -2997.470, -1115.580, -47.917, -2178.690, -971.913, 576.083},
+		{"Гора Чилиад", -2178.690, -1771.660, -47.917, -1936.120, -1250.970, 576.083},
+		{"Аэропорт СФ", -1794.920, -730.118, -3.0, -1213.910, -50.096, 200.000},
+		{"Паноптикум", -947.980, -304.320, -1.1, -319.676, 327.071, 200.000},
+		{"Тенистые ручьи", -1820.640, -2643.680, -8.0, -1226.780, -1771.660, 200.000},
+		{"Бэк-о-Бейонд", -1166.970, -2641.190, 0.000, -321.744, -1856.030, 200.000},
+		{"Гора Чилиад", -2994.490, -2189.910, -47.917, -2178.690, -1115.580, 576.083},
+		{"Тьерра Робада", -1213.910, 596.349, -242.990, -480.539, 1659.680, 900.000},
+		{"Округ Флинт", -1213.910, -2892.970, -242.990, 44.615, -768.027, 900.000},
+		{"Гора Чиллиад", -2997.470, -2892.970, -242.990, -1213.910, -1115.580, 900.000},
+		{"Пустынный округ", -480.539, 596.349, -242.990, 869.461, 2993.870, 900.000},
+		{"Тьерра Робада", -2997.470, 1659.680, -242.990, -480.539, 2993.870, 900.000},
+		{"Окружность СФ", -2997.470, -1115.580, -242.990, -1213.910, 1659.680, 900.000},
+		{"Окружность ЛВ", 869.461, 596.349, -242.990, 2997.060, 2993.870, 900.000},
+		{"Туманный округ", -1213.910, -768.027, -242.990, 2997.060, 596.349, 900.000},
+		{"Окружность ЛС", 44.615, -2892.970, -242.990, 2997.060, -768.027, 900.000}
+	}
+    for i, v in ipairs(streets) do
+        if (x >= v[2]) and (y >= v[3]) and (z >= v[4]) and (x <= v[5]) and (y <= v[6]) and (z <= v[7]) then
+            return v[1]
+        end
+    end
+    return 'Неизвестно'
+end
+function split_text_into_lines(text, max_length)
+	local lines = {}
+	local current_line = ""
+	for word in text:gmatch("%S+") do
+		local new_line = current_line .. (current_line == "" and "" or " ") .. word
+		if #new_line > max_length then
+			table.insert(lines, current_line)
+			current_line = word
+		else
+			current_line = new_line
+		end
+	end
+	if current_line ~= "" then
+		table.insert(lines, current_line)
+	end
+	return table.concat(lines, "\n")
+end
+local function chapter_header_open(menu_state, key, name, force_open)
+	menu_state.open_store = menu_state.open_store or {}
+	if force_open then
+		if type(imgui.SetNextItemOpen) == 'function' then
+			imgui.SetNextItemOpen(true)
+			return imgui.CollapsingHeader(u8(name))
+		end
+		menu_state.open_store[key] = menu_state.open_store[key] or imgui.new.bool(true)
+		menu_state.open_store[key][0] = true
+		return imgui.CollapsingHeader(u8(name), menu_state.open_store[key])
+	end
+	return imgui.CollapsingHeader(u8(name))
+end
+function count_lines_in_text(text, max_length)
+	local lines = {}
+	local current_line = ""
+	for word in text:gmatch("%S+") do
+		local new_line = current_line .. (current_line == "" and "" or " ") .. word
+		if #new_line > max_length then
+			table.insert(lines, current_line)
+			current_line = word
+		else
+			current_line = new_line
+		end
+	end
+	if current_line ~= "" then
+		table.insert(lines, current_line)
+	end
+	return tonumber(#lines)
+end
+function downloadFileFromUrlToPath(url, path)
+	local function on_finish_download()
+		if download_file == 'helper' then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка новой версии хелпера успешно завершена! Перезагрузка..',  message_color)
+			reload_script = true
+			thisScript():reload()
+		elseif download_file == 'smart_uk' then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи розыска для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('sum') .. ' [ID игрока]', message_color)
+			MODULE.Main.Window[0] = false
+			play_sound()
+			load_module('smart_uk')
+		elseif download_file == 'smart_pdd' then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи штрафов для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('tsm') .. ' [ID игрока]', message_color)
+			MODULE.Main.Window[0] = false
+			play_sound()
+			load_module('smart_pdd')
+		elseif download_file == 'smart_rptp' then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умного срока для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() ..  '] {ffffff}завершена успешно!',  message_color)
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('pum') .. ' [ID игрока]', message_color)
+			MODULE.Main.Window[0] = false
+			play_sound()
+			load_module('smart_rptp')
+		elseif download_file == 'vehicles' then
+			if not modules.vehicles._silent_update then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка всех кастомных т/с успешно завершена!',  message_color)
+				play_sound()
+			end
+			modules.vehicles._silent_update = false
+			initialize_vehicles()
+		elseif download_file == 'notify' then
+			if doesFileExist(config_dir .. "/Resourse/notify.mp3") then
+				print('Звук оповещений успешно загружен!')
+			end
+		end
+		download_file = ''
+	end
+	if IS_MOBILE then
+		local function downloadToFile(url, path)
+			local http = require("socket.http")
+			local ltn12 = require("ltn12")
+			local f, ferr = io.open(path, "wb")
+			if not f then return false, "Не удалось создать файл: " .. tostring(ferr) end
+			local ok, code, headers, status = http.request{ method = "GET", url = url, sink = ltn12.sink.file(f) }
+			if not ok then return false, "Ошибка запроса: " .. tostring(code) end
+			if tonumber(code) ~= 200 then return false, "HTTP код: " .. tostring(code) end
+			return true
+		end
+		local ok, err = downloadToFile(url, path)
+		if ok then
+			on_finish_download()
+		else
+			sampAddChatMessage(CHAT_PREFIX .. " {ffffff}Ошибка загрузки файла: " .. tostring(err), message_color)
+			if download_file == 'helper' and MODULE.Update then
+				MODULE.Update.downloading = false
+				MODULE.Update.download_start = nil
+			end
+			download_file = ''
+		end
+	else
+		downloadUrlToFile(url, path, function(id, status)
+			if status == 6 then
+				on_finish_download()
+			end
+		end)
+	end
+end
+function MODULE.Update.show_notice()
+	if not MODULE.Update.is_need_update then return end
+	if MODULE.Update.Window[0] then return end
+	sampAddChatMessage(' ', message_color)
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Доступна новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}!', message_color)
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
+	if MODULE.Update.is_emergency then
+		sampAddChatMessage(CHAT_PREFIX .. ' {FF0000}ВНИМАНИЕ: это аварийное обновление, его установка настоятельно рекомендуется!', message_color)
+	end
+	sampAddChatMessage(' ', message_color)
+	MODULE.Update.popup_opened = false
+	MODULE.Update.Window[0] = true
+	play_sound()
+end
+function MODULE.Update.start_install()
+	if not MODULE.Update.is_need_update then return end
+	if MODULE.Update.downloading or MODULE.Update.auto_start_download then return end
+	sampAddChatMessage(' ', message_color)
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обнаружена новая версия хелпера ' .. message_color_hex .. MODULE.Update.version .. '{ffffff}. Начинаю автоматическую установку...', message_color)
+	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Статус обновления: ' .. (MODULE.Update.status_color or '{FFFFFF}') .. (MODULE.Update.status or '') .. '{ffffff}!', message_color)
+	if MODULE.Update.is_emergency then
+		sampAddChatMessage(CHAT_PREFIX .. ' {FF0000}ВНИМАНИЕ: это аварийное обновление, исправляющее критические ошибки!', message_color)
+	end
+	sampAddChatMessage(' ', message_color)
+	MODULE.Update.auto_start_download = true
+	MODULE.Update.popup_opened = false
+	MODULE.Update.Window[0] = true
+	play_sound()
+end
+function parse_news_ver(v)
+	local t = {}
+	for c in tostring(v or ''):gmatch('%d+') do t[#t + 1] = tonumber(c) end
+	return t
+end
+
+function cmp_news_ver(a, b)
+	local pa, pb = parse_news_ver(a), parse_news_ver(b)
+	if #pa == 0 or #pb == 0 then return nil end
+	local n = math.max(#pa, #pb)
+	for i = 1, n do
+		local x, y = pa[i] or 0, pb[i] or 0
+		if x < y then return -1 end
+		if x > y then return 1 end
+	end
+	return 0
+end
+
+function news_img_path(news)
+	local name = tostring(news.image or ''):gsub('[^%w%.%-]', '_')
+	return config_dir .. '/news_' .. name
+end
+
+function request_news_image(news)
+	if not news.image or news.image == '' then return end
+	if news._img_requested or news._tex then return end
+	news._img_requested = true
+	local path = news_img_path(news)
+	news._img_path = path
+	if doesFileExist(path) then return end
+	asyncHttpRequest("GET", NEWS_IMG_BASE .. news.image, {timeout = 10},
+		function(resp)
+			if resp and resp.text and resp.text ~= '' then
+				local f = io.open(path, 'wb')
+				if f then f:write(resp.text); f:close() end
+			end
+		end,
+		function(err) end
+	)
+end
+MODULE.UpdateInfo = { loaded = false, loading = false, error = nil, data = nil }
+local function load_update_info()
+	if MODULE.UpdateInfo.loading then return end
+	MODULE.UpdateInfo.loading = true
+	MODULE.UpdateInfo.error = nil
+	asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(resp)
+		MODULE.UpdateInfo.loading = false
+		local ok, info = pcall(function() return decodeJson(resp.text or '') end)
+		if not ok or type(info) ~= 'table' then
+			MODULE.UpdateInfo.error = 'не удалось обработать ответ'
+			return
+		end
+		MODULE.UpdateInfo.data = info
+		MODULE.UpdateInfo.loaded = true
+	end, function(err)
+		MODULE.UpdateInfo.loading = false
+		MODULE.UpdateInfo.error = tostring(err)
+	end)
+end
+function load_news(manual)
+	if MODULE.News.loading then return end
+	MODULE.News.loading = true
+	MODULE.News.error = nil
+	asyncHttpRequest(
+		"GET",
+		NEWS_JSON_URL,
+		{timeout = 5},
+		function(response)
+			MODULE.News.loading = false
+			local ok, decoded = pcall(function() return decodeJson(response.text) end)
+			if not ok or type(decoded) ~= "table" then
+				MODULE.News.error = "Не удалось обработать ответ"
+				return
+			end
+			local arr = decoded.news or decoded
+			if type(arr) ~= "table" then
+				MODULE.News.error = "Неверный формат News.json"
+				return
+			end
+			local cur_ver = tostring(thisScript().version or '')
+			local list = {}
+			for _, item in ipairs(arr) do
+				if type(item) == "table" then
+					local statusKey  = tostring(item.status or ""):lower()
+					local statusInfo = UPDATE_STATUS[statusKey] or { text = "Новость", color = "{FFFFFF}" }
+					local _hv = item.hide_version
+					local hide = (_hv == true) or (type(_hv) == "string" and _hv:lower() == "true")
+					local news_ver = tostring(item.version or "")
+					local ver_visible = true
+					if news_ver ~= '' then
+						local c = cmp_news_ver(news_ver, cur_ver)
+						if c ~= nil and c > 0 then ver_visible = false end
+					end
+					table.insert(list, {
+						version      = news_ver,
+						date         = tostring(item.date or ""),
+						status       = statusKey,
+						status_text  = statusInfo.text,
+						status_color = statusInfo.color,
+						title        = tostring(item.title or ""),
+						hide_version = hide,
+						button       = tostring(item.button or ""),
+						button_url   = tostring(item.button_url or ""),
+						image        = tostring(item.image or ""),
+						image_h      = item.image_h,
+						ver_visible  = ver_visible,
+						text         = tostring(item.text or ""),
+					})
+				end
+			end
+			MODULE.News.list = list
+			for _, n in ipairs(list) do request_news_image(n) end
+			local visible = {}
+			for _, n in ipairs(list) do if n.ver_visible then visible[#visible + 1] = n end end
+			MODULE.News.visible = visible
+			MODULE.News.selected = 1
+			MODULE.News.loaded = true
+			print('Новости загружены: ' .. #list .. ' шт.')
+		end,
+		function(err)
+			MODULE.News.loading = false
+			MODULE.News.error = tostring(err)
+		end
+	)
+end
+function check_update(manual)
+	print('Проверка на наличие обновлений...')
+	if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Проверка обновлений...', message_color) end
+	local function compare_versions(v1, v2)
+		local function parse(v) local t = {} for p in v:gmatch('(%d+)') do table.insert(t, tonumber(p)) end return t end
+		local p1, p2 = parse(v1), parse(v2)
+		for i = 1, math.max(#p1, #p2) do
+			local a, b = p1[i] or 0, p2[i] or 0
+			if a < b then return -1 end
+			if a > b then return 1 end
+		end
+		return 0
+	end
+	asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(response)
+		local ok, u = pcall(function() return decodeJson(response.text) end)
+		if not ok or type(u) ~= 'table' then
+			if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка проверки обновлений (не удалось обработать ответ).', message_color) end
+			isUpdateChecked = true; return
+		end
+		local uUrl      = tostring(u.url or "")
+		local stableVer = tostring(u.stable_version or u.version or "")
+		local betaVer   = tostring(u.beta_version or "")
+		local myVer     = thisScript().version
+		local beta_closed = (u.beta_closed == true) or (betaVer ~= "" and stableVer ~= "" and compare_versions(stableVer, betaVer) >= 0)
+		MODULE.Update.beta_closed    = beta_closed
+		MODULE.Update.stable_version = stableVer
+		MODULE.Update.beta_version   = betaVer
+		MODULE.Update.stable_info    = tostring(u.stable_info or u.info or "")
+		MODULE.Update.beta_info      = tostring(u.beta_info or "")
+		if beta_closed and settings.general.beta_tester == true and stableVer ~= "" and uUrl ~= "" and compare_versions(myVer, stableVer) ~= 0 then
+			print('Бета-тест закрыт | предлагаю стабильную: ' .. stableVer)
+			MODULE.Update.is_need_update = true
+			MODULE.Update.url     = uUrl
+			MODULE.Update.version = stableVer
+			MODULE.Update.info    = MODULE.Update.stable_info
+			local stKey  = tostring(u.stable_status or ""):lower()
+			local stInfo = UPDATE_STATUS[stKey] or { text = "Обновление", color = "{FFFFFF}" }
+			MODULE.Update.status = stInfo.text; MODULE.Update.status_color = stInfo.color
+			MODULE.Update.is_emergency = (stKey == "emergency")
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Бета-тест завершён: вышла стабильная версия ' .. message_color_hex .. stableVer .. '{ffffff}. Установите её в окне обновления.', message_color)
+			MODULE.Update.show_notice()
+			isUpdateChecked = true; return
+		end
+		local is_beta = (betaVer ~= "") and not beta_closed and ((settings.general.beta_tester == true) or (myVer == betaVer))
+		local targetVer  = is_beta and betaVer or stableVer
+		local targetInfo = is_beta and MODULE.Update.beta_info or MODULE.Update.stable_info
+		local statusKey  = tostring((is_beta and u.beta_status) or u.stable_status or u.status or ""):lower()
+		local statusInfo = UPDATE_STATUS[statusKey] or { text = "Обновление", color = "{FFFFFF}" }
+		if is_beta then
+			statusInfo = { text = "Бета", color = "{B026FF}" }
+		end
+		if targetVer ~= "" and uUrl ~= "" and compare_versions(myVer, targetVer) < 0 then
+			print('Доступно обновление! | Локальная: ' .. myVer .. ' | В облаке: ' .. targetVer .. ' | Канал: ' .. (is_beta and 'бета' or 'стабильный'))
+			MODULE.Update.is_need_update = true
+			MODULE.Update.url = uUrl; MODULE.Update.version = targetVer; MODULE.Update.info = targetInfo
+			MODULE.Update.status = statusInfo.text; MODULE.Update.status_color = statusInfo.color
+			MODULE.Update.is_emergency = (statusKey == "emergency")
+			if settings.general.updater and not manual then MODULE.Update.start_install()
+			elseif manual or MODULE.Update.can_show then MODULE.Update.show_notice() end
+		else
+			print('Обновления не обнаружены')
+			if manual then
+				if targetVer ~= "" and compare_versions(myVer, targetVer) == 0 then
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}У вас установлена последняя версия хелпера [' .. message_color_hex .. targetVer .. '{ffffff}]' .. (is_beta and ' (бета)' or '') .. '.', message_color)
+				elseif not is_beta and stableVer ~= "" and compare_versions(myVer, stableVer) > 0 then
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы являетесь тестировщиком версии (' .. message_color_hex .. myVer .. '{ffffff}). О всех багах пишите разработчику.', message_color)
+				end
+			end
+		end
+		isUpdateChecked = true
+	end, function(err)
+		if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка проверки обновлений: ' .. tostring(err), message_color) end
+		isUpdateChecked = true
+	end)
+end
+local function is_html_garbage(path)
+	local f = io.open(path, "rb")
+	if not f then return false end
+	local head = f:read(256) or ""
+	f:close()
+	local s = head:match("^%s*(.*)$") or head
+	return s:sub(1, 1) == "<"
+end
+function check_resources()
+	if not doesDirectoryExist(config_dir .. '/Resourse') then
+		print('Создаю папку для ресурсов хелпера...')
+		createDirectory(config_dir .. '/Resourse')
+	end
+	local RAW = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main'
+	if not doesFileExist(config_dir .. '/Resourse/logo.png') or is_html_garbage(config_dir .. '/Resourse/logo.png') then
+		if doesFileExist(config_dir .. '/Resourse/logo.png') then os.remove(config_dir .. '/Resourse/logo.png') end
+		print('Подгружаю логотип хелпера...')
+		downloadFileFromUrlToPath(RAW .. '/Resourse/logo.png', config_dir .. '/Resourse/logo.png')
+	end
+	if not doesFileExist(config_dir .. "/Resourse/notify.mp3") or is_html_garbage(config_dir .. "/Resourse/notify.mp3") then
+		if doesFileExist(config_dir .. "/Resourse/notify.mp3") then os.remove(config_dir .. "/Resourse/notify.mp3") end
+		print('Подгружаю звук оповещений хелпера...')
+		downloadFileFromUrlToPath(RAW .. '/Resourse/notify.mp3', config_dir .. "/Resourse/notify.mp3")
+	end
+	local veh_path = modules.vehicles.path
+	if not doesFileExist(veh_path) or is_html_garbage(veh_path) then
+		if doesFileExist(veh_path) then os.remove(veh_path) end
+		print('Подгружаю список кастомных т/с для определенения моделей...')
+		download_file = 'vehicles'
+		downloadFileFromUrlToPath(RAW .. '/SmartVEH/Vehicles' ..
+			((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), veh_path)
+	end
+end
+function import_fraction_data(mode)
+	add_unique_cmd(modules.commands.data.commands.my, get_fraction_cmds(mode, false))
+	add_unique_cmd(modules.commands.data.commands_manage.my, get_fraction_cmds(mode, true))
+	add_default_notes(mode)
+	import_data_from_old_helpers()
+	save_module('commands')
+	save_module('notes')
+	modules.piemenu.data = get_fraction_pie(mode)
+	save_module('piemenu')
+end
+function get_fraction_pie(mode)
+	local default = {
+		{
+			name = 'Время',
+			icon = 'CLOCK',
+			action = '/time'
+		},
+		{
+			name = 'Анимка',
+			icon = 'TOILET',
+			action = '/piss'
+		},
+		{
+			name = 'Т/С',
+			icon = 'CAR',
+			next = {
+				{
+					name = 'Ремка',
+					icon = '',
+					action = '/repcar'
+				},
+				{
+					name = 'Канистра',
+					icon = '',
+					action = '/fillcar'
+				}
+			}
+		},
+		{
+			name = 'Оружие',
+			icon = 'GUN',
+			action = '/gun'
+		}
+	}
+	local police = {
+		{
+			name = 'Кричалка',
+			icon = 'VOLUME_HIGH',
+			action = '/ss'
+		},
+		{
+			name = 'Миранда',
+			icon = '',
+			action = '/mr'
+		},
+		{
+			name = 'Траффик стоп',
+			icon = 'BULLHORN',
+			next = {
+				{
+					name = '10-55',
+					icon = '',
+					action = '/55'
+				},
+				{
+					name = '10-66',
+					icon = '',
+					action = '/66'
+				}
+			}
+		},
+		{
+			name = 'Тайзер',
+			icon = 'GUN',
+			action = '/t'
+		}
+	}
+	return (mode == 'police' or mode == 'fbi') and police or default
+end
+function get_fraction_cmds(selected, is_manage)
+    local cmds = {
+		{cmd = 'time', description = 'Посмотреть время',  text = '/me взглянул{sex} на свои часы с гравировкой "{fraction}"&/time&/do На часах видно время {get_time}.', arg = '', enable = false, waiting = '2', bind = "{}"},
+		{cmd = 'cure', description = 'Поднять игрока из стадии',  text = '/me наклоняется над человеком, и прощупывает его пульс на сонной артерии&/cure {id}&/do Пульс отсутствует.&/me начинает делать человеку непрямой массаж сердца, время от времени проверяя пульс&/do Спустя несколько минут сердце человека начало биться.&/do Человек пришел в сознание.&/todo Отлично*улыбаясь', arg = '{id}', enable = true, waiting = '2', bind = "{}"}
+	}
+    local function append_commands(from_table)
+        for _, cmd in ipairs(from_table) do
+			table.insert(cmds, cmd)
+		end
+    end
+	if is_manage then
+		if selected == 'mafia' then
+			append_commands(modules.commands.data.commands_manage.mafia)
+		elseif selected == 'ghetto' then
+			append_commands(modules.commands.data.commands_manage.ghetto)
+		else
+			append_commands(modules.commands.data.commands_manage.goss)
+			if selected == 'fbi' then
+				append_commands(modules.commands.data.commands_manage.goss_fbi)
+			elseif selected == 'prison' then
+				append_commands(modules.commands.data.commands_manage.goss_prison)
+			elseif selected == 'gov' then
+				append_commands(modules.commands.data.commands_manage.goss_gov)
+			end
+		end
+	else
+		if selected == 'police' then
+			append_commands(modules.commands.data.commands.police)
+		elseif selected == 'fbi' then
+			append_commands(modules.commands.data.commands.police)
+			append_commands(modules.commands.data.commands.fbi)
+			append_commands(modules.commands.data.commands.mafia)
+			for index, value in ipairs(cmds) do
+				if value.cmd == 'lead' or value.cmd == 'unlead' then
+					table.remove(cmds, index)
+					break
+				end
+			end
+		elseif selected == 'hospital' then
+			append_commands(modules.commands.data.commands.hospital)
+			if tonumber(getServerNumber()) > 300 then -- удаление ненужных команды для родины рп
+				for index, value in ipairs(cmds) do
+					if value.cmd == 'hla' or value.cmd == 'hlb' or value.cmd == 'ant' or value.cmd == 'pilot' or value.cmd == 'medin' or value.cmd == 'mt' then
+						table.remove(cmds, index)
+						break
+					end
+				end
+			end
+		elseif selected == 'smi' then
+			append_commands(modules.commands.data.commands.smi)
+		elseif selected == 'army' then
+			append_commands(modules.commands.data.commands.army)
+		elseif selected == 'prison' then
+			append_commands(modules.commands.data.commands.prison)
+			append_commands(modules.commands.data.commands.army)
+		elseif selected == 'lc' then
+			append_commands(modules.commands.data.commands.lc)
+		elseif selected == 'gov' then
+			append_commands(modules.commands.data.commands.gov)
+		elseif selected == 'ins' then
+			append_commands(modules.commands.data.commands.ins)
+		elseif selected == 'fd' then
+			append_commands(modules.commands.data.commands.fd)
+		elseif selected == 'mafia' then
+			append_commands(modules.commands.data.commands.mafia)
+		elseif selected == 'ghetto' then
+			append_commands(modules.commands.data.commands.ghetto)
+		end
+	end
+    return cmds
+end
+function delete_default_fraction_cmds(my_cmds, default_cmds)
+	for i = #my_cmds, 1, -1 do
+		for _, def in ipairs(default_cmds) do
+			if my_cmds[i].cmd == def.cmd then
+				table.remove(my_cmds, i)
+				break
+			end
+		end
+	end
+end
+function add_unique_cmd(tbl, cmds)
+	for _, cmd in ipairs(cmds) do
+		local exists = false
+		for _, v in ipairs(tbl) do
+			if v.cmd == cmd.cmd then exists = true break end
+		end
+		if not exists then table.insert(tbl, cmd) end
+	end
+end
+function add_unique_note(tbl, note)
+	for _, v in ipairs(tbl) do
+		if v.note_name == note.note_name then
+			return
+		end
+	end
+	table.insert(tbl, note)
+end
+function add_default_notes(module)
+	if module ~= 'none' then
+		local money = {
+			note_name = 'Зарплата в фракции',
+			note_text = 'Почему ваша зарплата может быть меньше, чем указано:&-20 процентов если нету жилья (дом/отель/трейлер)&-20/-40 процентов если у вас есть выговоры&-10 процентов из-за фикса экономики от разрабов&&Способы повысить свою зарплату во фракции:&+10 процентов если арендовать номер в отеле&+7 процентов если вступить в семью с фам.флагом&+15 процентов если есть \"Военный билет\"&+11 процентов если есть \"Грамота Ветерана\"&+3 процента если есть акс \"Оранжевая магическая шляпа\"&+10/+15/+20/+25/+26/+30/+35 процентов если купить охранника&- Повышайтесь на ранг повыше :)'
+		}
+		add_unique_note(modules.notes.data, money)
+	end
+	if module == 'police' or module == 'fbi' or module == 'prison' or module == 'army' then
+		local situate_codes = {
+			note_name = 'Ситуационные коды',
+			note_text = 'CODE 0 - Офицер ранен.&CODE 1 - Офицер в бедственном положении, нужна помощь всех юнитов.&CODE 2 - Обычный вызов [без сирен/стробоскопов/соблюдение ПДД].&CODE 2 HIGHT - Приоритетный вызов [без сирен/стробоскопов/соблюдение ПДД].&CODE 3 - Срочный вызов [сирены, стробоскопы, игнорирования ПДД].&CODE 4 - Стабильно, помощь не требуется.&Code 4 ADAM - Помощь не требуется, но офицеры поблизости должны быть готовы оказать помощь.&CODE 5 - Офицерам держаться подальше от опасного места.&CODE 6 - Задерживаюсь на месте [включая локацию и причину,например, 911].&CODE 7 - Перерыв на обед.&CODE 30 - Срабатывание "тихой" сигнализации на месте происшествия.&CODE 30 RINGER - Срабатывание "громкой сигнализации на месте происшествия.&CODE 37 - Обнаружение угнанного т/c.&Сode TOM - Офицеру требуется Тайзер.'
+		}
+		local teen_codes = {
+			note_name = 'Тен-коды',
+			note_text = '10-1 - Сбор всех офицеров на дежурстве.&10-2 - Вышел в патруль.&10-2R - Закончил патруль.&10-3 - Радиомолчание.&10-4 - Принято.&10-5 - Повторите.&10-6 - Не принято/неверно/нет.&10-7 - Ожидайте.&10-8 - Не доступен/занят.&10-14 - Запрос транспортировки.&10-15 - Подозреваемые арестованы.&10-18 - Требуется поддержка дополнительных юнитов.&10-20 - Локация.&10-21 - Статус и местонахождение.&10-22 - Выдвигайтесь к локации.&10-27 - Меняю маркировку патруля.&10-30 - Дорожно-транспортное происшествие.&10-40 - Большое скопление людей (более 4).&10-41 - Нелегальная активность.&10-46 - Провожу обыск.&10-55 - Траффик стоп.&10-57 VICTOR - Погоня за автомобилем.&10-57 FOXTROT - Пешая погоня.&10-66 - Траффик стоп повышенного риска.&10-70 - Запрос поддержки.&10-71 - Запрос медицинской поддержки.&10-88 - Теракт/ЧС.&10-99 - Ситуация урегулирована.&10-100 Временно недоступен для вызовов.'
+		}
+		add_unique_note(modules.notes.data, situate_codes)
+		add_unique_note(modules.notes.data, teen_codes)
+	end
+	if module == 'police' or module == 'fbi' then
+		local markup_patrool = { note_name = 'Маркировки патруля', note_text = 'Основные:&ADAM [A] - Патруль из 2/3 офицеров на крузере.&LINCOLN [L] - Одиночный патруль на крузере.&MARY [M] - Одиночный патруль на мотоцикле.&KING [K] - Патруль SWAT (PLATOON-D) на любом служебном т/с, включая бронетехнику.&HENRY [H] - Высокоскоростой патруль.&AIR [AIR] - Воздушный патруль.&Air Support Division [ASD] - Воздушная поддержка.&&Дополнительные:&CHARLIE [C] - Группа захвата.&ROBERT [R] - Отдел Детективов.&SUPERVISOR [SV] - Руководящий состав.&DAVID [D] - Cпециальный отдел SWAT.&EDWARD [E] - Эвакуатор полиции.&NORA [N] - немаркированная единица патруля.'}
+		add_unique_note(modules.notes.data, markup_patrool)
+	end
+	save_module('notes')
+end
+function import_data_from_old_helpers()	
+	local base = getWorkingDirectory():gsub("\\", "/")
+	local function readJsonSafe(p)
+		if not doesFileExist(p) then return nil end
+		local f = io.open(p, "r")
+		if not f then return nil end
+		local ok, data = pcall(decodeJson, f:read("*a"))
+		f:close()
+		return ok and data or nil
+	end
+	local function migrate_command_args(c)
+		local hasArgId = c.arg:find("{arg_id}", 1, true)
+		local hasArg2 = c.arg:find("{arg2}", 1, true)
+		local hasArg3 = c.arg:find("{arg3}", 1, true)
+		if hasArg2 and hasArg3 then
+			c.arg = c.arg:gsub("{arg_id}", "{id}"):gsub("{arg2}", "{number}"):gsub("{arg3}", "{arg}")
+			c.text = c.text:gsub("{arg_id}", "{id}"):gsub("{arg2}", "{number}"):gsub("{arg3}", "{arg}")
+		elseif hasArg2 and not hasArg3 then
+			c.arg = c.arg:gsub("{arg_id}", "{id}"):gsub("{arg2}", "{arg}")
+			c.text = c.text:gsub("{arg_id}", "{id}"):gsub("{arg2}", "{arg}")
+		elseif hasArgId then
+			c.arg = c.arg:gsub("{arg_id}", "{id}")
+			c.text = c.text:gsub("{arg_id}", "{id}")
+		end
+		return c
+	end
+	local function import_settings(folder)
+		local settingsPath = base .. "/" .. folder .. "/Settings.json"
+		if not doesFileExist(settingsPath) then return end
+		local data = readJsonSafe(settingsPath)
+		if not data then return end
+		if data.note then
+			for _, n in ipairs(data.note) do
+				if not n.deleted then add_unique_note(n) end
+			end
+		end
+		if data.commands then
+			for _, c in ipairs(data.commands) do
+				if not c.deleted then
+					add_unique_cmd(modules.commands.data.commands.my, {migrate_command_args(c)})
+				end
+			end
+		end
+		if data.commands_manage then
+			for _, c in ipairs(data.commands_manage) do
+				if not c.deleted then
+					migrate_command_args(c)
+					add_unique_cmd(modules.commands.data.commands_manage.my, {migrate_command_args(c)})
+				end
+			end
+		end
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Импорт ваших команд (биндов) и заметок из ' .. message_color_hex .. folder .. '{ffffff} успешно завершен!', message_color)
+		os.remove(settingsPath)
+	end
+	import_settings("SMI Helper")
+	import_settings("Hospital Helper")
+	import_settings("AS Helper")
+	local function import_split(folder)
+		local notesPath = base .. "/" .. folder .. "/Notes.json"
+		if doesFileExist(notesPath) then 
+			local n = readJsonSafe(notesPath)
+			if n and n.note then
+				for _, note in ipairs(n.note) do
+					if not note.deleted then add_unique_note(note) end
+				end
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Импорт ваших заметок из ' .. message_color_hex .. folder .. ' Helper {ffffff} успешно завершен!', message_color)
+				os.remove(notesPath)
+			end
+		end
+		local cmdsPath = base .. "/" .. folder .. "/Commands.json"
+		if doesFileExist(cmdsPath) then 
+			local c = readJsonSafe(cmdsPath)
+			if c then
+				if c.commands then
+					for _, cmd in ipairs(c.commands) do
+						if not cmd.deleted then
+							add_unique_cmd(modules.commands.data.commands.my, {migrate_command_args(cmd)})
+						end
+					end
+				end
+				if c.commands_manage then
+					for _, cmd in ipairs(c.commands_manage) do
+						if not cmd.deleted then
+							add_unique_cmd(modules.commands.data.commands_manage.my, {migrate_command_args(cmd)})
+						end
+					end
+				end
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Импорт ваших команд (биндов) из ' .. message_color_hex .. folder .. ' Helper {ffffff} успешно завершен!', message_color)
+				os.remove(cmdsPath)
+			end
+		end
+	end
+	for _, helpers in ipairs({"Mafia", "FD", "Prison", "GOV", "Government", "Justice"}) do
+		import_split(helpers .. " Helper")
+	end
+	local function safeMove(folder, file, target)
+		local p = base .. "/" .. folder .. "/" .. file
+		if readJsonSafe(p) then 
+			os.rename(p, target)
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Импорт "' .. file .. '" из ' .. message_color_hex .. folder .. '{ffffff} успешно завершен!', message_color)
+		end
+	end
+	safeMove("SMI Helper", "Ads.json", modules.ads_history.path)
+	safeMove("Justice Helper", "SmartUK.json", modules.smart_uk.path)
+	safeMove("Justice Helper", "SmartPDD.json", modules.smart_pdd.path)
+	safeMove("Prison Helper", "SmartRPTP.json", modules.smart_rptp.path)
+end
+function delete_old_helpers()
+	local current_path = thisScript().path:gsub('\\','/')
+    local correct_path = worked_dir .. "/Arizona Helper.lua"
+	if current_path ~= correct_path then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Исправляю название файла хелпера для корректной работы обновлений...', message_color)
+        if doesFileExist(correct_path) then os.remove(correct_path) end
+        os.rename(current_path, correct_path)
+    end
+
+	local old_helpers = {"Justice", "Hospital", "SMI", "AS", "FD", "GOV", "Government", "Mafia", "Prison"}
+	for _, name in ipairs(old_helpers) do
+        local file1 = worked_dir .. "/" .. name .. " Helper.lua"
+        local file2 = worked_dir .. "/" .. name .. "_Helper.lua"
+        if doesFileExist(file1) then os.remove(file1) end
+        if doesFileExist(file2) then os.remove(file2) end
+    end
+end
+function delete_helper_data(checker)
+	os.remove(config_dir .. "/Settings.json")
+	os.remove(config_dir .. "/Player.json")
+	os.remove(config_dir .. "/Commands.json")
+	os.remove(config_dir .. "/Buttons.json")
+	os.remove(config_dir .. "/Departament.json")
+	os.remove(config_dir .. "/PieMenu.json")
+	os.remove(config_dir .. "/Notes.json")
+	os.remove(config_dir .. "/Vehicles.json")
+	os.remove(config_dir .. "/Weapon.json")
+	os.remove(config_dir .. "/Ads.json")
+	os.remove(config_dir .. "/Update.json")
+	os.remove(config_dir .. "/Crosshair.json")
+	os.remove(config_dir .. "/Scoreboard.json")
+	os.remove(config_dir .. "/SmartUK.json")
+	os.remove(config_dir .. "/SmartPDD.json")
+	os.remove(config_dir .. "/SmartRPTP.json")
+	if checker then
+		os.remove(config_dir .. "/Resourse/notify.mp3")
+		os.remove(config_dir .. "/Resourse/logo.png")
+		os.remove(thisScript().path)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Хелпер полностью удалён из вашего устройства!', message_color)
+		reload_script = true
+		thisScript():unload()
+	else
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Перезагрузка хелпера...', message_color)
+		reload_script = true
+		thisScript():reload()
+	end
+end
+if isMode('police') or isMode('fbi') then
+	function form_su(name, playerID, message)
+		local lvl, id, reason = message:match('Прошу обьявить в розыск (%d) степени дело N(%d+)%. Причина%: (.+)')
+		local rank = (isMode('fbi') and 4 or 5)
+		if (modules.player.data.fraction_rank_number >= rank) then
+			MODULE.SumMenu.form_su = id .. ' ' .. lvl .. ' ' .. reason
+			sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Используйте ' .. message_color_hex .. '/givefsu ' .. playerID .. '{ffffff} чтобы выдать розыск по запросу офицера ' .. message_color_hex .. name, message_color)
+			play_sound()
+		else
+			sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Для выдачи розыска по запросу нужно иметь ' .. rank .. '-й ранг, но вы только ' .. modules.player.data.fraction_rank_number .. '-й ранг :(', message_color)
+		end
+	end
+end
+if isMode('hospital') then
+	function heal_handler(nick, id, message)
+		if (nick and id and message and tonumber(id) ~= select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))) then
+			local function check_end_time()
+				lua_thread.create(function()
+					wait(5000)
+					if MODULE.HealChat.bool then
+						MODULE.HealChat.Window[0] = false
+						MODULE.HealChat.bool = false
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы не успели вылечить игрока ' .. sampGetPlayerNickname(id), message_color)
+					end
+				end)
+			end
+			for hello_bro, keyword in ipairs(MODULE.HealChat.worlds) do
+				if (message:rupper():find(keyword:rupper())) then
+					if IS_MOBILE then
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Чтоб вылечить игрока ' .. sampGetPlayerNickname(id) .. ', в течении 5-ти секунд нажмите кнопку', message_color)
+						MODULE.HealChat.player_id = id
+						MODULE.HealChat.bool = true
+						MODULE.HealChat.Window[0] = true
+						check_end_time()
+					elseif hotkey_ok then
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Чтобы вылечить игрока ' .. sampGetPlayerNickname(id) .. ' нажмите ' .. message_color_hex .. getNameKeysFrom(settings.general.bind_action) .. ' {ffffff}в течении 5-ти секунд!', message_color)
+						show_notify('info', 'Arizona Helper', 'Нажмите ' .. getNameKeysFrom(settings.general.bind_action) .. ' чтобы быстро вылечить игрока', 5000)
+						MODULE.HealChat.player_id = id
+						MODULE.HealChat.bool = true
+						check_end_time()
+					end
+					return
+				end
+			end
+		end
+	end
+end
+if isMode('fd') then
+	function getFireLocation(id)
+		count = 0
+		for line in MODULE.Fires.locations:gmatch('.-\n') do
+			if id == count then
+				local line2 = line:match('%].+%](.+){.+{.+{'):gsub("^%s+", ""):gsub("%s+$", "")
+				MODULE.Fires.location = line2 or 'пожар'
+				if MODULE.Fires.lvl == -1 then
+					if line:find('%*%*%*') then
+						MODULE.Fires.lvl = 3
+					elseif line:find('%*%*') then
+						MODULE.Fires.lvl = 2
+					elseif line:find('%*') then
+						MODULE.Fires.lvl = 1
+					end
+				end
+				if settings.fd.doklads.togo then
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', выехал' .. MODULE.Binder.tag.sex() .. ' на ' .. MODULE.Fires.location .. ' ' .. MODULE.Fires.lvl .. ' степени опасности')
+				end
+				return
+			else
+				count = count + 1
+			end
+		end
+	end
+end
+if isMode('smi') then
+	function try_send_ad(text)
+		if text == '' then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Нельзя отправить пустое обьявление!', message_color)
+			play_sound()
+			return false
+		end
+		if text == MODULE.SmiEdit.last_ad_text then
+			MODULE.SmiEdit.ad_repeat_count = MODULE.SmiEdit.ad_repeat_count + 1
+		else
+			MODULE.SmiEdit.ad_repeat_count = 0
+			MODULE.SmiEdit.last_ad_text = text
+		end
+		if MODULE.SmiEdit.ad_repeat_count >= 51 then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось отправить обьяву, у вас слишком много спец.символов (цифры/точки/кавычки)!', message_color)
+			play_sound()
+			MODULE.SmiEdit.last_ad_text = ''
+			MODULE.SmiEdit.ad_repeat_count = 0
+			if modules.ads_history.data then
+				if settings.smi.ads_history then
+					for index, ad in ipairs(modules.ads_history.data) do
+						if ad and ad.text and ad.text == MODULE.SmiEdit.ad_message then
+							ad.text = ad.my_text
+							save_module('ads_history')
+							break
+						end
+					end
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сломался файл ' .. modules.ads_history.path, message_color)
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Удалите его, либо если шарите, то найдите ошибку и исправьте (файл в кодировке 1251)', message_color)
+				play_sound()
+			end
+			return false
+		end
+		MODULE.SmiEdit.is_active_ad = false
+		sampSendDialogResponse(MODULE.SmiEdit.ad_dialog_id, 1, 0, text)
+		imgui.StrCopy(MODULE.SmiEdit.input_edit_text, '')
+		return true
+	end
+end
+------------------------------------------[ Crosshair ]-------------------------------------------
+local CROSSHAIR_OFFSETS = {
+	x86   = { r = { 0x58E301, 0x58E3DA, 0x58E433, 0x58E47C }, g = { 0x58E2F6, 0x58E3D1, 0x58E42A, 0x58E473 },
+			  b = { 0x58E2F1, 0x58E3C8, 0x58E425, 0x58E466 }, a = { 0x58E2EC, 0x58E3BF, 0x58E420, 0x58E461 } },
+	arm   = { r = { 0x437416, 0x437486, 0x437812, 0x437874, 0x4378A2, 0x4378CC }, g = { 0x437418, 0x437488, 0x437814, 0x437876, 0x4378A4, 0x4378CE },
+			  b = { 0x43741A, 0x43748C, 0x437816, 0x43787A, 0x4378A6, 0x4378D0 }, a = { 0x437412, 0x43780E } },
+	arm64 = { r = { 0x51C934, 0x51C9A0, 0x51C9E0, 0x51CA14, 0x51CE28, 0x51CE68, 0x51CE9C, 0x51CED4 }, g = { 0x51C938, 0x51C9A4, 0x51C9E4, 0x51CA18, 0x51CE2C, 0x51CE6C, 0x51CEA0, 0x51CED8 },
+			  b = { 0x51C93C, 0x51C9A8, 0x51C9E8, 0x51CA1C, 0x51CE30, 0x51CE70, 0x51CEA4, 0x51CEDC }, a = { 0x51C940, 0x51C9AC, 0x51C9EC, 0x51CA20, 0x51CE34, 0x51CE74, 0x51CEA8, 0x51CEE0 } },
+}
+function crosshair_rw(op, color)
+	local offsets = CROSSHAIR_OFFSETS[jit.arch]
+	if not offsets then return end
+	local base = (type(MONET_GTASA_BASE) == "number") and MONET_GTASA_BASE or 0
+	local is64, b = jit.arch == 'arm64', MODULE.Crosshair
+	b.orig = b.orig or {}
+	local vals = color and { color[1], color[2], color[3], 255 } or nil
+	for ci, ch in ipairs({ 'r', 'g', 'b', 'a' }) do
+		b.orig[ch] = b.orig[ch] or {}
+		for i = 1, #offsets[ch] do
+			local addr = base + offsets[ch][i]
+			if op == 'capture' then
+				b.orig[ch][i] = is64 and memory.getuint32(addr, true) or memory.getuint8(addr, true)
+			elseif op == 'restore' then
+				if is64 then memory.setuint32(addr, b.orig[ch][i], true) else memory.setuint8(addr, b.orig[ch][i], true) end
+			elseif is64 then
+				memory.setuint32(addr, 0x52800000 + bit.lshift(vals[ci], 5) + ci, true)
+			else
+				memory.setuint8(addr, vals[ci], true)
+			end
+		end
+	end
+end
+function crosshair_capture_original()
+	local b = MODULE.Crosshair
+	if not b.orig_saved then crosshair_rw('capture'); b.orig_saved = true end
+end
+function crosshair_restore_original()
+	local b = MODULE.Crosshair
+	if b.orig_saved then crosshair_rw('restore'); b.orig, b.orig_saved, b.last_sight_color = nil, false, nil end
+end
+function changeCrosshairColor(color)
+	if memory_ok and color ~= MODULE.Crosshair.last_sight_color then
+		crosshair_capture_original(); MODULE.Crosshair.last_sight_color = color; crosshair_rw('write', color)
+	end
+end
+function isActiveCrosshairMode()
+	if IS_MOBILE then
+		return (sam and sam.camera and sam.camera.aCams and sam.camera.aCams[0] and sam.camera.aCams[0].nMode == 53) or false
+	end
+	return memory_ok and memory.getint16(0xB6F1A8, false) == 53
+end
+---------------------------------------------[ Events ]---------------------------------------------
+function emulationCEF(str)
+	local bs = raknetNewBitStream()
+	raknetBitStreamWriteInt8(bs, 220)
+	raknetBitStreamWriteInt8(bs, 18)
+	raknetBitStreamWriteInt16(bs, #str)
+	raknetBitStreamWriteString(bs, str)
+	raknetBitStreamWriteInt32(bs, 0)
+	raknetSendBitStream(bs)
+	raknetDeleteBitStream(bs)
+end
+function visualCEF(str, is_encoded)
+	local bs = raknetNewBitStream()
+	raknetBitStreamWriteInt8(bs, 17)
+	raknetBitStreamWriteInt32(bs, 0)
+	raknetBitStreamWriteInt16(bs, #str)
+	raknetBitStreamWriteInt8(bs, is_encoded and 1 or 0)
+	if is_encoded then
+		raknetBitStreamEncodeString(bs, str)
+	else
+		raknetBitStreamWriteString(bs, str)
+	end
+	raknetEmulPacketReceiveBitStream(220, bs)
+	raknetDeleteBitStream(bs)
+end
+function show_notify(type, title, text, time)
+    local function escape_js(s)
+        return s:gsub("\\", "\\\\"):gsub('"', '\\"')
+    end
+    local safe_type = escape_js(type)
+    local safe_title = escape_js(title)
+    local safe_text = escape_js(text)
+    local safe_time = tostring(time)
+    local str = ('window.executeEvent("event.notify.initialize", "[\\"%s\\", \\"%s\\", \\"%s\\", \\"%s\\"]");'):format(safe_type, safe_title, safe_text, safe_time)
+    visualCEF(str, true)
+end
+function sampev.onShowTextDraw(id, data)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[ShowTextDraw] {ffffff}ID ' .. id .. " | Text " .. data.text .. ' | ModelID ' .. data.modelId .. " |", message_color)
+		print("[ShowTextDraw] ID " .. id .. " | Text " .. data.text .. ' | ModelID ' .. data.modelId .. " |")
+	end
+	if data.text:find('~n~~n~~n~~n~~n~~n~~n~~n~~w~Style: ~r~Sport!') then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Активирован режим езды Sport!', message_color)
+		return false
+	end
+	if data.text:find('~n~~n~~n~~n~~n~~n~~n~~n~~w~Style: ~g~Comfort!') then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Активирован режим езды Comfort!', message_color)
+		return false
+	end
+end
+function sampev.onSendClickTextDraw(textdrawId)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[ClickTextDraw] {ffffff}ID ' .. textdrawId, message_color)
+		print('[ClickTextDraw] ID ' .. textdrawId)
+	end
+end
+function sampev.onSendTakeDamage(playerId,damage,weapon)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[TakeDamage] {ffffff}ID ' .. playerId .. " | Damage " .. damage .. " | Weapon " .. weapon, message_color)
+		print('[TakeDamage] ID ' .. playerId .. " | Damage " .. damage .. " | Weapon " .. weapon)
+	end
+	if playerId ~= 65535 then
+		playerId2 = playerId1
+		playerId1 = playerId
+		if isParamSampID(playerId) and playerId1 ~= playerId2 and tonumber(playerId) ~= 0 and weapon then
+			local weapon_name = get_name_weapon(weapon)
+			if weapon_name then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Игрок ' .. sampGetPlayerNickname(playerId) .. '[' .. playerId .. '] напал на вас используя ' .. weapon_name .. '['.. weapon .. ']!', message_color)
+				if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
+					if ((MODULE.Patrool.Window[0]) and (MODULE.Patrool.ComboCode[0] ~= 1)) then
+						sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Ваш ситуационный код изменён на CODE 0.', message_color)
+						MODULE.Patrool.ComboCode[0] = 1
+						MODULE.Patrool.code = 'CODE 0'
+					end
+					if ((MODULE.Post.Window[0]) and (MODULE.Post.ComboCode[0] ~= 1)) then
+						sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Ваш ситуационный код изменён на CODE 0.', message_color)
+						MODULE.Post.ComboCode[0] = 1
+						MODULE.Post.code = 'CODE 0'
+					end
+					if ((isMode('police') or isMode('fbi')) and settings.mj.auto_doklad_damage) or (((isMode('army') or isMode('prison')) and settings.md.auto_doklad_damage)) then
+						if not MODULE.Binder.state.isActive then
+							lua_thread.create(function()
+								MODULE.Binder.state.isActive = true
+								sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL. ' .. (weapon ~= 0 and 'Нахожусь под огнём' or 'На меня напали') .. ' в районе ' .. MODULE.Binder.tag.get_area() .. ' (' .. MODULE.Binder.tag.get_square() .. '), состояние CODE 0!')
+								wait(2000)
+								sampSendChat('/rb Нападающий: ' .. sampGetPlayerNickname(playerId) .. '[' .. playerId .. '], он(-а) использует ' .. weapon_name .. '!')
+								MODULE.Binder.state.isActive = false
+							end)
+						end
+					end
+				end
+			end
+		end
+	end
+end
+function sampev.onSendGiveDamage(playerId, damage, weapon, bodypart)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[GiveDamage] {ffffff}ID ' .. playerId .. " | Damage " .. damage .. " | Weapon " .. weapon .. " | Body " .. bodypart, message_color)
+		print('[GiveDamage] ID ' .. playerId .. " | Damage " .. damage .. " | Weapon " .. weapon .. " | Body " .. bodypart)
+	end
+end
+function sampev.onServerMessage(color, text)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[ServerMessage] {ffffff}Color ' .. color .. " | Text " .. text, message_color)
+	end
+	if MODULE.Edgo and MODULE.Edgo.try_consume_number and MODULE.Edgo.try_consume_number(text) then return false end
+	if MODULE.Edgo and MODULE.Edgo._num_suppress_until and os.clock() < MODULE.Edgo._num_suppress_until then
+		local c = (text or ""):gsub('%{......%}', '')
+		local sid = c:match('%[(%d+)%]')
+		if sid and tonumber(sid) == MODULE.Edgo._num_suppress_id and c:match(':%s*%d+%s*$') then return false end
+	end
+	if MODULE.Edgo and MODULE.Edgo.history and MODULE.Edgo.history.waiting_result then
+		local c = (text or ""):gsub('%{......%}', '')
+		if c:find('Проверяем историю никнеймов', 1, true) then return false end
+		if c:find('ранее известн', 1, true) then
+			local old = c:match('как%s+(.+)')
+			if old then old = old:gsub('[%.%s]+$', '') end
+			MODULE.Edgo.history.got = (old and old ~= "") and old or nil
+			MODULE.Edgo.history.finished = true
+			MODULE.Edgo.history.waiting_result = false
+			return false
+		end
+		if c:find('не найдено', 1, true) or c:find('нет истории', 1, true) or c:find('история никнеймов пуста', 1, true) then
+			MODULE.Edgo.history.got = nil
+			MODULE.Edgo.history.finished = true
+			MODULE.Edgo.history.waiting_result = false
+			return false
+		end
+	end
+	local debris_triggers = {
+		{
+			key = 'pickup',
+			pattern = 'Вы подобрали обломок, теперь вам нужно отнести его и',
+			msg = 'Вы подобрали завал, теперь вам нужно отнести его в общую кучу!',
+			rps = {
+				'/me нагнул{r} к лежащему обломку, примерил{p} хват и рывком вздёрнул{p} его с земли.',
+				'/me упёр{p} ладони в края обломка и, напрягши руки, оторвал{p} его от щебня.',
+				'/me присел{p} на одно колено, подвёл{p} пальцы под обломок и, крякнув, поднял{p} его.',
+				'/me обхватил{p} обломок поудобнее и, упершись ногами, взвалил{p} его на плечо.',
+				'/me подцепил{p} обломок снизу и, выпрямив спину, прижал{p} его к груди.',
+				'/me раскачал{p} обломок из стороны в сторону и резким движением вырвал{p} его из завала.',
+				'/me наклонил{p} над обломком, ухватил{p} его обеими руками и с натугой поставил{p} вертикально.',
+				'/me упер{p} ногу в груду щебня, схватил{p} обломок и, выдохнув, рывком поднял{p} его.',
+				'/me примерил{p} обломок на вес, перехватил{p} его покрепче и вздёрнул{p} с земли.',
+				'/me просунул{p} руки под обломок и, упершись коленом, с усилием взвалил{p} его на себя.',
+				'/me заш{g} сбоку, поддел{p} обломок пальцами и рывком оторвал{p} его от земли.',
+				'/me нагнул{r} к обломку, обхватил{p} его ладонями и, напрягшись, выпрямил{p} спину вместе с ним.'
+			}
+		},
+		{
+			key = 'drop', 
+			pattern = 'Вы выбросили завал.',
+			msg = 'Вы положили завал в общую кучу, теперь отправляйтесь к следующему завалу.',
+			rps = {
+				'/me с размаху метнул{p} обломок вперёд, и тот с грохотом врезался в груду завалов.',
+				'/me толкнул{p} обломок от себя обеими руками, отправив его с треском на кучу.',
+				'/me раскачал{p} обломок и, резко выпрямившись, перебросил{p} его на верхушку завала.',
+				'/me разжал{p} руки над самой кучей, и обломок рухнул вниз, подняв облако пыли.',
+				'/me с силой швырнул{p} обломок вперёд, и он, перевернувшись в воздухе, лёг на груду.',
+				'/me вложил{p} вес тела в бросок и отправил{p} обломок на кучу, откуда брызнул щебень.',
+				'/me размахнул{r} обломком над головой и с силой обрушил{p} его на завалы.',
+				'/me оттолкнул{p} обломок от груди, и тот, пролетев по дуге, грохнулся на кучу.',
+				'/me резко выпрямил{p} руки, метнув обломок вперёд, и тот с лязгом врезался в груду.',
+				'/me качнул{p} обломок и, вложившись в движение, перебросил{p} его через край завала.',
+				'/me отош{g} на шаг, размахнул{r} и с силой швырнул{p} обломок на общую кучу.',
+				'/me с натугой толкнул{p} обломок вперёд, и тот с глухим стуком вкатился на вершину груды.'
+			}
+		},
+		{
+			key = 'place', 
+			pattern = 'Вы положили обломок',
+			msg = 'Вы положили завал в общую кучу, теперь отправляйтесь к следующему завалу.',
+			rps = {
+				'/me осторожно опустил{p} обломок на кучу, подбирая место поустойчивее.',
+				'/me пристроил{p} обломок в углубление между кусками завала и медленно отпустил{p} его.',
+				'/me аккуратно водрузил{p} обломок на верхушку груды, выровняв его по краю.',
+				'/me плавно наклонил{r} обломок на кучу и, убедившись в устойчивости, разжал{p} пальцы.',
+				'/me уложил{p} обломок плашмя поверх завалов и слегка подтолкнул{p} его для упора.',
+				'/me осторожно пристроил{p} обломок на груде, подождал{p}, пока он уляжется, и отпустил{p} хватку.',
+				'/me медленно опустил{p} обломок, примеривая его к щели между кусками, и зафиксировал{p}.',
+				'/me бережно положил{p} обломок на кучу, стараясь не обрушить уже собранную груду.',
+				'/me приставил{p} обломок к краю завала и, выровняв, аккуратно отпустил{p} руки.',
+				'/me осторожно водрузил{p} обломок на вершину груды, проверил{p} его на шаткость и отступил{p}.',
+				'/me подош{g} к куче, примерил{p} обломок и мягко опустил{p} его в свободное углубление.',
+				'/me не спеша уложил{p} обломок поверх завалов, подпёр{p} его щебнем и отряхнул{p} ладони.'
+			}
+		}
+	}
+	if settings.general.auto_invite and modules.player.data.fraction_rank_number >= 9 and not isMode('fbi') then
+		local pID, msg = text:match("%[(%d+)%]:%s*(.+)")
+		if pID and msg then
+			local lower_msg = msg:lower()
+			local keywords = {"инвайт", "invite", "вступлю", "примите", "во фракцию", "в организацию", "хочу к вам", "возьмите", "набор"}
+			local is_request = false
+			for _, kw in ipairs(keywords) do
+				if lower_msg:find(kw, 1, true) then
+					is_request = true
+					break
+				end
+			end
+			if is_request and tonumber(pID) ~= select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)) then
+				if not MODULE.AutoInvite.last_invite or os.time() - MODULE.AutoInvite.last_invite >= 5 then
+					MODULE.AutoInvite.last_invite = os.time()
+					local invite_rank = settings.general.auto_invite_rank or 1
+					sampSendChat('/invite ' .. pID .. ' ' .. invite_rank)
+					sampAddChatMessage('[Arizona Helper| Ассистент] {ffffff}Авто-инвайт: отправлен /invite ' .. pID .. ' на ' .. invite_rank .. ' ранг.', message_color)
+				end
+			end
+		end
+	end
+
+	if isMode('police') or isMode('fbi') then
+		local clean = text:gsub('{%x%x%x%x%x%x}',''):gsub('{%x%x%x%x%x%x%x%x}',''):gsub('{%x%x%x}','')
+		local officer = clean:match('([%w_]+_%w+) очистил розыск')
+			or clean:match('([%w_]+_%w+) снял розыск')
+		local target, tid = clean:match('розыск ([%w_]+_%w+)%[(%d+)%]')
+		if officer and officer ~= MODULE.Binder.tag.my_nick() then
+			MODULE.Edgo.last_unsu = { officer = officer, target = target,
+				tid = tid and tonumber(tid) or nil, time = os.time() }
+			show_notify('warning', 'Снятие розыска',
+				officer..' -> '..(target or '?')..(tid and ('['..tid..']') or ''), 4000)
+			play_sound()
+			sampAddChatMessage(CHAT_PREFIX .. ' {FF6347}Внимание: розыск снят! {ffffff}'..officer
+				..' снял '..(target or '?')..(tid and ('['..tid..']') or '')
+				..'.{FF6347} Возможна коррупция.', message_color)
+		end
+	end
+
+	if settings.mj.auto_doklad_arrest then
+		if text:find('^>> Вы посадили игрока ([%w_]+) в тюрьму на (%d+) минут') then
+			local nick, jail_time = text:match('^>> Вы посадили игрока ([%w_]+) в тюрьму на (%d+) минут')
+			if nick then
+				MODULE.Arrest.last_nick = nick
+				lua_thread.create(function()
+					wait(200)
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. '. Мною был арестован и доставлен в КПЗ гражданин ' .. nick .. ' на срок: ' .. jail_time .. ' мин.')
+					MODULE.Arrest.last_nick = "Неизвестный"
+				end)
+			end
+		end
+	end
+
+	if settings.general.auto_mask and text:find('Время действия маски истекло') then
+		sampSendChat('/mask')
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-маска: действие предыдущей маски истекло, надеваю новую.', message_color)
+	end
+	if MODULE.Afind and MODULE.Afind.active
+	   and text:find('в каком-то здании', 1, true) then
+		MODULE.Afind.last_building_msg = os.time()
+		if not MODULE.Afind.in_building then
+			MODULE.Afind.in_building = true
+			MODULE.Afind.building_since = os.time()
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Игрок ' .. message_color_hex .. MODULE.Afind.target_nick .. '[' .. tostring(MODULE.Afind.target_id or -1) .. '] {ffffff}сейчас находится в здании.', message_color)
+		end
+		return false
+	end
+	if MODULE.Armory and (MODULE.Armory.suppress_until or 0) > os.time() then
+		for _, p in ipairs({
+			'Бодикамера уже активирована',
+			'Вы успешно переоделись в форму S.W.A.T.',
+			'Вы успешно надели маску',
+			'Время действия маски',
+			'Откройте инвентарь',
+			'Вы успешно получили',
+			'Вы взяли ',
+			'Вы уже взяли предмет',
+			'Брать одно и тоже оружие можно раз в',
+			'Брать щит можно раз в',
+			'Брать бодикамеру можно раз в',
+			'У вас уже есть тазер',
+			'надел бронежилет',
+			'У вас отобрали служебные предметы',
+			'У Вас есть щит',
+			'чтобы выбросить щит',
+			'переодевается в рабочую одежду',
+			'Вы переоделись в рабочую одежду',
+		}) do
+			if text:find(p, 1, true) then return false end
+		end
+	end
+	if settings.mj.awanted and MODULE.Awanted.last_target ~= -1 then
+		if text:find('Чтобы закрепить игрока, у него должен быть розыск')
+		   or text:find('Нельзя закрепить полицейского')
+		   or text:find('Вы не на дежурстве')
+		   or text:find('Нельзя использовать на выбранном игроке')
+		   or text:find('Игрок АФК')
+		   or text:find('Вы не полицейский')
+		   or text:find('Этот игрок уже помечен как опасный преступник')
+		   or text:find('Игрок не найден')
+		   or text:find('Вы слишком далеко') then
+			MODULE.Awanted.last_target = -1
+			return false
+		elseif text:find('успешно') and (text:find('закрепили') or text:find('пометили')) then
+			local tid = MODULE.Awanted.last_target
+			MODULE.Awanted.last_target = -1
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}AWANTED: Обнаружен преступник рядом! ID: ' .. message_color_hex .. tid, message_color)
+			show_notify('warning', 'AWANTED', 'Преступник рядом! Дело: ' .. tid, 3000)
+			return false
+		end
+	end
+	if IS_MOBILE then
+		if text:find('{DFCFCF}[Подсказка] {DC4747}Вы можете задать вопрос в нашу техническую поддержку /report', 1, true) and modules.player.data.nick ~= '' then
+			CHECK_ID = true
+			sampSendChat('/id ' .. modules.player.data.nick)
+		end
+		if CHECK_ID and text:find('^%[(%d+)%]') then 
+			MODULE.MOBILE_PLAYER_ID = text:match('^%[(%d+)%]')
+			CHECK_ID = false
+		end
+	end
+
+	if settings.general.ping and MODULE.Binder.tag.my_nick() ~= '' and text:find('@' .. MODULE.Binder.tag.my_nick(), 1, true) then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Кто-то упомянул вас в чате!', message_color)
+		play_sound()
+	end
+
+	if modules.player.data.fraction_rank_number >= 9 and not isMode('fbi') then
+		if settings.general.auto_uninvite then
+			local function auto_uninvite_handler(tag, name, playerID, message)
+				if not message:find("отправьте (.+) +++ чтобы уволится ПСЖ!") and not message:find("Сотрудник (.+) был уволен по причине") and message:rupper():find("ПСЖ") or message:rupper():find("УВОЛЬТЕ") or message:rupper():find("УВАЛ") then
+					MODULE.LeadTools.auto_uninvite.msg3 = MODULE.LeadTools.auto_uninvite.msg2
+					MODULE.LeadTools.auto_uninvite.msg2 = MODULE.LeadTools.auto_uninvite.msg1
+					MODULE.LeadTools.auto_uninvite.msg1 = text
+					MODULE.LeadTools.auto_uninvite.player_id = playerID
+					if MODULE.LeadTools.auto_uninvite.msg3 == text then
+						MODULE.LeadTools.auto_uninvite.checker = true
+						sampSendChat('/fmute ' .. playerID .. ' 1 ПСЖ')
+					elseif tag == "R" then
+						sampSendChat("/rb " .. name .. "[" .. playerID .. "], отправьте /rb +++ чтобы уволится ПСЖ!")
+					elseif tag == "F" then
+						sampSendChat("/fb " .. name .. "[" .. playerID .. "], отправьте /fb +++ чтобы уволится ПСЖ!")
+					end
+				elseif ((message == "(( +++ ))" or  message == "(( +++. ))") and (MODULE.LeadTools.auto_uninvite.player_id == playerID)) then
+					MODULE.LeadTools.checker = true
+					sampSendChat('/fmute ' .. playerID .. ' 1 ПСЖ')
+				end
+			end
+			if text:find("^%[(.-)%] (.-) (.-)%[(.-)%]: (.+)") and color == 766526463 then
+				local tag, rank, name, playerID, message = string.match(text, "%[(.-)%] (.+) (.-)%[(.-)%]: (.+)")
+				auto_uninvite_handler(tag, name, playerID, message)
+			elseif text:find("^%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: (.+)") and color == 766526463 then
+				local tag, tag2, rank, name, playerID, message = string.match(text, "%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: (.+)")
+				auto_uninvite_handler(tag, name, playerID, message)
+			elseif text:find("(.+) заглушил%(а%) игрока (.+) на 1 минут. Причина: ПСЖ") and MODULE.LeadTools.checker then
+				local text2 = text:gsub('{......}', '')
+				local DATA = text2:match("(.+) заглушил")
+				local Name = DATA:match(" ([A-Za-z0-9_]+)%[")
+				local MyName = sampGetPlayerNickname(select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)))
+				if Name == MyName then
+					sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Увольняю игрока ' .. sampGetPlayerNickname(MODULE.LeadTools.auto_uninvite.player_id) .. '!', message_color)
+					MODULE.LeadTools.checker = false
+					find_and_use_command("/uninvite {id} {arg}", (MODULE.LeadTools.auto_uninvite.player_id .. ' ПСЖ'))
+				else
+					sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Другой заместитель/лидер уже увольняет игрока ' .. sampGetPlayerNickname(MODULE.LeadTools.auto_uninvite.player_id) .. '!', message_color)
+					MODULE.LeadTools.checker = false
+				end
+			end
+		end
+	end
+	if settings.general.auto_accept_docs and text:find('^%[Новое предложение%].+offer') then
+		sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Открываю список предложений от игрока...', message_color)
+		sampSendChat('/offer')
+	end
+
+	if isMode('smi') then
+		if text:find('^На обработку объявлений пришло ') or text:find('^{C17C2D}На обработку объявлений пришло сообщение от руководства страховой компании%: (.+)')
+		or text:find('^VIP объявление:') or text:find('^Стандартное объявление:') then --Rodina RP
+			local nick = text:match('от: ([^{%(]+)') or text:match('компании: (.+)') or text:match('%, от%: (.+)%[') or ''
+			if settings.smi.notify_new_ads then play_sound() end
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Поступило новое обьявление от игрока ' .. message_color_hex .. nick, message_color)
+			return false
+		end
+		if (text:find('^%[Ошибка%] %{ffffff%}Это объявление уже редактирует (.+).')) then
+			local nick = text:match('редактирует (.+).')
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Это обьявление уже редактирует игрок ' .. message_color_hex  .. nick, message_color)
+			return false
+		end
+		if text:find('^{FCAA4D}%[VIP%] Объявление%:') then
+			lua_thread.create(function()
+				MODULE.SmiEdit.vip_pause = true
+				wait(10000)
+				MODULE.SmiEdit.vip_pause = false
+			end)
+		end
+	end
+
+	if (isMode('police') or isMode('fbi')) then
+		if text:find("^%[(.-)%] (.-) (.-)%[(.-)%]: Прошу обьявить в розыск (%d) степени дело N(%d+)%. Причина%: (.+)") then
+			local tag, rank, name, playerID, message = string.match(text, "%[(.-)%] (.+) (.-)%[(.-)%]: (.+)")
+			form_su(name, playerID, message)
+		elseif text:find("^%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: Прошу обьявить в розыск (%d) степени дело N(%d+)%. Причина%: (.+)") then
+			local tag, tag2, rank, name, playerID, message = string.match(text, "%[(.-)%] %[(.-)%] (.+) (.-)%[(.-)%]: (.+)")
+			form_su(name, playerID, message)
+		end
+		if (text:find('^Местоположение (.+) отмечено на карте красным маркером')) then
+			printStringNow(MODULE.Wanted.afind, 500)
+			return false
+		end
+		if ((MODULE.Wanted.checker) and (text:find('^%[Ошибка%] %{FFFFFF%}Используй: %/wanted %[уровень розыска 1%-6%]') or text:find('^%[Ошибка%] %{FFFFFF%}Используйте: %/wanted %[уровень розыска 1%-6%]'))) then
+			return false
+		end
+		if ((MODULE.Wanted.checker) and (text:find('^%[Ошибка%].+Игроков с таким уровнем розыска нету'))) then 
+			return false 
+		end
+		if ((MODULE.Patrool.active) and (text:find('^На этом автомобиле уже установлена маркировка.'))) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Меняю макрировку в транспорте...', message_color)
+			sampSendChat('/delvdesc')
+			lua_thread.create(function()
+				wait(5000)
+				sampSendChat('/vdesc ' .. MODULE.Binder.tag.get_patrool_mark())
+			end)		
+		end
+		for _, t in ipairs(debris_triggers) do
+			if text:find(t.pattern, 1, true) then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}' .. t.msg, message_color)
+				if settings.mj.auto_rp_situation then
+					local is_f = modules.player.data.sex == "Женщина"
+					local line = t.rps[math.random(#t.rps)]
+						:gsub('{p}', is_f and "а" or "")
+						:gsub('{g}', is_f and "ла" or "ёл")
+						:gsub('{r}', is_f and "ась" or "ся")
+					local d = (settings.mj.rp_delay or {})[t.key]
+					lua_thread.create(function()
+						if d > 0 then wait(d) end
+						sampSendChat(line)
+					end)
+				end
+				return false
+			end
+		end
+		if text:find('^>> Вы посадили игрока (.+) в тюрьму на (%d+) минут') then
+			if (settings.mj.auto_time) then
+				lua_thread.create(function()
+					wait(500)
+					sampSendChat('/time')
+				end)
+			end
+		end
+		if settings.mj.auto_time then
+			local nick = MODULE.Binder.tag.my_nick():gsub('%[.+%]', '')
+			if text:find("^ " .. nick .. ' обыскивает (.+)') 
+			or text:find("^" .. nick .. ' проверяет документы у (.+)') 
+			or text:find("^%[Розыск%] (.+) Обвинитель%: " .. nick) then
+				sampSendChat('/time')
+			end
+		end
+	end
+ 	
+	if isMode('hospital') then
+		if text:find('^Очевидец сообщает о пострадавшем человеке в районе (.+) %((.+)%).') then
+			MODULE.GoDeath.locate, MODULE.GoDeath.city = text:match('Очевидец сообщает о пострадавшем человеке в районе (.+) %((.+)%).')
+			return false
+		elseif text:find('^Очевидец сообщает о пострадавшем человеке%, геолокация%: (.+)') then --Rodina RP
+			MODULE.GoDeath.locate, MODULE.GoDeath.city = "неизвестном", text:match('геолокация%: (.+)')
+			return false
+		end
+		if text:find('^%(%( Чтобы принять вызов, введите /godeath (%d+). Оплата за вызов (.+) %)%)') then
+			local price_godeath = ''
+			MODULE.GoDeath.player_id, price_godeath = text:match('%(%( Чтобы принять вызов, введите /godeath (%d+). Оплата за вызов (.+) %)%)')
+			MODULE.GoDeath.player_id = tonumber(MODULE.GoDeath.player_id)
+			local cmd = '/godeath'
+			for _, command in ipairs(modules.commands.data.commands.my) do
+				if command.enable and command.text:find('/godeath {id}') then
+					cmd =  '/' .. command.cmd
+				end
+			end
+			if MODULE.GoDeath.locate == 'неизвестном' then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Из города ' .. message_color_hex .. MODULE.GoDeath.city .. ' {ffffff}поступил вызов о пострадавшем ' .. message_color_hex .. sampGetPlayerNickname(MODULE.GoDeath.player_id), message_color)
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Из города ' .. message_color_hex .. MODULE.GoDeath.city .. ' (' .. MODULE.GoDeath.locate .. ') {ffffff}поступил вызов о пострадавшем ' .. message_color_hex .. sampGetPlayerNickname(MODULE.GoDeath.player_id), message_color)
+			end
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вылечив его вы получите ' .. price_godeath .. '! Чтобы принять вызов, используйте команду ' .. message_color_hex .. cmd .. ' ' .. MODULE.GoDeath.player_id, message_color)
+			return false
+		end
+		if text:find("^Пациент (.+) вызывает врачей .+холл.+этаж") then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пациент ' .. text:match("Пациент (.+) вызывает") .. ' вызывает врача в холл больницы!', message_color)
+			return false
+		end
+		if settings.mh.heal_in_chat.enable and not MODULE.HealChat.bool then	
+			if text:find('^(.+)%[(%d+)%] говорит:{......} (.+)') then
+				local nick, id, message = text:match('^(.+)%[(%d+)%] говорит:{......} (.+)')
+				heal_handler(nick, id, message)
+			elseif text:find('^(.+)%[(%d+)%] кричит: (.+)') then
+				local nick, id, message = text:match('^(.+)%[(%d+)%] кричит: (.+)')
+				heal_handler(nick, id, message)
+			end
+		end
+	end	
+
+	if isMode('lc') then
+		if text:find('^Вы отремонтировали дорожный знак: (.+) Ваша зарплата%: (.+)') then
+			local money = text:match('Ваша зарплата%: (.+)')
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}За ремонт дорожного знака вы заработали ' .. money, message_color)
+			if AS_REMONT_DEBUG then
+				sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Запомнил все ваши действия ремонта знака, и готов их повторять!', message_color)
+				AS_REMONT_DEBUG = false
+				settings.lc.auto_repair_znak.enable = true
+				save_settings()
+			end
+			return false
+		end
+		if text:find('^Вы установили дорожный знак: (.+) Ваша зарплата%: (.+)') then
+			local money = text:match('Ваша зарплата%: (.+)')
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}За установку дорожного знака вы заработали ' .. money, message_color)
+			if AS_INSTALL_DEBUG then
+				sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Запомнил все ваши действия установки знака, и готов их повторять!', message_color)
+				AS_INSTALL_DEBUG = false
+				settings.lc.auto_install_znak.enable = true
+				save_settings()
+			end
+			return false
+		end
+		if text:find('^Вы взяли инструменты для ремонта дорожного знака.') then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы взяли инструменты для ремонта дорожного знака.', message_color)
+			return false
+		end
+		if text:find('^%[Ошибка%](.+)У игрока уже есть такая лицензия сроком более чем (.+)') then
+			local days = text:match('сроком более чем (.+)')
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}У игрока уже есть такая лицензия сроком более чем ' .. days, message_color)
+			sampSendChat('У вас уже есть такая лицензия сроком более чем ' .. days)
+			return false
+		end
+		if (text:find('^%[Ошибка%](.+)Вы не можете продавать лицензии на такой срок')) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ваш ранг ниже, чем требуется для выдачи данной лицензии!', message_color)
+			sampSendChat('Извините, я не могу выдать данную лицензию из-за низкой должности.')
+			return false
+		end
+	end	
+
+	if isMode('fd') then
+		if (text:find("Происшествие(.+)В штате произошел пожар! Ранг опасности (%d) звезды")) then
+			MODULE.Fires.lvl = text:match('Ранг опасности (%d) звезды')
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}В штате новый пожар ' .. MODULE.Fires.lvl .. ' степени опасности!', message_color)
+			if (tonumber(MODULE.Fires.lvl) >= 2) then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Действует повышенная выплата за устранение пожара из-за высокого уровня опасности.', message_color)
+			end
+			sampSendChat('/fires')
+			return false
+		end
+		if (text:find("%[Информация%] {ffffff}Вы прибыли на место пожара")) then
+			MODULE.Fires.isZone = true
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы прибыли на место пожара.', message_color)
+			if (settings.fd.doklads.here) then 
+				sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', прибыл' .. MODULE.Binder.tag.sex() .. ' на место пожара ' .. MODULE.Fires.lvl .. ' степени опасности!')
+			end
+			return false
+		end
+		if (text:find("%[Информация%] {ffffff}Пожарная машина будет зареспавнена через (%d+) минут")) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пожарная машина будет зареспавнена через ' .. text:match("через (%d+) минут") .. ' минут!', message_color)
+			return false
+		end
+		if (MODULE.Fires.isZone) then
+			if text:find("%[Информация%] {......}Происшествие №(%d+)%: Все очаги возгорания ликвидированы") then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Все очаги возгорания ликвидированы!', message_color)
+				if settings.fd.doklads.fire then
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', все очаги возгорания пожара ' .. MODULE.Fires.lvl .. ' степени опасности ликвидированы!')
+				end
+				return false
+			end
+			if text:find("%[Информация%] {ffffff}Отнесите пострадавшего в палатку.") then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отнесите пострадавшего в палатку.', message_color)
+				if settings.fd.doklads.stretcher then 
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', погрузил' .. MODULE.Binder.tag.sex() .. ' пострадавшего на носилки, отношу в палатку.')
+				end
+				return false
+			end
+			if text:find("%[Информация%] {ffffff}Отлично! Вы спасли пострадавшего!") then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы спасли пострадавшего!', message_color)
+				if settings.fd.doklads.npc_save then 
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', пострадавшему успешно оказана помощь!')
+				end
+				return false
+			end
+			if text:find("%[Информация%] {ffffff}Вы заработали на происшествие {90EE90}$(.+){FFFFFF}, забрать вознаграждение можно на базе организации") then
+				MODULE.Fires.isZone = false
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пожар устранён, за его ликвидацию вы заработали: ' .. message_color_hex .. '$' .. (text:match('{90EE90}$(.+){FFFFFF}') or 'nil'), message_color)
+				if settings.fd.doklads.file_end then
+					lua_thread.create(function()
+						wait(500)
+						sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', пожар ' .. MODULE.Fires.lvl .. ' степени опасности полностю устранён!')
+					end)
+				end
+				return false
+			end
+		end
+		if (text:find("%[Информация%] {ffffff}Палатка возвращена Вам в инвентарь.")) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Палатка возвращена вам в инвентарь.', message_color)
+			if (settings.fd.doklads.tent) then 
+				sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. ', убрал' .. MODULE.Binder.tag.sex() .. ' палатку с места проишествия.')
+			end
+			return false
+		end
+	end
+
+	if isMode('ins') then
+		if (text:find('^(.+) подал заявление на страхование имущества.') and color == -1048826369) then
+			local nick = text:match('^(.+) подал')
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Игрок ' .. nick .. ' подал заявление на страхование имущества!', message_color)
+			if (settings.ins.notify_new_ticket) then
+				play_sound()
+			end
+			return false
+		end
+		if (text:find('^Вы заполнили вторую часть документов.')) then
+			sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Прохождение мини игры успешно завершено!', message_color)
+			return false
+		end
+	end
+
+	if isMode('gov') then
+		if text:find('^%[Ошибка%].+Заключенных нет.') then
+			MODULE.Zeks.Window[0] = false
+			MODULE.Zeks.checker = false
+			MODULE.Zeks.updzeks.stop = false
+			MODULE.Zeks.updzeks.check = false
+		end
+	end
+
+	if text:find('^%[Ошибка%] {ffffff}После прошедшего подтверждение не прошло 3 часа. {C0C0C0}%(Осталось: (.+)%)') then
+		sampSendChat('Вы недавно получали подтверждение, подождите ' .. text:match('Осталось: (.+)%)'))
+	end 
+
+	if (text:find("^1%.{......} 111 %- {......}Проверить баланс телефона")) or
+		(text:find("^2%.{......} 060 %- {......}Служба точного времени")) or
+		(text:find("^3%.{......} 911 %- {......}Полицейский участок")) or
+		(text:find("^4%.{......} 912 %- {......}Скорая помощь")) or
+		(text:find("^5%.{......} 914 %- {......}Такси")) or
+		(text:find("^5%.{......} 914 %- {......}Механик")) or
+		(text:find("^6%.{......} 8828 %- {......}Справочная центрального банка")) or
+		(text:find("^7%.{......} 997 %- {......}Служба по вопросам жилой недвижимости %(узнать владельца дома%)")) then
+		return false
+	end
+	if (text:find("^%[Подсказка%] {......}Номера телефонов государственных служб:")) then
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Номера телефонов государственных служб:', message_color)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}111 Баланс | 60 Время | 911 МЮ | 912 МЗ | 913 Такси | 914 Мехи | 8828 Банк | 997 Дома', message_color)
+		return false
+	end
+end
+function sampev.onSendChat(text)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[SendChat] {ffffff}Text ' .. text, message_color)
+		print('[SendChat] ' .. text)
+	end
+	local ignore = {
+		[")"] = true,
+		["))"] = true,
+		["("] = true,
+		["(("] = true,
+		["q"] = true,
+		["<3"] = true,
+	}
+	if ignore[text] then
+		return {text}
+	end
+	if settings.general.rp_chat then
+		text = text:sub(1, 1):rupper()..text:sub(2, #text) 
+		if not text:find('(.+)%.') and not text:find('(.+)%!') and not text:find('(.+)%?') then
+			text = text .. '.'
+		end
+	end
+	if settings.general.accent_enable then
+		text = modules.player.data.accent .. ' ' .. text 
+	end
+	return {text}
+end
+function sampev.onSendCommand(text)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[SendCommand] {ffffff}CMD ' .. text, message_color)
+		print('[SendCommand] CMD ' .. text)
+	end
+	if isMode('smi') and MODULE.SmiEdit.is_active_ad and text:find('^%/newsredak') then
+		sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Дождитесь отправки предыдущего обьявления!', message_color)
+		play_sound()
+		return false
+	end
+	if settings.general.rp_chat then
+		local chats =  { '/vr', '/fam', '/al', '/s', '/b', '/n', '/r', '/rb', '/f', '/fb', '/j', '/jb', '/m', '/do'} 
+		for _, cmd in ipairs(chats) do
+			if text:find('^'.. cmd .. ' ') then
+				local cmd_text = text:match('^'.. cmd .. ' (.+)')
+				if cmd_text ~= nil then
+					cmd_text = cmd_text:sub(1, 1):rupper()..cmd_text:sub(2, #cmd_text)
+					text = cmd .. ' ' .. cmd_text
+					if not text:find('(.+)%.') and not text:find('(.+)%!') and not text:find('(.+)%?') then
+						text = text .. '.'
+					end
+				end
+			end
+		end
+		return {text}
+	end
+end
+function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
+	if MODULE.Scoreboard and MODULE.Scoreboard.call_checker then
+		local t = title or ""
+		if t:find('ТЕЛЕФОННАЯ КНИГА', 1, true) or t:find('Телефонная книга', 1, true) or t:find('телефонная книга', 1, true) then
+			local clean = (text or ""):gsub('%{......%}', '')
+			local num = clean:match('телефона[:%s]+(%d+)') or clean:match('[:%s](%d%d%d+)')
+			MODULE.Scoreboard.call_checker = false
+			sampSendDialogResponse(dialogid, 0, 0, "")
+			if num then sampSendChat('/call ' .. num) end
+			return false
+		end
+	end
+	local H = MODULE.Edgo and MODULE.Edgo.history
+	if H and H.active then
+		local lower = MODULE.Edgo.lower or function(s) return (s or ""):lower() end
+		local lt = lower(title or "")
+		local lx = lower(text or "")
+		local is_history_title = lt:find("история никнейм", 1, true)
+		local is_input = lx:find("введите никнейм", 1, true) or lx:find("введите ник", 1, true)
+		              or lx:find("никнейм или id", 1, true) or lx:find("стоимость", 1, true)
+		if is_history_title and not is_input then
+			local offset = (style == 4 or style == 5) and 1 or 0
+			local entries, i = {}, 0
+			for line in (text or ""):gmatch("[^\r\n]+") do
+				i = i + 1
+				if i > offset then
+					local clean = MODULE.Edgo.clean(line)
+					local cols = {}
+					for c in clean:gmatch("[^\t]+") do table.insert(cols, c) end
+					if #cols >= 2 then
+						local old = cols[1]:gsub("^%s*%d+%.%s*", ""):gsub("%s+$", "")
+						local ol = old:lower()
+						if ol ~= "" and not ol:find("старый", 1, true) and not ol:find("новый", 1, true)
+						   and not ol:find("никнейм", 1, true) and not ol:find("дата", 1, true) then
+							table.insert(entries, old)
+						end
+					end
+				end
+			end
+			if #entries > 0 then
+				H.got = translate(entries[1]) or entries[1]
+			end
+			H.count = #entries
+			H.from_table = true
+			H.finished = true
+			H.waiting_result = false
+			sampSendDialogResponse(dialogid, 1, 0, "")
+			return false
+		end
+	end
+	if H and H.active and not H.finished then
+		local lower = MODULE.Edgo.lower or function(s) return (s or ""):lower() end
+		local lt = lower(title or "")
+		local lx = lower(text or "")
+		local is_history_title = lt:find("история никнейм", 1, true)
+		local is_input = lx:find("введите никнейм", 1, true) or lx:find("введите ник", 1, true)
+		              or lx:find("никнейм или id", 1, true) or lx:find("стоимость", 1, true)
+		if dialogid == 27272 or (is_history_title and is_input) then
+			sampSendDialogResponse(dialogid, 1, nil, H.token or "")
+			return false
+		end
+		if is_history_title and not is_input then
+			local pick = 'last'
+			local offset = (style == 4 or style == 5) and 1 or 0
+			local entries, i = {}, 0
+			for line in (text or ""):gmatch("[^\r\n]+") do
+				i = i + 1
+				if i > offset then
+					local clean = MODULE.Edgo.clean(line)
+					local cols = {}
+					for c in clean:gmatch("[^\t]+") do table.insert(cols, c) end
+					if #cols >= 2 then
+						local old = cols[1]:gsub("^%s*%d+%.%s*", ""):gsub("%s+$", "")
+						local ol = old:lower()
+						if ol ~= "" and not ol:find("старый", 1, true) and not ol:find("новый", 1, true)
+						   and not ol:find("никнейм", 1, true) and not ol:find("дата", 1, true) then
+							table.insert(entries, old)
+						end
+					end
+				end
+			end
+			local pick_old = nil
+			if #entries > 0 then
+				pick_old = (pick == 'first') and entries[1] or entries[#entries]
+			end
+			H.got   = pick_old and (translate(pick_old) or pick_old) or nil
+			H.count = #entries
+			H.finished = true
+			sampSendDialogResponse(dialogid, 1, 0, "")
+			return false
+		end
+	end
+	if MODULE.Edgo and MODULE.Edgo.badge and MODULE.Edgo.badge.active then
+		return MODULE.Edgo.handle_dialog(dialogid, style, title, text)
+	end
+	if settings.general.armory_enable then
+		local ttl = (title or ""):upper()
+		local txt = (text or "")
+		if ttl:find("СКЛАД ОРГАНИЗАЦИИ", 1, true)
+		   or txt:find("взять со склада", 1, true)
+		   or txt:find("Вы действительно хотите взять", 1, true) then
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+	end
+	if settings.mj.auto_case_documentation then
+		local function strip_colors(s) return (s or ""):gsub("{%x%x%x%x%x%x}", ""):gsub("{%x%x%x%x%x%x}", ""):gsub("{%x%x%x}", ""):gsub("\r", "") end
+		local title_clean = strip_colors(title or ""):gsub("%s+", " ")
+		local title_low = title_clean:rlower()
+		local clean = strip_colors(text)
+
+		if dialogid == 26951 then
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+		if style == 0 and title_low:find("расследование", 1, true) then
+			return true
+		end
+		local is_time_dialog   = title_low:find("дата и время убийства", 1, true) or dialogid == 26949 or dialogid == 26953
+		local is_weapon_dialog = title_low:find("орудие убийства", 1, true)       or dialogid == 26950 or dialogid == 26954
+		if is_time_dialog then
+			local time_val = clean:match("Дата и время:%s*(%d%d%.%d%d%.%d%d%d%d%s*%d%d:%d%d)")
+				or clean:match("Дата и время:%s*(%d%d%.%d%d%.%d%d%d%d)")
+			if time_val and time_val ~= "" then
+				sampSendDialogResponse(dialogid, 1, 0, time_val)
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-расследование: время убийства заполнено.', message_color)
+				return false
+			end
+		elseif is_weapon_dialog then
+			local weapon_val = clean:match("Орудие убийства:%s*(.-)%s*Введите")
+				or clean:match("Орудие убийства:%s*([^%s]+)")
+			if weapon_val then weapon_val = weapon_val:match("^%s*(.-)%s*$") end
+			if weapon_val and weapon_val ~= "" and weapon_val:rlower() ~= "неизвестно" then
+				sampSendDialogResponse(dialogid, 1, 0, weapon_val)
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Авто-расследование: орудие убийства заполнено.', message_color)
+				return false
+			end
+		end
+	end
+	if check_stats and (title:find('Основная статистика') or title:find('Статистика игрока')) then
+		if text:find("Имя") then
+			modules.player.data.nick = text:match("{FFFFFF}Имя: {......}(.+) %[%№%d+%] \n{FFFFFF}Пол") or text:match("{ffffff}Имя %(en%.%):%s+{......}([^\n\r]+)")
+			modules.player.data.name_surname = text:match("{ffffff}Имя %(рус%.%):%s+{......}([^\n\r]+)") or translate(modules.player.data.nick)
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ваше имя и фамилия обнаружены: ' .. modules.player.data.name_surname, message_color)
+        end
+		if text:find("Пол:") then
+			modules.player.data.sex = text:match("{FFFFFF}Пол: {......}%[(.-)]") or text:match("{ffffff}Пол:%s+{......}([^\n\r]+)")
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ваш пол обнаружен: ' .. modules.player.data.sex, message_color)
+		end
+		if text:find("Организация:") then
+			modules.player.data.fraction = text:match("{FFFFFF}Организация: {......}%[(.-)]") or text:match("{ffffff}Организация:%s+{......}([^\n\r]+)")
+			local fraction_data = {
+				['Полиция ЛС'] = {'ЛСПД', 'police'}, ['Полиция LS'] = {'LSPD', 'police'},
+				['Полиция ЛВ'] = {'ЛВМПД', 'police'}, ['Полиция LV'] = {'LVMPD', 'police'},
+				['Полиция СФ'] = {'СФПД', 'police'}, ['Полиция SF'] = {'SFPD', 'police'},
+				['Полиция ВС'] = {'ВСПД', 'police'}, ['Полиция VC'] = {'VCPD', 'police'},
+				['Областная полиция'] = {'LSSD', 'police'}, ['FBI'] = {'ФБР', 'fbi'}, ['ФБР'] = {'ФБР', 'fbi'},
+				['Федеральный Исправительный Комплекс'] = {'ФИК', 'prison'}, ['Тюрьма строгого режима ЛВ'] = {'ФИК', 'prison'},
+				['Воздушная Национальная Гвардия'] = {'ВНГ', 'army'}, ['Армия SF'] = {'ВНГ', 'army'},
+				['Армия Национальной Гвардии'] = {'АНГ', 'army'}, ['Армия LS'] = {'АНГ', 'army'},
+				['TV студия'] = {'СМИ ЛС', 'smi'},
+				['TV студия ЛС'] = {'СМИ ЛС', 'smi'}, ['TV студия LS'] = {'СМИ ЛС', 'smi'},
+				['TV студия ЛВ'] = {'СМИ ЛВ', 'smi'}, ['TV студия LV'] = {'СМИ ЛВ', 'smi'},
+				['TV студия СФ'] = {'СМИ СФ', 'smi'}, ['TV студия SF'] = {'СМИ СФ', 'smi'},
+				['TV студия ВС'] = {'СМИ ВС', 'smi'}, ['TV студия VC'] = {'СМИ ВС', 'smi'},
+				['Больница ЛС'] = {'ЛСМЦ', 'hospital'}, ['Больница LS'] = {'ЛСМЦ', 'hospital'},
+				['Больница ЛВ'] = {'ЛВМЦ', 'hospital'}, ['Больница LV'] = {'ЛВМЦ', 'hospital'},
+				['Больница СФ'] = {'СФМЦ', 'hospital'}, ['Больница SF'] = {'СФМЦ', 'hospital'},
+				['Больница ВС'] = {'ВСМЦ', 'hospital'}, ['Больница VC'] = {'ВСМЦ', 'hospital'},
+				['Больница Jefferson'] = {'ДМЦ', 'hospital'}, ['Больница Джефферсон'] = {'ДМЦ', 'hospital'},
+				['Правительство LS'] = {'Право', 'gov'}, ['Правительство ЛС'] = {'Право', 'gov'},
+				['Судья'] = {'Судья', 'judge'},
+				['Центр лицензирования'] = {'ГЦЛ', 'lc'},
+				['Пожарный департамент'] = {'ПД', 'fd'},
+				['Страховая компания'] = {'СТК', 'ins'},
+				['Russian Mafia'] = {'RM', 'mafia'},
+				['Yakuza'] = {'YKZ', 'mafia'},
+				['La Cosa Nostra'] = {'LCN', 'mafia'},
+				['Warlock MC'] = {'WMC', 'mafia'},
+				['Tierra Robada Bikers'] = {'TRB', 'mafia'},
+				['Grove Street'] = {'Грув', 'ghetto'},
+				['Los Santos Vagos'] = {'Вагос', 'ghetto'},
+				['East Side Ballas'] = {'Баллас', 'ghetto'},
+				['Varrios Los Aztecas'] = {'Ацтек', 'ghetto'},
+				['The Rifa'] = {'Рифа', 'ghetto'},
+				['Night Wolves'] = {'НВ', 'ghetto'},
+				--Rodina RP
+				['ФСБ'] = {'ФСБ', 'fbi'},
+				['Армия'] = {'ВС', 'army'},
+				['Тюрьма Строгого Режима'] = {'ФСИН', 'prison'},
+				['Полиция округа'] = {'ГИБДД', 'police'},
+				['Городская полиция'] = {'ГУВД', 'police'},
+				['Больница округа'] = {'МУСС', 'hospital'},
+				['Городская больница'] = {'СМП', 'hospital'},
+				['Центр Лицензирования'] = {'МРЭО', 'lc'},
+				['Правительство'] = {'Право', 'gov'},
+				['Новостное агенство'] = {'НА', 'smi'},
+				['Украинская мафия'] = {'УМ', 'mafia'},
+				['Кавказкая мафия'] = {'КМ', 'mafia'},
+			}
+			local data = fraction_data[modules.player.data.fraction]
+			local old_fraction_mode = settings.general.fraction_mode
+			if data then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ваша организация обнаружена, это: '..modules.player.data.fraction, message_color)
+				modules.player.data.fraction_tag = data[1]
+				settings.general.fraction_mode = data[2]
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вашей организации присвоен тег '..modules.player.data.fraction_tag .. ". Но вы можете изменить его.", message_color)
+				if text:find("Должность:") then
+					local rank, rank_number = text:match("{FFFFFF}Должность: {......}(.+)%((%d+)%)(.+)Уровень розыска")
+					if not rank or not rank_number then
+						rank, rank_number = text:match("{ffffff}Должность:%s+{......}([^(]+)%((%d+)%)")
+					end
+					modules.player.data.fraction_rank = rank
+					modules.player.data.fraction_rank_number = tonumber(rank_number)
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ваша должность обнаружена, это: ' .. modules.player.data.fraction_rank .. " (" .. modules.player.data.fraction_rank_number .. ")", message_color)
+					if (modules.player.data.fraction == "РКШД" or modules.player.data.fraction_tag == "РКШД" or modules.player.data.fraction == "LSSD" or modules.player.data.fraction_tag == "LSSD") then
+						update_lssd_patrol_settings()
+					end
+					if modules.player.data.fraction_rank_number >= 9 then
+						settings.general.auto_uninvite = true
+					end
+				end
+			else
+				settings.general.fraction_mode = 'none'
+				modules.player.data.fraction_tag = "ЖДЛС"
+				modules.player.data.fraction_rank = "Бомж"
+				modules.player.data.fraction_rank_number = 1
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось получить вашу организацию и должность!', message_color)
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Присвоил вам режим без организации (ЖДЛС - Бомж - 1).', message_color)
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Если вы действительно состоите в организации - перенастройте хелпер вручную.', message_color)
+			end
+			if old_fraction_mode ~= '' and old_fraction_mode ~= 'none' and old_fraction_mode ~= settings.general.fraction_mode then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы теперь в другой фракции, поэтому удаляю команды ' .. old_fraction_mode:rupper(), message_color)
+				delete_default_fraction_cmds(modules.commands.data.commands.my, get_fraction_cmds(old_fraction_mode, false))
+				delete_default_fraction_cmds(modules.commands.data.commands_manage.my, get_fraction_cmds(old_fraction_mode, true))
+			end
+			import_fraction_data(settings.general.fraction_mode)
+		end
+		save_settings()
+		save_module('player')
+		save_module('departament')
+		sampSendDialogResponse(dialogid, 0, 0, 0)
+		reload_script = true
+		thisScript():reload()
+		return false
+	end
+
+	if ((MODULE.Members.info.check) and (title:find('(.+)%(В сети: (%d+)%)') or title:find('В сети всего .+ чле.+организации'))) then
+        local count = 0
+        local next_page = false
+        local next_page_i = 0
+		MODULE.Members.info.fraction = string.match(title, '(.+)%(В сети')
+		if MODULE.Members.info.fraction then
+			MODULE.Members.info.fraction = string.gsub(MODULE.Members.info.fraction, '{(.+)}', '')
+		else
+			MODULE.Members.info.fraction = modules.player.data.fraction --Rodina RP
+		end
+        for line in text:gmatch('[^\r\n]+') do
+            count = count + 1
+            if not line:find('страница') and (not line:find('Ник') or not line:find('Имя')) then
+				local optional_info = ''
+				if line:find('{......}%(Вы%)') then
+					line = line:gsub("{......}%(Вы%)", "")
+					optional_info = '(Вы)'
+				end
+				if line:find(' %/ В деморгане') then
+					line = line:gsub(" %/ В деморгане", "")
+					optional_info = optional_info .. ' (JAIL)'
+				end
+				if line:find(' %/ MUTED') then
+					line = line:gsub(" %/ MUTED", "")
+					optional_info = optional_info .. ' (MUTE)'
+				end
+				if optional_info == '' then
+					optional_info = '-'
+				end
+				if line:find('{......}%(%d+.+%)') then
+					local color, nickname, id, rank, rank_number, color2, rank_time, warns, afk = string.match(line, "{(%x%x%x%x%x%x)}([%w_]+)%((%d+)%)%s*([^%(]+)%((%d+)%)%s*{(%x%x%x%x%x%x)}%(([^%)]+)%)%s*{FFFFFF}(%d+)%s*%[%d+%]%s*/%s*(%d+)%s*%d+ шт")
+					if color ~= nil and nickname ~= nil and id ~= nil and rank ~= nil and rank_number ~= nil and warns ~= nil and afk ~= nil then
+						local working = false
+						if color:find('90EE90') then
+							working = true
+						end
+						if rank_time then
+							rank_number = rank_number .. ') (' .. rank_time
+						end
+						table.insert(MODULE.Members.new, { nick = nickname, id = id, rank = rank, rank_number = rank_number, warns = warns, afk = afk, working = working, info = optional_info})
+					end
+				else
+					local color, nickname, id, rank, rank_number, rank_time, warns, afk = string.match(line, "{(%x%x%x%x%x%x)}%s*([^%(]+)%((%d+)%)%s*([^%(]+)%((%d+)%)%s*([^{}]+){FFFFFF}%s*(%d+)%s*%[%d+%]%s*/%s*(%d+)%s*%d+ шт")
+					if color ~= nil and nickname ~= nil and id ~= nil and rank ~= nil and rank_number ~= nil and warns ~= nil and afk ~= nil then
+						local working = false
+						if color:find('90EE90') then
+							working = true
+						end
+						table.insert(MODULE.Members.new, { nick = nickname, id = id, rank = rank, rank_number = rank_number, warns = warns, afk = afk, working = working, info = optional_info})
+					end
+				end
+				if not rank or not nickname then --Rodina RP
+					local nickname, id, rank, rank_number, warns = line:match("(.+)%((%d+)%)%s+(.+)%((%d+)%).+(%d) / 3")
+					if nickname and id and rank and rank_number and warns then
+						table.insert(MODULE.Members.new, { nick = nickname, id = id, rank = rank, rank_number = rank_number, warns = warns, afk = 0, working = true, info = optional_info})
+					end
+				end
+            end
+            if line:match('Следующая страница') then
+                next_page = true
+                next_page_i = count - 2
+            end
+        end
+		if next_page then
+			sampSendDialogResponse(dialogid, 1, next_page_i, 0)
+			next_page = false
+			next_page_i = 0
+		elseif #MODULE.Members.new ~= 0 then
+			sampSendDialogResponse(dialogid, 0, 0, 0)
+			MODULE.Members.all = MODULE.Members.new
+			MODULE.Members.info.check = false
+			if not settings.general.auto_update_members then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы можете включить авто-обновление списка /members /helper - Функции ' .. modules.player.data.fraction_tag .. '!', message_color)
+			end
+			if MODULE.Members.upd and MODULE.Members.upd.check then
+				MODULE.Members.Window[0] = true
+			end
+		else
+			sampSendDialogResponse(dialogid, 0, 0, 0)
+			sampAddChatMessage(CHAT_PREFIX .. '{ffffff} Список сотрудников пуст!', message_color)
+			MODULE.Members.info.check = false
+        end
+        return false
+    end
+
+	if modules.player.data.fraction_rank_number >= 9 then
+		if title:find('Выберите ранг для (.+)') and text:find('вакансий') then
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+		if MODULE.LeadTools.spawncar and title:find('$') and text:find('Спавн транспорта') then
+			local count = 0
+			for line in text:gmatch('[^\r\n]+') do
+				if line:find('Спавн транспорта') then
+					sampSendDialogResponse(dialogid, 1, count, 0)
+					MODULE.LeadTools.spawncar = false
+					return false
+				else
+					count = count + 1
+				end
+			end
+		end
+		if MODULE.LeadTools.vc_vize.bool then
+			if text:find('Управление разрешениями на командировку в Vice City') then
+				local count = 0
+				for line in text:gmatch('[^\r\n]+') do
+					if line:find('Управление разрешениями на командировку в Vice City') then
+						sampSendDialogResponse(dialogid, 1, count, 0)
+						return false 
+					else
+						count = count + 1
+					end
+				end
+			end
+			if title:find('Выдача разрешений на поездки Vice City') then
+				MODULE.LeadTools.vc_vize.bool = false
+				sampSendDialogResponse(dialogid, 1, 0, tostring(MODULE.LeadTools.vc_vize.player_id))
+				sampSendChat("/r Сотруднику "..translate(sampGetPlayerNickname(tonumber(MODULE.LeadTools.vc_vize.player_id))).." выдана виза Vice City!")
+				return false 
+			end	
+			if title:find('Забрать разрешение на поездки Vice City') then
+				MODULE.LeadTools.vc_vize.bool = false
+				sampSendChat("/r У сотрудника "..translate(sampGetPlayerNickname(tonumber(MODULE.LeadTools.vc_vize.player_id))).." была изьята виза Vice City!")
+				sampSendDialogResponse(dialogid, 1, 0, tostring(sampGetPlayerNickname(MODULE.LeadTools.vc_vize.player_id)))
+				return false 
+			end
+		end
+		if (MODULE.LeadTools.platoon.check) then
+			if text:find('Назначить взвод игроку') and text:find('Участники взвода') then
+				sampSendDialogResponse(dialogid, 1, 3, 0)
+				return false 
+			end
+			if text:find('{FFFFFF}Введите {FB8654}ID{FFFFFF} игрока, которого хотите назначить') then
+				sampSendDialogResponse(dialogid, 1, 0, MODULE.LeadTools.platoon.player_id)
+				MODULE.LeadTools.platoon.check = false
+				return false 
+			end
+		end
+		if (MODULE.LeadTools.cleaner.uninvite) then
+			if title:find('$') and text:find('Управление членами организации') then
+				sampSendDialogResponse(dialogid, 1, 1, 0)
+				return false 
+			end
+			if text:find('Игроки онлайн') and text:find("Игроки оффлайн") then
+				sampSendDialogResponse(dialogid, 1, 1, 0)
+				return false 
+			end
+			if title:find('Увольнение %(оффлайн%)') then
+				local counter = -1
+				for line in text:gmatch('([^\n\r]+)') do
+					counter = counter + 1
+					if line:find("{FFFFFF}(.+)%s+(%d+) дней") then
+						local nick, days = line:match("{FFFFFF}(.+)%s+(%d+) дней")
+						if days and tonumber(days) >= tonumber(MODULE.LeadTools.cleaner.day_afk) then
+							table.insert(MODULE.LeadTools.cleaner.players_to_kick, {nickname = nick, day = days})
+						end            
+					elseif line:find('{B0E73A}Вперед') then
+						sampSendDialogResponse(dialogid, 1, counter - 1, "")
+						return false
+					end
+				end 
+				if #MODULE.LeadTools.cleaner.players_to_kick > 0 then
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff} Найдено ' .. #MODULE.LeadTools.cleaner.players_to_kick .. ' игроков которые ' .. MODULE.LeadTools.cleaner.day_afk .. " дней не в сети!", message_color)
+					lua_thread.create(function()
+						for index, value in ipairs(MODULE.LeadTools.cleaner.players_to_kick) do
+							MODULE.LeadTools.cleaner.reason_day = value.day
+							sampSendChat('/uninviteoff ' .. value.nickname)
+							printStringNow(index .. '/' .. #MODULE.LeadTools.cleaner.players_to_kick, 2000)
+							wait(2000)
+						end
+						MODULE.LeadTools.cleaner.uninvite = false
+					end)
+				else
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff} Нету игроков которые ' .. MODULE.LeadTools.cleaner.day_afk .. " дней не в сети!",  message_color)
+				end
+				sampSendDialogResponse(dialogid, 2, 0, 0)
+				return false
+			end
+			if MODULE.LeadTools.cleaner.uninvite and text:find("Укажите причину(.+)увольнения(.+)игрока из фракции") then
+				sampSendDialogResponse(dialogid, 1,  0, 'Пропал из штата (' .. MODULE.LeadTools.cleaner.reason_day .. ' дней не в игре)')
+				return false
+			end
+		end
+		if (MODULE.LeadTools.sell_rank.checker) then
+			if (title:find('$') and text:find('Продать ранг')) then
+				local count = 0
+				for line in text:gmatch('[^\r\n]+') do
+					if (line:find('Продать ранг')) then
+						sampSendDialogResponse(dialogid, 1, count, 0)
+					else
+						count = count + 1
+					end
+				end
+			elseif (title:find('Выбор игрока') and text:find(MODULE.LeadTools.sell_rank.player_id)) then
+				local count = 0
+				for line in text:gmatch('[^\r\n]+') do
+					if (line:find(MODULE.LeadTools.sell_rank.player_id)) then
+						sampSendDialogResponse(dialogid, 1, count-1, 0)
+					else
+						count = count + 1
+					end
+				end
+				MODULE.LeadTools.sell_rank.checker = false
+			end
+			return false
+		end
+	end
+
+	if isMode('gov') then
+		if settings.gov.anti_trivoga and (text:find('Вы действительно хотите вызвать сотрудников полиции?') or text:find('Вы действительно хотите {FFA11C}вызвать{FFFFFF} полицию?')) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Тревожная кнопка отключена. Для включения используйте /helper - Функции Право', message_color)
+			sampSendDialogResponse(dialogid, 2, 0, 0)
+			return false
+		end
+		if MODULE.Zeks.checker and title:find("нные под стражу") then
+			for line in text:gmatch('[^\r\n]+') do
+				local clean_line = line:gsub('{........}', ''):gsub('{......}', ''):gsub('{(...)}', '')
+				local nick, id, time, kpz, adv = clean_line:match('([%w_]+)%((%d+)%)\t(%d+).-\t(.-)\t(.-)$')
+				if nick and id and time and kpz and kpz ~= "Неизвестно" and adv then
+					if adv == 'В ожидании адвоката' then adv = '-' else adv = adv:gsub('Адвокат:', '')  end
+					
+					table.insert(MODULE.Zeks.new, {nick = nick, id = id, time = time, kpz = kpz, adv = adv})
+				end
+			end
+			MODULE.Zeks.checker = false
+			if #MODULE.Zeks.new == 0 then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сейчас на сервере нету заключенных игроков!', message_color)
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сканирование /' .. get_custom_cmd('zeks') .. ' окончено! Найдено заключенных игроков: ' .. message_color_hex .. #MODULE.Zeks.new, message_color)
+				MODULE.Zeks.all = MODULE.Zeks.new
+				MODULE.Zeks.updzeks.stop = false
+				MODULE.Zeks.updzeks.time = 0
+				MODULE.Zeks.updzeks.last_time = os.time()
+				MODULE.Zeks.updzeks.check = true
+				MODULE.Zeks.Window[0] = true
+			end
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+	end
+
+	if settings.general.auto_accept_docs then
+		if (title:find('Активные предложения', 1, true) and (text:find('паспорт', 1, true) or text:find('лицензии', 1, true) or text:find('мед', 1, true))) then
+			if text:find('Когда') then
+				sampSendDialogResponse(dialogid, 1, 0, 0)
+				return false
+			elseif text:find('Принять предложение') then
+				local doc_type = 'документ'
+				if text:find('паспорт') then
+					doc_type = 'паспорт'
+				elseif text:find('мед') then
+					doc_type = 'мед.карту'
+				elseif text:find('лицензии') then
+					doc_type = 'лицензии'
+				end
+				sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Запускаю отыгровку проверки документов игрока...', message_color)
+				MODULE.Binder.state.isActive = true
+				sampSendChat('/me берёт ' .. doc_type .. ' и внимательно осматривает, затем возвращает обратно владельцу')
+				sampSendDialogResponse(dialogid, 1, 2, '')
+				MODULE.Binder.state.isActive = false
+				return false
+			end
+		end
+		if (title:find('Подтверждение действия') and (text:find('посмотреть его паспорт') or text:find('посмотреть его лицензии') or text:find('посмотреть его мед(.+)карту'))) then
+			lua_thread.create(function()
+				wait(1000)
+				sampSendDialogResponse(dialogid, 1, 2, '')
+			end)
+			return false
+		end
+	end
+	
+	if isMode('police') or isMode('fbi') then
+		if text:find('Ник') and text:find('Уровень розыска') and text:find('Расстояние') and MODULE.Wanted.checker then 
+			local text = string.gsub(text, '%{......}', '')
+			text = string.gsub(text, 'Ник%s+Уровень розыска%s+Расстояние\n', '')
+			for line in string.gmatch(text, '[^\n]+') do
+				local nick, id, lvl, dist = string.match(line, '(%w+_%w+)%((%d+)%)%s+(%d) уровень%s+%[(.+)%]')
+				if nick and id and lvl and dist then
+					if dist:find('в интерьере') then
+						dist = 'В инте'
+					end
+					local dup = false
+					for _, entry in ipairs(MODULE.Wanted.new) do
+						if entry.id == id and entry.lvl == lvl then
+							dup = true
+							break
+						end
+					end
+					if not dup then
+						table.insert(MODULE.Wanted.new, {nick = nick, id = id, lvl = lvl, dist = dist})
+					end
+				end
+			end
+			sampSendDialogResponse(dialogid, 0, 0, 0)
+			return false
+		end
+	end
+	
+	if (isMode('hospital')) then
+		if text:find("Проверьте и подтвердите данные перед выдачей мед карты") or text:find('Вы собираетесь предложить купить медкарту') then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ожидайте пока игрок подтвердит получение мед. карты', message_color)
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+		--Rodina RP
+		if title:find('Выберите медкарту') and text:find('Не определен') and text:find('Наблюдаются отклонения') then
+			sampSendDialogResponse(dialogid, 1, MODULE.Binder.tag.get_medcard_status(), 0)
+			return false
+		end
+		if title:find('Выбор длительности') and text:find('Выберите количество дней на которое будет') then
+			local days = {[0] = '7', [1] = '14', [2] = '30', [3] = '60'}
+			local day = days[MODULE.Binder.tag.get_medcard_days()]
+			sampSendDialogResponse(dialogid, 1, 0, day)
+			return false
+		end
+		if title:find('Выбор стоимости') and text:find('Выберите сумму.+Введите сумму') then
+			sampSendDialogResponse(dialogid, 1, 0, MODULE.Binder.tag.get_medcard_price())
+			return false
+		end
+	end
+
+	if isMode('smi') then
+		if MODULE.SmiEdit.skip_dialog then
+			sampSendDialogResponse(dialogid, 0, 0, 0)
+			MODULE.SmiEdit.skip_dialog = false
+			sampSendChat('/newsredak')
+			return false
+		end
+		if title:find('Редактирование') and text:find('Объявление от') and text:find('Сообщение') then
+			MODULE.SmiEdit.is_active_ad = true
+			MODULE.SmiEdit.ad_dialog_id = dialogid
+			for line in text:gmatch("[^\n]+") do
+				if line:find('^{FFFFFF}Объявление от {FFD700}маркетолога (.+) %(бизнес') then
+					MODULE.SmiEdit.ad_from = line:match('{FFFFFF}Объявление от {FFD700}маркетолога (.+) %(бизнес')
+				elseif line:find('^{FFFFFF}Объявление от {FFD700}руководства страховой компании (.+),') then
+					MODULE.SmiEdit.ad_from = line:match('{FFFFFF}Объявление от {FFD700}руководства страховой компании (.+),')
+				elseif line:find('^{FFFFFF}Объявление от {FFD700}(.+),') then
+					MODULE.SmiEdit.ad_from = line:match('{FFFFFF}Объявление от {FFD700}(.+),')
+				end
+				if line:find('{FFFFFF}Сообщение:%s+{33AA33}(.+)') then
+					MODULE.SmiEdit.ad_message = line:match('{FFFFFF}Сообщение:%s+{33AA33}(.+)')
+				elseif line:find('Сообщение%:.+{33AA33}(.+){FFFFFF}') then --Rodina RP
+					MODULE.SmiEdit.ad_message = line:match('Сообщение%:.+{33AA33}(.+){FFFFFF}')
+				end
+			end
+			MODULE.SmiEdit.Window[0] = true
+			return false
+		end
+		if (title:find('Редактирование') and text:find('обычных') and text:find('автоматических')) then
+			sampSendDialogResponse(dialogid, 1, 0, 0)
+			return false
+		end
+		if title:find('Редакция') or title:find('Выберите об.явление%:') then
+			if text:find('На данный момент сообщений нет') then
+				sampSendDialogResponse(dialogid, 1, 0, 0)
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}На данный момент нету обьявлений для редактирования!', message_color)
+				return false
+			end
+		end 
+		if title:find('Операции с об.явлением') and button1:find('Изменить') then --Rodina RP
+			sampSendDialogResponse(dialogid, 1, 0, 0)	
+			return false
+		end
+	end
+	
+	if (isMode('lc')) then
+		if title:find("Дорожные знаки") and (title:find("Los Santos") or title:find("San Fierro") or title:find("Las Venturas") or title:find("Lav Venturas")) and settings.lc.auto_find_clorest_znak then
+			local count = 0
+			local znaks = {}
+			for line in text:gmatch('[^\r\n]+') do
+				count = count + 1
+				if not line:find('Название знака') and not line:find('Установлен') then
+					line = string.gsub(line, "%%", "")
+					line = string.gsub(line, "{[0-9a-fA-F]+}", "")
+					local num, name, dist, damage, status = string.match(line, '%[(%d+)%] ([^\t]+)\t([0-9%.]+)..м\t(%d*)\t(.*)')
+					if name == nil then
+						num, name, dist, status = string.match(line, '%[(%d+)%] ([^\t]+)\t([0-9%.]+)..м\t.*\t(.*)')
+						damage = 100
+					end
+					table.insert(znaks, {number = num, name = name, distance = dist, health = damage, status = status})
+				end
+			end
+			local min_dist = 999999
+			local nearest = nil
+			for i, znak in ipairs(znaks) do
+				local dist = tonumber(znak.distance)
+				if dist and dist < min_dist then
+					min_dist = dist
+					nearest = znak
+				end
+			end
+			if not nearest then
+				sampAddChatMessage("[Arizona Helper | Ассистент] {ffffff}В данном городе все дорожные знаки в норме!", message_color)
+				sampSendDialogResponse(dialogid, 0, 0, "")
+			else
+				sampAddChatMessage("[Arizona Helper | Ассистент] {ffffff}Ближайший к вам знак " .. message_color_hex .. "№" .. nearest.number .. " {ffffff}(дистанция " .. message_color_hex .. nearest.distance .. "м{ffffff}, статус " .. message_color_hex .. nearest.status .. "{ffffff})", message_color)
+				sampSendDialogResponse(dialogid, 1, nearest.number-1, "")
+			end
+			return false
+		end
+		
+	end
+	
+	if isMode('fd') then
+		if title:find('Список происшествий') then
+			if text:find('В данный момент все спокойно') then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}В данный момент пожаров нету, можете отдыхать', message_color)
+				sampSendDialogResponse(dialogid, 1, 0, 0)
+				return false
+			else
+			-- 	MODULE.Fires.dialogId = dialogid
+			-- 	MODULE.Fires.isDialog = true
+				MODULE.Fires.locations = text:match('Осталось времени\n(.+)') .. '\n'
+			-- 	sampShowDialog(999, title, text, button1, button2, style)
+			end
+		end
+	end
+
+	if isMode('ins') then
+		if settings.ins.anti_trivoga and (text:find('Вы действительно хотите вызвать сотрудников полиции?') or text:find('Вы действительно хотите {FFA11C}вызвать{FFFFFF} полицию?')) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Тревожная кнопка отключена. Для включения используйте /helper - Функции СТК', message_color)
+			sampSendDialogResponse(dialogid, 2, 0, 0)
+			return false
+		end
+		if (settings.ins.auto_input_ticket and title:find('Заполнение документа')) then
+			local nick = text:match("{ffff00}([%w_]+)")
+			local types = text:match("{ffff00}(%w+)")
+			local number = text:match("{ffff00}(%d+)")
+			sampSendDialogResponse(dialogid, 1, 0, nick or types or number or '')
+			return false
+		end
+		if title:find('Заявки на страхование') then
+			if text:find('На данный момент нет заявок на страхование') then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}На данный момент нет заявок на страхование!', message_color)
+				sampSendDialogResponse(dialogid, 1, 0, 0)
+				return false
+			end
+		end
+	end
+
+end
+function sampev.onCreate3DText(id, color, position, distance, testLOS, attachedPlayerId, attachedVehicleId, text_3d)
+	if text_3d and ((isMode('gov') and settings.gov.anti_trivoga) or (isMode())) then
+		if text_3d:find('Тревожная кнопка') or text_3d:find('Кнопка для вызова полиции') then
+			sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Тревожная кнопка удалена из интерьера, поскольку вы отключили её.', message_color)
+			return false
+		end	
+	end
+end
+function sampev.onPlayerChatBubble(playerid, color, distance, duration, message)
+	if MODULE.DEBUG then
+		sampAddChatMessage('[ChatBubble] {ffffff}ID ' .. playerid .. ' | Color ' .. color .. ' | Dist ' .. distance .. ' | Duration ' .. duration .. ' | MSG ' .. message, message_color)
+		print('[ChatBubble] ID ' .. playerid .. ' | Color ' .. color .. ' | Dist ' .. distance .. ' | Duration ' .. duration .. ' | MSG ' .. tostring(message))
+	end
+	if (isMode('police') or isMode('fbi') or isMode('prison')) and settings.mj.anti_screpki then
+		if message and message:find('достал скрепки для взлома наручников', 1, true) then
+			local nick = sampGetPlayerNickname(playerid) or 'Неизвестный'
+			local id = playerid
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Внимание! ' .. nick .. '[' .. id .. '] использует скрепки и начинает взламывать наручники!', message_color)
+			play_sound()
+			local result, handle = sampGetCharHandleBySampPlayerId(id)
+			if result then
+				local x, y, z = getCharCoordinates(handle)
+				local mx, my, mz = getCharCoordinates(PLAYER_PED)
+				if getDistanceBetweenCoords3d(mx, my, mz, x, y, z) <= 1.5 then
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Пытаюсь изъять скрепки у этого игрока...', message_color)
+					find_and_use_command('/bot {id}', id)
+				else
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Подойдите к игроку ' .. nick .. ' и используйте команду /bot ' .. id, message_color)
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Подойдите к игроку ' .. nick .. ' и используйте команду /bot ' .. id, message_color)
+			end
+		end
+	end
+end
+function sampev.onTogglePlayerControllable(controllable)
+	local cc = MODULE.CruiseControl
+	if (cc.active or cc.pursuit_active) and not controllable then
+		cc.active = false
+		cc.pursuit_active = false
+		cc.pursuit_target_id = -1
+		cc.driving = false
+		cc.wait_point = false
+		cc.stuck_t = 0
+		clearCharTasks(PLAYER_PED)
+		if isCharInAnyCar(PLAYER_PED) then
+			taskWarpCharIntoCarAsDriver(PLAYER_PED, storeCarCharIsInNoSave(PLAYER_PED))
+		end
+	end
+end
+addEventHandler('onSendPacket', function(id, bs, priority, reliability, orderingChannel)
+    if id ~= 220 then return end
+    local ok, idd, packettype = pcall(function() return raknetBitStreamReadInt8(bs), raknetBitStreamReadInt8(bs) end)
+    if not ok or packettype == nil then return end
+    if IS_MOBILE then
+        local ok_sub, subtype = pcall(raknetBitStreamReadInt8, bs)
+        if not ok_sub then return end
+        if packettype == 66 or packettype == 63 then
+            if MODULE.DEBUG then
+                local unr = raknetBitStreamGetNumberOfUnreadBits(bs) or 0
+                local unrs = {}
+                for i = 1, 8 do
+                    local ok_b, b = pcall(raknetBitStreamReadInt8, bs)
+                    if ok_b then table.insert(unrs, b) end
+                end
+                local info = string.format('[SendPacket] 220 %d %d | Unread bits %d : %s', packettype, subtype, unr, table.concat(unrs, ' '))
+                print(info)
+                sampAddChatMessage(info, message_color)
+            end
+            if settings.general.scoreboard and packettype == 66 and subtype == 56 then
+                MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+                return false
+            end
+        end
+    else
+        local ok_str, strlen, str = pcall(function() local l = raknetBitStreamReadInt16(bs) return l, raknetBitStreamReadString(bs, l) end)
+        if not ok_str then return end
+        if packettype ~= 0 and packettype ~= 1 and str and #str > 2 then
+            if MODULE.DEBUG then
+                sampAddChatMessage('[SendPacket] {ffffff}' .. str, message_color)
+                print("[SendPacket] " .. str)
+            end
+        end
+    end
+end)
+addEventHandler('onReceivePacket', function(id, bs)
+	if id == 220 then
+		local id = raknetBitStreamReadInt8(bs)
+		local cmd = raknetBitStreamReadInt8(bs)
+
+		if cmd == 153 then
+			local carId = raknetBitStreamReadInt16(bs)
+			raknetBitStreamIgnoreBits(bs, 8)
+			local numberlen = raknetBitStreamReadInt8(bs)
+			local plate_number = raknetBitStreamReadString(bs, numberlen)
+			local typelen = raknetBitStreamReadInt8(bs)
+			local numType = raknetBitStreamReadString(bs, typelen)
+			modules.vehicles.cache[carId] = { carID = carId or 0, number = plate_number or "", region = numType or "" }
+		end
+
+		if IS_MOBILE then
+			if cmd == 84 then
+				local unk1 = raknetBitStreamReadInt8(bs)
+				local unk2 = raknetBitStreamReadInt8(bs)
+				local len = raknetBitStreamReadInt16(bs)
+				local encoded = raknetBitStreamReadInt8(bs)
+				local str = encoded == 0 and raknetBitStreamReadString(bs, len) or raknetBitStreamDecodeString(bs, len + encoded)
+				if MODULE.DEBUG then
+					sampAddChatMessage('[ReceivePacket] {ffffff}' .. str, message_color)
+					print("[ReceivePacket] " .. str)
+				end
+			end
+		else
+			if cmd == 17 then
+				raknetBitStreamIgnoreBits(bs, 32)
+				local length = raknetBitStreamReadInt16(bs)
+				local encoded = raknetBitStreamReadInt8(bs)
+				local cef_str = (encoded ~= 0) and raknetBitStreamDecodeString(bs, length + encoded) or raknetBitStreamReadString(bs, length)
+
+				if MODULE.DEBUG then
+					sampAddChatMessage('[ReceivePacket] {ffffff}' .. cef_str, message_color)
+					print("[ReceivePacket] " .. cef_str)
+				end
+
+				if MODULE.Armory then
+					local ev, pl = cef_str:match("^window%.executeEvent%('([^']+)',%s*`?(.-)`?%)%;?$")
+					if ev then MODULE.Armory.on_cef(ev, pl) end
+				end
+
+				if settings.general.auto_clicker then
+					local event_name, event_data = cef_str:match("^window%.executeEvent%('(.-)', [`'](%b[])[`']%);$")
+					if event_name == "event.setActiveView" then
+						MODULE.AutoClicker.active = false
+						local data = decodeJson(event_data)
+						if type(data) == "table" then
+							for _, view in ipairs(data) do
+								if view == "Clicker" then MODULE.AutoClicker.active = true; break end
+							end
+						end
+					end
+				end
+
+				if (cef_str:find('findGame') and cef_str:find(' документов","Найдите ')) then
+					if ((not isMode('ins')) or (isMode('ins') and settings.ins.hint_in_sort)) then
+						local find = cef_str:match('%[.+%[(.+)%]%]')
+						local nums = {}
+						for n in find:gmatch("%d+") do table.insert(nums, tonumber(n)) end
+						table.sort(nums)
+						for i = 1, #nums do nums[i] = nums[i] + 1 end
+						local result = table.concat(nums, ", ")
+						sampAddChatMessage("[Arizona Helper | Ассистент] {ffffff}Правильные конверты: " .. result .. ". Считать их нужно слева направо", message_color)
+						sampShowDialog(897124, 'Arizona Helper - Ассистент', "Правильные конверты: " .. result .. ".\nСчитать их нужно слева направо", '{009EFF}Закрыть', '', 0)
+					end
+				end
+			end
+		end
+	end
+end)
+addEventHandler('onReceiveRpc', function(id, bs)
+	if id == 123 then
+        local carId = raknetBitStreamReadInt16(bs)
+        local numLen = raknetBitStreamReadInt8(bs)
+		local plate_number = raknetBitStreamReadString(bs, numLen)
+		modules.vehicles.cache[carId] = {
+			carID = carId or 0,
+			number = plate_number or "",
+			type = "ARZ"
+		}
+	end
+end)
+---------------------------------------------[ INIT GUI ]--------------------------------------------
+imgui.OnInitialize(function()
+	imgui.GetIO().IniFilename = nil
+	imgui.GetIO().Fonts:Clear()
+
+	local glyph_ranges = imgui.GetIO().Fonts:GetGlyphRangesCyrillic()
+	if IS_MOBILE then
+		MODULE.FONT = imgui.GetIO().Fonts:AddFontFromFileTTF(worked_dir .. '/lib/mimgui/trebucbd.ttf', 14 * settings.general.custom_dpi, _, glyph_ranges)
+	else
+		MODULE.FONT = imgui.GetIO().Fonts:AddFontFromFileTTF(getFolderPath(0x14)..'\\trebucbd.ttf', 14 * settings.general.custom_dpi, _, glyph_ranges)
+	end
+
+	fa.Init(14 * settings.general.custom_dpi)
+	for key, value in pairs(fa) do
+		if key ~= 'Init' then table.insert(MODULE.Icons.keys, key) end
+	end
+	table.sort(MODULE.Icons.keys)
+
+	if settings.general.helper_theme == 0 and monet_ok then
+		apply_moonmonet_theme()
+	elseif settings.general.helper_theme == 1 then
+		apply_dark_theme()
+	elseif settings.general.helper_theme == 2 then
+		apply_white_theme()
+	end
+
+	imgui.GetIO().ConfigFlags = imgui.ConfigFlags.NoMouseCursorChange
+
+	function TextEditCallback(data)
+		MODULE.INPUT.CURSOR_POS = data.CursorPos
+		if data.CursorPos ~= MODULE.INPUT.CURSOR_POS or data.SelectionStart ~= MODULE.INPUT.SELECTION_START or data.SelectionEnd ~= MODULE.INPUT.SELECTION_END then
+			MODULE.INPUT.USER_MOVED_CURSOR = true
+		end
+		MODULE.INPUT.SELECTION_START = data.SelectionStart
+		MODULE.INPUT.SELECTION_END = data.SelectionEnd
+		return 0
+	end
+	TextEditCallback = ffi.cast('int (*)(ImGuiInputTextCallbackData* data)', TextEditCallback)
+
+end)
+imgui.OnFrame(
+    function() return MODULE.Initial.Window[0] end,
+    function(player)
+        imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+        imgui.Begin(fa.GEARS .. u8' Первичная настройка хелпера ' .. fa.GEARS, MODULE.Initial.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+        change_dpi()
+		if MODULE.Initial.step == 0 then
+			MODULE.Initial.terms_accepted = MODULE.Initial.terms_accepted or false
+			if doesFileExist(config_dir .. '/Resourse/logo.png') then
+				if (not _G.helper_logo) then
+					local path = config_dir .. '/Resourse/logo.png'
+					_G.helper_logo = imgui.CreateTextureFromFile(path)
+				end
+				if _G.helper_logo then
+					imgui.Image(_G.helper_logo, imgui.ImVec2(589 * settings.general.custom_dpi, 161 * settings.general.custom_dpi))
+				else
+					imgui.BeginChild('##logo_warmup', imgui.ImVec2(589 * settings.general.custom_dpi, 161 * settings.general.custom_dpi), false)
+					imgui.EndChild()
+				end
+			else
+				if imgui.BeginChild('##init1_1', imgui.ImVec2(520 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), true) then
+					imgui.Text("\n\n\n")
+					imgui.CenterTextDisabled(u8('Не удалось загрузить дополнительные ресурсы хелпера!\n\n'))
+					imgui.CenterTextDisabled(u8('Для автоматической загрузки временно включите VPN или скачайте файлы вручную'))
+					imgui.CenterUnderlineText("https://github.com/GreenTechYT/arizona-helper-unlimited")
+					if imgui.IsItemClicked() then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited/tree/main/Resourse') end
+					imgui.EndChild()
+				end
+			end
+			imgui.CenterText(u8("Настроим хелпер для комфортной игры"))
+			imgui.Separator()
+			imgui.CenterText(u8("Продолжая использование хелпера, вы соглашаетесь с:"))
+			if imgui.CenterButton(fa.BOOK .. u8(' Прочитать пользовательское соглашение ') .. fa.BOOK) then
+				imgui.OpenPopup(fa.BOOK .. u8' Пользовательское соглашение ' .. fa.BOOK .. '##terms_popup')
+			end
+			if MODULE.Initial.terms_accepted then
+				imgui.CenterText(fa.FLAG_CHECKERED .. u8' Соглашение принято. Вы можете продолжить настройку.')
+			else
+				imgui.CenterTextDisabled(fa.CIRCLE_XMARK .. u8' Соглашение не принято. Продолжение настройки недоступно.')
+			end
+			imgui.Separator()
+			imgui.CenterText(u8("Выберите способ настройки:"))
+			if MODULE.Initial.terms_accepted then
+				if imgui.CenterButton(fa.CIRCLE_ARROW_RIGHT .. u8(' Автоматически через /stats ') .. fa.CIRCLE_ARROW_LEFT) then
+					check_stats = true
+					sampSendChat('/stats')
+					MODULE.Initial.Window[0] = false
+				end
+				if imgui.CenterButton(fa.CIRCLE_ARROW_RIGHT .. u8(' Настроить вручную ') .. fa.CIRCLE_ARROW_LEFT) then
+					MODULE.Initial.fraction_type_selector = 0
+					MODULE.Initial.step = 1
+				end
+			else
+				imgui.CenterTextDisabled(fa.CIRCLE_INFO .. u8' Примите пользовательское соглашение, чтобы разблокировать настройку.')
+				imgui.CenterTextDisabled(fa.CIRCLE_ARROW_RIGHT .. u8(' Автоматически через /stats ') .. fa.CIRCLE_ARROW_LEFT)
+				imgui.CenterTextDisabled(fa.CIRCLE_ARROW_RIGHT .. u8(' Настроить вручную ') .. fa.CIRCLE_ARROW_LEFT)
+			end
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+			if imgui.BeginPopupModal(fa.BOOK .. u8' Пользовательское соглашение ' .. fa.BOOK .. '##terms_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+				change_dpi()
+				imgui.CenterText(u8'Пользовательское соглашение и политика конфиденциальности')
+				imgui.Separator()
+				if imgui.BeginChild('##terms_text', imgui.ImVec2(520 * settings.general.custom_dpi, 320 * settings.general.custom_dpi), true) then
+					render_terms_text()
+					imgui.EndChild()
+				end
+				imgui.Separator()
+				if imgui.Button(fa.FLAG_CHECKERED .. u8' Принять', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+					MODULE.Initial.terms_accepted = true
+					imgui.CloseCurrentPopup()
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отказаться', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+					MODULE.Initial.terms_accepted = false
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
+		elseif MODULE.Initial.step == 1 then
+			imgui.CenterText(u8('Выберите категорию вашей организации:'))
+
+			local function render_org_block(org_num, icon, name, fractions, tags)
+				if imgui.BeginChild('##init1_'..org_num, imgui.ImVec2(170 * settings.general.custom_dpi, 45 * settings.general.custom_dpi), (MODULE.Initial.fraction_type_selector == org_num)) then
+					if not (MODULE.Initial.fraction_type_selector == org_num) then
+						imgui.SetCursorPos(imgui.ImVec2(0, 5 * settings.general.custom_dpi))
+					end
+					imgui.CenterText(icon .. u8(' '..name))
+					imgui.CenterTextDisabled(u8(fractions))
+					imgui.EndChild()
+				end
+				if imgui.IsItemClicked() then
+					MODULE.Initial.fraction_type_selector = org_num
+					MODULE.Initial.fraction_type_selector_text = name
+					MODULE.Initial.fraction_type_icon = icon
+				end
+			end
+			render_org_block(1, fa.BUILDING_SHIELD, 'Мин.Юстиции', 'ЛСПД/ЛВПД/СФПД/ФБР/РКШ')
+			imgui.SameLine()
+			render_org_block(2, fa.HOSPITAL, 'Мин.Здрав.', 'ЛСМЦ/ЛВМЦ/СФМЦ/ДМЦ')
+			imgui.SameLine()
+			render_org_block(3, fa.BUILDING_SHIELD, 'Мин.Обороны', 'АНГ/ВНГ/ВС/ФИК/ФСИН')
+			render_org_block(4, fa.BUILDING_NGO, 'Масс.Медиа', 'СМИ ЛС/ЛВ/СФ/ВС/АЗ')
+			imgui.SameLine()
+			render_org_block(5, fa.BUILDING_COLUMNS, 'Центральный аппарат', 'Право/ГЦЛ/СТК/МРЭО')
+			imgui.SameLine()
+			render_org_block(6, fa.HOTEL, 'Пожарная часть', 'ПД')
+			render_org_block(7, fa.TORII_GATE, 'Мафия', 'YKZ/LCN/RM/WMC/TRB')
+			imgui.SameLine()
+			render_org_block(8, fa.BUILDING_WHEAT, 'Банда', 'Грув/Балас/Рифа/Вагос')
+			imgui.SameLine()
+			render_org_block(0, fa.BUILDING_CIRCLE_XMARK, 'Без организации', 'Биндер & Заметки')
+
+			if imgui.Button(fa.CIRCLE_ARROW_LEFT .. u8(' Назад'), imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Initial.step = 0
+			end
+			imgui.SameLine()
+			if imgui.Button(u8('Подтвердить выбор ') .. fa.CIRCLE_ARROW_RIGHT, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Initial.slider[0] = 1
+				if MODULE.Initial.fraction_type_selector == 6 then
+					MODULE.Initial.step2_result = 61
+					MODULE.Initial.step = 3
+				elseif MODULE.Initial.fraction_type_selector == 0 then
+					modules.player.data.fraction_rank = 'Нету'
+					modules.player.data.fraction_rank_number = 0
+					MODULE.Initial.step = 4
+				else
+					MODULE.Initial.step = 2
+				end
+			end
+		elseif MODULE.Initial.step == 2 then
+    		imgui.CenterText(u8('Выберите организацию из категории "' .. MODULE.Initial.fraction_type_selector_text .. '":'))
+
+			local function render_fraction_block(org_num, name, fraction_tag)
+				if imgui.BeginChild('##init2_'..org_num, imgui.ImVec2(170 * settings.general.custom_dpi, 45 * settings.general.custom_dpi), (MODULE.Initial.fraction_selector == org_num)) then
+					if not (MODULE.Initial.fraction_selector == org_num) then
+						imgui.SetCursorPos(imgui.ImVec2(0, 5 * settings.general.custom_dpi))
+					end
+					imgui.CenterText(u8(name))
+					imgui.CenterTextDisabled(u8(fraction_tag))
+					imgui.EndChild()
+				end
+				if imgui.IsItemClicked() then
+					MODULE.Initial.fraction_selector = org_num
+					MODULE.Initial.fraction_selector_text = name
+					MODULE.Initial.step2_result = (MODULE.Initial.fraction_type_selector * 10) + org_num
+				end
+			end
+			local orgs = {
+				[1] = {
+					{name = "Полиция Лос-Сантоса", 			tag = "ЛСПД"},
+					{name = "Полиция Лас-Вентураса",		tag = "ЛВПД"},
+					{name = "Полиция Сан-Фиерро", 			tag = "СФПД"},
+					{name = "Областная полиция", 			tag = "LSSD"},
+					{name = "S.W.A.T.", 					tag = "СВАТ"},
+					{name = "Фед.Бюро Расследований", 		tag = "ФБР"},
+					{name = "Городская полиция", 			tag = "ГУВД"},
+					{name = "Полиция округа", 				tag = "КТЦ"},
+					{name = "Фед.Служба Безопасности", 		tag = "ФСБ"},
+				},
+				[2] = {
+					{name = "Больница Лос-Сантоса",   		tag = "ЛСМЦ"},
+					{name = "Больница Лас-Вентураса", 		tag = "ЛВМЦ"},
+					{name = "Больница Сан-Фиерро", 			tag = "СФМЦ"},
+					{name = "Больница Джефферсон", 			tag = "ДМЦ"},
+					{name = "Больница Вайс-Сити", 			tag = "ВСМЦ"},
+					{name = "Городская больница", 			tag = "СМП"},
+					{name = "Больница округа", 				tag = "МУСС"},
+				},
+				[3] = {
+					{name = "Армия Лос-Сантоса", 			tag = "АНГ"},
+					{name = "Армия Сан-Фиерро", 			tag = "ВНГ"},
+					{name = "Армия Арзамаса", 				tag = "ВС"},
+					{name = "Тюрьма Строго Режима LV", 		tag = "ФИК"},
+					{name = "Фед.Служба Исп.Наказаний", 	tag = "ФСИН"},
+				},
+				[4] = {
+					{name = "СМИ Лос-Сантоса", 				tag = "СМИ ЛС"},
+					{name = "СМИ Лас-Вентураса", 			tag = "СМИ ЛВ"},
+					{name = "СМИ Сан-Фиерро", 				tag = "СМИ СФ"},
+					{name = "СМИ Вайс-Сити", 				tag = "СМИ ВС"},
+					{name = "СМИ Арзамаса", 				tag = "НА"},
+				},
+				[5] = {
+					{name = "Правительство", 				tag = "Право"},
+					{name = "Центр лицензирования", 		tag = "ГЦЛ"},
+					{name = "Страховая компания", 			tag = "СТК"},
+					{name = "Судья", 						tag = "Судья"},
+					{name = "МРЭО ГИБДД", 					tag = "МРЭО"},
+				},
+				[6] = {
+					{name = "Пожарный департамент", 		tag = "ПД"},
+				},
+				[7] = {
+					{name = "Yakuza", 						tag = "YKZ"},
+					{name = "La Cosa Nostra", 				tag = "LCN"},
+					{name = "Russian Mafia", 				tag = "RM"},
+					{name = "Warlock MC", 					tag = "WMC"},
+					{name = "Tierra Robada Bikers", 		tag = "TRB"},
+					{name = "Украинская мафия", 			tag = "УМ"},
+					{name = "Кавказкая мафия", 				tag = "КМ"},
+					{name = "Русская мафия", 				tag = "РМ"},
+				},
+				[8] = {
+					{name = "Grove Street", 				tag = "Грув"},
+					{name = "East Side Ballas", 			tag = "Балас"},
+					{name = "Los Santos Vagos", 			tag = "Вагос"},
+					{name = "The Rifa", 					tag = "Рифа"},
+					{name = "Varrios Los Aztecas", 			tag = "Ацтек"},
+					{name = "Night Wolves", 				tag = "Волки"},
+				},
+			}
+			local org_list = orgs[MODULE.Initial.fraction_type_selector]
+			for i, org in ipairs(org_list) do
+				render_fraction_block(i, org.name, org.tag)
+				if ((i % 3 ~= 0) and i ~= #org_list) then imgui.SameLine() end
+			end
+
+			if imgui.Button(fa.CIRCLE_ARROW_LEFT .. u8(' Назад'), imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Initial.step = 1
+			end
+			imgui.SameLine()
+			if imgui.Button(u8('Подтвердить выбор ') .. fa.CIRCLE_ARROW_RIGHT, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				if MODULE.Initial.step2_result ~= 0 then
+					MODULE.Initial.step = 3
+				end
+			end
+		elseif MODULE.Initial.step == 3 then
+			imgui.CenterText(u8('Укажите вашу должность и номер ранга:'))
+			imgui.PushItemWidth(520 * settings.general.custom_dpi)
+			imgui.InputTextWithHint(u8'##input_fraction_rank', u8('Введите название вашей должности...'), MODULE.Initial.input, 256)
+			imgui.PushItemWidth(520 * settings.general.custom_dpi)
+			imgui.SliderInt('##fraction_rank_number', MODULE.Initial.slider, 1, 10)
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_ARROW_LEFT .. u8(' Назад'), imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				if MODULE.Initial.fraction_type_selector == 6 then
+					MODULE.Initial.step = 1 
+				else
+					imgui.StrCopy(MODULE.Initial.input, "")
+					MODULE.Initial.step = 2
+				end
+			end
+			imgui.SameLine()
+			if imgui.Button(u8('Продолжить ') .. fa.CIRCLE_ARROW_RIGHT, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				modules.player.data.fraction_rank = u8:decode(ffi.string(MODULE.Initial.input))
+				modules.player.data.fraction_rank_number = MODULE.Initial.slider[0]
+				if modules.player.data.fraction_rank_number >= 9 then
+					settings.general.auto_uninvite = true
+				end
+				imgui.StrCopy(MODULE.Initial.input, "")
+				MODULE.Initial.step = 4
+			end
+		elseif MODULE.Initial.step == 4 then
+			imgui.CenterText(u8('Введите ваш полный игровой никнейм (на английском):'))
+			imgui.PushItemWidth(520 * settings.general.custom_dpi)
+			imgui.InputText(u8'##input_nick', MODULE.Initial.input, 256)
+			imgui.CenterTextDisabled(u8(translate(u8:decode(ffi.string(MODULE.Initial.input)))))
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_ARROW_LEFT .. u8(' Назад'), imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				imgui.StrCopy(MODULE.Initial.input, "")
+				if MODULE.Initial.fraction_type_selector == 0 then
+					MODULE.Initial.step = 1
+				else
+					MODULE.Initial.step = 3
+				end
+			end
+			imgui.SameLine()
+			if imgui.Button(u8('Завершить настройку ') .. fa.FLAG_CHECKERED, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				modules.player.data.nick = u8:decode(ffi.string(MODULE.Initial.input))
+				modules.player.data.name_surname = translate(modules.player.data.nick)
+				MODULE.Initial.step = 5
+			end
+		elseif MODULE.Initial.step == 5 then
+			local fraction_modes = {
+				{id = 0,  name = "Отсутствует",         	   mode = "none",       tag = "Нету"},
+				{id = 11, name = "Полиция Лос-Сантоса",        mode = "police", 	tag = "ЛСПД"},
+				{id = 12, name = "Полиция Лас-Вентураса",      mode = "police", 	tag = "ЛВПД"},
+				{id = 13, name = "Полиция Сан-Фиерро",         mode = "police", 	tag = "СФПД"},
+				{id = 14, name = "Областная полиция",          mode = "police", 	tag = "РКШД"},
+				{id = 15, name = "S.W.A.T.",                   mode = "police", 	tag = "СВАТ"},
+				{id = 16, name = "Фед. Бюро Расследований",    mode = "fbi",    	tag = "ФБР"},
+				{id = 17, name = "Городская полиция",          mode = "police",	 	tag = "ГУВД"},
+				{id = 18, name = "Полиция округа",             mode = "police", 	tag = "КТЦ"},
+				{id = 19, name = "Фед. Служба Безопасности",   mode = "fbi",    	tag = "ФСБ"},
+				{id = 21, name = "Больница Лос-Сантоса",       mode = "hospital", 	tag = "ЛСМЦ"},
+				{id = 22, name = "Больница Лас-Вентураса",     mode = "hospital", 	tag = "ЛВМЦ"},
+				{id = 23, name = "Больница Сан-Фиерро",        mode = "hospital", 	tag = "СФМЦ"},
+				{id = 24, name = "Больница Джефферсон",        mode = "hospital", 	tag = "ДМЦ"},
+				{id = 25, name = "Больница Вайс-Сити",         mode = "hospital", 	tag = "ВСМЦ"},
+				{id = 26, name = "Городская больница",         mode = "hospital", 	tag = "СМП"},
+				{id = 27, name = "Больница округа",            mode = "hospital", 	tag = "МУСС"},
+				{id = 31, name = "Армия Лос-Сантоса",          mode = "army", 		tag = "АНГ"},
+				{id = 32, name = "Армия Сан-Фиерро",           mode = "army", 		tag = "ВНГ"},
+				{id = 33, name = "Армия Арзамаса",             mode = "army", 		tag = "ВС"},
+				{id = 34, name = "Федеральный Исправительный Комплекс",  mode = "prison", 	tag = "ФИК"},
+				{id = 35, name = "Фед. Служба Исп. Наказаний", mode = "prison", 	tag = "ФСИН"},
+				{id = 41, name = "СМИ Лос-Сантоса",            mode = "smi",	 	tag = "СМИ ЛС"},
+				{id = 42, name = "СМИ Лас-Вентураса",          mode = "smi", 		tag = "СМИ ЛВ"},
+				{id = 43, name = "СМИ Сан-Фиерро",             mode = "smi", 		tag = "СМИ СФ"},
+				{id = 44, name = "СМИ Вайс-Сити",              mode = "smi", 		tag = "СМИ ВС"},
+				{id = 45, name = "СМИ Арзамаса",               mode = "smi", 		tag = "НА"},
+				{id = 51, name = "Правительство",              mode = "gov", 		tag = "Право"},
+				{id = 52, name = "Центр лицензирования",       mode = "lc", 		tag = "ГЦЛ"},
+				{id = 53, name = "Страховая компания",         mode = "ins", 		tag = "СТК"},
+				{id = 54, name = "Судья",                      mode = "judge", 		tag = "Судья"},
+				{id = 55, name = "МРЭО ГИБДД",                 mode = "lc", 		tag = "МРЭО"},
+				{id = 61, name = "Пожарный департамент",       mode = "fd", 		tag = "ПД"},
+				{id = 71, name = "Yakuza",                     mode = "mafia",		tag = "YKZ"},
+				{id = 72, name = "La Cosa Nostra",             mode = "mafia", 		tag = "ЛКН"},
+				{id = 73, name = "Russian Mafia",              mode = "mafia", 		tag = "РМ"},
+				{id = 74, name = "Warlock MC",                 mode = "mafia", 		tag = "WMC"},
+				{id = 75, name = "Tierra Robada Bikers",       mode = "mafia", 		tag = "ТРБ"},
+				{id = 76, name = "Украинская мафия",           mode = "mafia", 		tag = "УМ"},
+				{id = 77, name = "Кавказская мафия",           mode = "mafia", 		tag = "КМ"},
+				{id = 78, name = "Русская мафия",              mode = "mafia", 		tag = "РМ"},
+				{id = 81, name = "Grove Street",               mode = "ghetto", 	tag = "Грув"},
+				{id = 82, name = "East Side Ballas",           mode = "ghetto", 	tag = "Балас"},
+				{id = 83, name = "Los Santos Vagos",           mode = "ghetto", 	tag = "Вагос"},
+				{id = 84, name = "The Rifa",                   mode = "ghetto", 	tag = "Рифа"},
+				{id = 85, name = "Varrios Los Aztecas",        mode = "ghetto", 	tag = "Ацтек"},
+				{id = 86, name = "Night Wolves",               mode = "ghetto", 	tag = "Волки"},
+			}
+			for index, value in ipairs(fraction_modes) do
+				if value.id == MODULE.Initial.step2_result then
+					settings.general.fraction_mode = value.mode
+					modules.player.data.fraction = value.name
+					modules.player.data.fraction_tag = value.tag
+					break
+				end
+			end
+			import_fraction_data(settings.general.fraction_mode)
+			save_settings()
+			save_module('player')
+			save_module('departament')
+			reload_script = true
+			thisScript():reload()
+		end
+        imgui.End()
+    end
+)
+local function background_dim_color(alpha_override)
+    local alpha = alpha_override or ((settings.general.background_transparent or 75) / 100)
+    local ok, col = pcall(function()
+        local c = imgui.GetStyle().Colors[imgui.Col.WindowBg]
+        return imgui.ImVec4(c.x, c.y, c.z, alpha)
+    end)
+    if ok and col then return col end
+    local th = settings.general.helper_theme
+    if th == 2 then
+        return imgui.ImVec4(0.92, 0.92, 0.95, alpha)
+    elseif th == 0 and MODULE.Main and MODULE.Main.mmcolor then
+        local m = MODULE.Main.mmcolor
+        return imgui.ImVec4(m[0], m[1], m[2], alpha)
+    end
+    return imgui.ImVec4(0.06, 0.06, 0.08, alpha)
+end
+local function hash_password(s)
+	local h1, h2 = 5381, 52711
+	for i = 1, #s do
+		local c = s:byte(i)
+		h1 = (h1 * 33 + c) % 4294967296
+		h2 = (h2 * 31 + c) % 4294967296
+	end
+	return string.format('%08x%08x', h1, h2)
+end
+---------------------------------------------[ MAIN GUI ]--------------------------------------------
+imgui.OnFrame(
+	function()
+		local is_registered = (modules.player.data.nick and modules.player.data.nick ~= '') and true or false
+		if MODULE.Main.Window[0] and is_registered and not settings.general.terms_accepted then
+			MODULE.Main.Window[0] = false
+			MODULE.TermsConfirm.Window[0] = true
+			return false
+		end
+		return MODULE.Main.Window[0]
+	end,
+	function(player)
+		MODULE.Main.cmd_search = MODULE.Main.cmd_search or imgui.new.char[128]()
+		MODULE.Main.notes_search = MODULE.Main.notes_search or imgui.new.char[128]()
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+		imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 430 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+		imgui.Begin(getHelperIcon() .. " Arizona Helper Unlimited " .. getHelperIcon() .. "##main", MODULE.Main.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar)		change_dpi()
+		if imgui.BeginTabBar(u8'Привет!') then
+			if imgui.BeginTabItem(fa.HOUSE..u8' Главное меню ') then
+				if doesFileExist(config_dir .. '/Resourse/logo.png') then
+					if (not _G.helper_logo) then
+						local path = config_dir .. '/Resourse/logo.png'
+						_G.helper_logo = imgui.CreateTextureFromFile(path)
+					end
+					if _G.helper_logo then
+						imgui.Image(_G.helper_logo, imgui.ImVec2(589 * settings.general.custom_dpi, 161 * settings.general.custom_dpi))
+					else
+						imgui.BeginChild('##logo_warmup', imgui.ImVec2(589 * settings.general.custom_dpi, 161 * settings.general.custom_dpi), false)
+						imgui.EndChild()
+					end
+				else
+					if imgui.BeginChild('##1000000000000', imgui.ImVec2(589 * settings.general.custom_dpi, 161 * settings.general.custom_dpi), true) then
+						imgui.Text("\n\n\n")
+						imgui.CenterTextDisabled(u8('Не удалось загрузить дополнительные ресурсы хелпера!\n\n'))
+						imgui.CenterTextDisabled(u8('Для автоматической загрузки временно включите VPN или скачайте файлы вручную'))
+						imgui.CenterUnderlineText("https://github.com/GreenTechYT/arizona-helper-unlimited")
+						if imgui.IsItemClicked() then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited/tree/main/Resourse') end
+						imgui.EndChild()
+					end
+				end
+				if imgui.BeginChild('##2', imgui.ImVec2(589 * settings.general.custom_dpi, 169 * settings.general.custom_dpi), true) then
+					imgui.CenterText(getUserIcon() .. u8' Информация о вашем персонаже ' .. getUserIcon())
+					imgui.Separator()
+					imgui.Columns(3)
+					imgui.CenterColumnText(u8"Имя и фамилия:")
+					imgui.SetColumnWidth(-1, 230 * settings.general.custom_dpi)
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(modules.player.data.name_surname))
+					imgui.SetColumnWidth(-1, 250 * settings.general.custom_dpi)
+					imgui.NextColumn()
+					if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. '##name_surname') then
+						modules.player.data.name_surname = translate(sampGetPlayerNickname(select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))))
+						imgui.StrCopy(MODULE.Main.input, u8(modules.player.data.name_surname))
+						imgui.StrCopy(MODULE.Initial.input, u8(modules.player.data.nick))
+						imgui.OpenPopup(getUserIcon() .. u8' Имя и фамилия ' .. getUserIcon() .. '##name_surname')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Изменить свой ник') end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(getUserIcon() .. u8' Имя и фамилия ' .. getUserIcon() .. '##name_surname', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.PushItemWidth(405 * settings.general.custom_dpi)
+						imgui.InputTextWithHint(u8'##name_surname', u8('Введите имя и фамилию вашего персонажа...'), MODULE.Main.input, 256)
+						imgui.PushItemWidth(405 * settings.general.custom_dpi)
+						if imgui.InputTextWithHint(u8'##nickname', u8('Введите ваш игровой никнейм...'), MODULE.Initial.input, 256) then
+							imgui.StrCopy(MODULE.Main.input, u8(translate(u8:decode(ffi.string(MODULE.Initial.input)))))
+						end
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_name_surname', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##save_name_surname', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							modules.player.data.name_surname = u8:decode(ffi.string(MODULE.Main.input))
+							modules.player.data.nick = u8:decode(ffi.string(MODULE.Initial.input))
+							save_module('player')
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					imgui.SetColumnWidth(-1, 100 * settings.general.custom_dpi)
+					imgui.Columns(1)
+					imgui.Separator()
+					imgui.Columns(3)
+					imgui.CenterColumnText(u8"Акцент:")
+					imgui.NextColumn()
+					if MODULE.Main.checkbox.accent_enable[0] then
+						local accent_display = modules.player.data.accent:gsub('%[(.-) акцент%]?:?', '%1')
+						imgui.CenterColumnText(u8(accent_display))
+					else
+						imgui.CenterColumnText(u8'Отключено')
+					end
+					imgui.NextColumn()
+					if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. '##accent') then
+						imgui.StrCopy(MODULE.Main.input, u8(modules.player.data.accent))
+						imgui.OpenPopup(getUserIcon() .. u8' Акцент персонажа ' .. getUserIcon() .. '##accent')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Настроить акцент') end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(getUserIcon() .. u8' Акцент персонажа ' .. getUserIcon() .. '##accent', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						if imgui.Checkbox('##MODULE.Main.checkbox.accent_enable', MODULE.Main.checkbox.accent_enable) then
+							settings.general.accent_enable = MODULE.Main.checkbox.accent_enable[0]
+							save_settings()
+						end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Работоспособность акцента') end
+						imgui.SameLine()
+						imgui.PushItemWidth(375 * settings.general.custom_dpi)
+						imgui.InputTextWithHint(u8'##accent_input', u8('Введите акцент вашего персонажа...'), MODULE.Main.input, 256)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_accent', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##save_accent', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							modules.player.data.accent = u8:decode(ffi.string(MODULE.Main.input))
+							save_module('player')
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					imgui.Columns(1)
+					imgui.Separator()
+					imgui.Columns(3)
+					imgui.CenterColumnText(u8"Пол:")
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(modules.player.data.sex))
+					imgui.NextColumn()
+					if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. '##sex') then
+						modules.player.data.sex = (modules.player.data.sex ~= 'Мужчина') and 'Мужчина' or 'Женщина'
+						save_module('player')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Изменить пол персонажа') end
+					imgui.Columns(1)
+					imgui.Separator()
+					imgui.Columns(3)
+					imgui.CenterColumnText(u8"Организация:")
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(modules.player.data.fraction))
+					imgui.NextColumn()
+					if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. "##fraction") then
+						imgui.StrCopy(MODULE.Main.input, u8(modules.player.data.fraction))
+						imgui.OpenPopup(getHelperIcon() .. u8' Организация ' .. getHelperIcon() .. '##fraction')
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(getHelperIcon() .. u8' Организация ' .. getHelperIcon() .. '##fraction', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.PushItemWidth(405 * settings.general.custom_dpi)
+						imgui.InputTextWithHint(u8'##input_fraction_name', u8('Введите название вашей организации...'), MODULE.Main.input, 256)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_fraction_edit', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##save_fraction_edit', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							modules.player.data.fraction = u8:decode(ffi.string(MODULE.Main.input))
+							save_settings()
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					imgui.SameLine()
+					if imgui.SmallButton(fa.GEAR .. '##fraction') then
+						imgui.OpenPopup(getHelperIcon() .. u8' Смена организации ' .. getHelperIcon() .. '##fraction')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Полная смена организации') end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(getHelperIcon() .. u8' Смена организации ' .. getHelperIcon() .. '##fraction', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.CenterText(u8('Вы действительно хотите изменить организацию?'))
+						imgui.CenterText(u8('Все стандартные фракционные RP команды будут сброшены!'))
+						imgui.CenterText(u8('Но ваши личные RP команды, которые вы добавляли, сохраняться'))
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_new_fraction', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.GEARS .. u8' Сменить фракцию##reset_fraction', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							delete_default_fraction_cmds(modules.commands.data.commands.my, get_fraction_cmds(settings.general.fraction_mode, false))
+							delete_default_fraction_cmds(modules.commands.data.commands_manage.my, get_fraction_cmds(settings.general.fraction_mode, true))
+							MODULE.Initial.Window[0] = true
+							MODULE.Main.Window[0] = false
+						end
+						imgui.End()
+					end
+					imgui.Columns(1)
+					imgui.Separator()
+					imgui.Columns(3)
+					imgui.CenterColumnText(u8"Должность:")
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(modules.player.data.fraction_rank) .. " (" .. modules.player.data.fraction_rank_number .. ")")
+					imgui.NextColumn()
+					if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. "##rank") then
+						imgui.StrCopy(MODULE.Main.input, u8(modules.player.data.fraction_rank))
+						MODULE.Main.slider.rank[0] = modules.player.data.fraction_rank_number
+						imgui.OpenPopup(getHelperIcon() .. u8' Должность в организации ' .. getHelperIcon() .. '##fraction_rank')
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(getHelperIcon() .. u8' Должность в организации ' .. getHelperIcon() .. '##fraction_rank', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.PushItemWidth(405 * settings.general.custom_dpi)
+						imgui.InputTextWithHint(u8'##input_fraction_rank', u8('Введите название вашей должности...'), MODULE.Main.input, 256)
+						imgui.PushItemWidth(405 * settings.general.custom_dpi)
+						imgui.SliderInt('##fraction_rank_number', MODULE.Main.slider.rank, 1, 10)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_fraction_rank', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##save_fraction_rank', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							local old_rank_number = modules.player.data.fraction_rank_number
+							modules.player.data.fraction_rank = u8:decode(ffi.string(MODULE.Main.input))
+							modules.player.data.fraction_rank_number = MODULE.Main.slider.rank[0]
+							save_module('player')
+							if old_rank_number < 9 and modules.player.data.fraction_rank_number >= 9 then
+								sampAddChatMessage(CHAT_PREFIX .. " {ffffff}Поскольку вы стали " .. (modules.player.data.fraction_rank_number == 10 and 'лидером' or 'заместителем') .. ", нужно перезагрузить хелпер для пременения доп.функций. Перезагрузка...", message_color)
+								reload_script = true
+								thisScript():reload()
+							end
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					imgui.SameLine()
+					if imgui.SmallButton(fa.PASSPORT .. '##stats') then
+						check_stats = true
+						sampSendChat('/stats')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Получить данные из /stats') end
+					imgui.Columns(1)
+					imgui.Separator()
+					imgui.Columns(3)
+					imgui.CenterColumnText(u8"Тег организации:")
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(modules.player.data.fraction_tag))
+					imgui.NextColumn()
+					if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. '##fraction_tag') then
+						imgui.StrCopy(MODULE.Main.input, u8(modules.player.data.fraction_tag))
+						imgui.OpenPopup(getHelperIcon() .. u8' Тег организации ' .. getHelperIcon() .. '##fraction_tag')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Изменить тег организации') end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(getHelperIcon() .. u8' Тег организации ' .. getHelperIcon() .. '##fraction_tag', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.PushItemWidth(405 * settings.general.custom_dpi)
+						imgui.InputText(u8'##input_fraction_tag', MODULE.Main.input, 256)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_fraction_tag', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##save_fraction_tag', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							modules.player.data.fraction_tag = u8:decode(ffi.string(MODULE.Main.input))
+							save_module('player')
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					imgui.Columns(1)
+					imgui.EndChild()
+				end
+				if imgui.BeginChild('##3', imgui.ImVec2(589 * settings.general.custom_dpi, 27 * settings.general.custom_dpi), true) then
+					imgui.Columns(2)
+					imgui.Text(fa.CROWN .. u8"         Arizona Helper модифицирован GreenTechYT (Rics с Scottdale). Права защищены          " .. fa.CROWN)
+					imgui.SetColumnWidth(-1, 580 * settings.general.custom_dpi)
+					imgui.NextColumn()
+					imgui.EndChild()
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.RECTANGLE_LIST..u8' Команды') then
+				if imgui.BeginTabBar('Список всех команд') then
+					if imgui.BeginTabItem(fa.BARS..u8' Стандартные команды ') then
+						imgui.PushItemWidth(-1)
+						imgui.InputTextWithHint('##cmd_search_standard', u8'Поиск команд...', MODULE.Main.cmd_search, 128)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						local list_h = imgui.GetContentRegionAvail().y
+						if imgui.BeginChild('##standart_cmds', imgui.ImVec2(589 * settings.general.custom_dpi, list_h), true) then
+							imgui.Columns(3)
+							imgui.CenterColumnText(u8"Команда")
+							imgui.SetColumnWidth(-1, 170 * settings.general.custom_dpi)
+							imgui.NextColumn()
+							imgui.CenterColumnText(u8"Описание")
+							imgui.SetColumnWidth(-1, 300 * settings.general.custom_dpi)
+							imgui.NextColumn()
+							imgui.CenterColumnText(u8"Действие")
+							imgui.SetColumnWidth(-1, 150 * settings.general.custom_dpi)
+							imgui.Columns(1)
+							imgui.Separator()
+							for index, item in ipairs(modules.custom_commands.data) do
+								local show = item.editable
+								if show and item.key == 'weapons' then show = false end -- Его больше нету
+								if show and item.key == 'frp' and modules.player.data.fraction_rank_number < 6 then show = false end
+								if show and (item.key == 'dep' or item.key == 'sob' or item.key == 'post') and (isMode('ghetto') or isMode('mafia') or isMode('none')) then show = false end
+								if show and item.key == 'zeks' and not (isMode('gov') and settings.gov.custom_zeks) then show = false end
+								if show and item.key == 'pum' and not isMode('prison') then show = false end
+								if show and (item.key == 'wanteds' or item.key == 'patrool' or item.key == 'sum' or item.key == 'tsm' or item.key == 'edgo') and not (isMode('police') or isMode('fbi')) then show = false end
+								if show and item.key == 'cruise' and not settings.general.adaptive_cruise then show = false end
+								if show and not cmd_matches_search(item.cmd, item.description) then
+									show = false
+								end
+								if show then
+									imgui.Columns(3)
+									local ok_c, ec_c = pcall(u8, '/' .. item.cmd)
+									if item.enable then imgui.CenterColumnText(ok_c and ec_c or ('/' .. item.cmd))
+									else imgui.CenterColumnTextDisabled(ok_c and ec_c or ('/' .. item.cmd)) end
+									imgui.NextColumn()
+									local ok_d, ec_d = pcall(u8, item.description)
+									if item.enable then imgui.CenterColumnText(ok_d and ec_d or item.description)
+									else imgui.CenterColumnTextDisabled(ok_d and ec_d or item.description) end
+									imgui.NextColumn()
+									local st = imgui.GetStyle()
+									local pad = st.FramePadding.x
+									local icon_toggle = item.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF
+									local is_edgo = (item.key == 'edgo')
+									local is_frp = (item.key == 'frp')
+									local is_post = (item.key == 'post')
+									local is_wanteds = (item.key == 'wanteds') 
+									local is_patrool = (item.key == 'patrool')
+									local is_afind = (item.key == 'afind')
+									local is_forensic = (item.key == 'forensic')
+									local has_gear = is_afind or is_forensic or is_edgo or is_post or is_patrool or is_frp or is_wanteds
+									local bw1 = imgui.CalcTextSize(icon_toggle).x + pad * 2
+									local bw2 = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + pad * 2
+									local bw3 = has_gear and (imgui.CalcTextSize(fa.GEAR).x + pad * 2) or 0
+									local total = bw1 + bw2 + bw3 + st.ItemSpacing.x * (has_gear and 2 or 1)
+									local x0 = imgui.GetCursorPosX()
+									local cw = imgui.GetColumnWidth()
+									local start_x = x0 + (cw - total) * 0.5
+									if start_x < x0 then start_x = x0 end
+									imgui.SetCursorPosX(start_x)
+									if imgui.SmallButton((item.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##cc_' .. index) then
+										item.enable = not item.enable
+										save_module('custom_commands')
+										if item.enable then register_custom_command(item.key)
+										else sampUnregisterChatCommand(item.cmd) end
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8((item.enable and "Отключение команды /" or "Включение команды /") .. item.cmd)) end
+									imgui.SameLine()
+									if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##cc_edit_' .. index) then
+										local text_raw = (item.text or ''):gsub('&', '\n')
+										local ok_cmd, enc_cmd = pcall(u8, item.cmd)
+										local ok_txt, enc_txt = pcall(u8, text_raw)
+										local ok_desc, enc_desc = pcall(u8, item.description)
+										local arg_idx = 0
+										if item.arg == '{arg}' then arg_idx = 1
+										elseif item.arg == '{id}' then arg_idx = 2
+										elseif item.arg == '{id} {arg}' then arg_idx = 3
+										elseif item.arg == '{id} {number} {arg}' then arg_idx = 4 end
+										MODULE.CustomCmdEdit.index = index
+										MODULE.CustomCmdEdit.key = item.key
+										MODULE.CustomCmdEdit.original_cmd = item.cmd
+										MODULE.CustomCmdEdit.input_cmd = imgui.new.char[256](ok_cmd and enc_cmd or item.cmd)
+										MODULE.CustomCmdEdit.input_text = imgui.new.char[8192](ok_txt and enc_txt or text_raw)
+										MODULE.CustomCmdEdit.input_description = imgui.new.char[256](ok_desc and enc_desc or item.description)
+										MODULE.CustomCmdEdit.ComboTags = imgui.new.int(arg_idx)
+										local w = tonumber(item.waiting) or 2
+										MODULE.CustomCmdEdit.waiting_slider = imgui.new.float(w)
+										MODULE.CustomCmdEdit.orig_waiting = w
+										imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование стандартной команды ' .. fa.PEN_TO_SQUARE .. '##cc_edit_popup_' .. index)
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8("Изменение команды /" .. item.cmd)) end
+									if is_edgo then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_edgo_set_' .. index) then
+											MODULE.EdgoSettings = MODULE.EdgoSettings or {}
+											if not MODULE.EdgoSettings.cd_slider then
+												MODULE.EdgoSettings.cd_slider = imgui.new.float((settings.mj.edgo_rp_cd or 3000) / 1000)
+												MODULE.EdgoSettings.rp_enabled = imgui.new.bool(settings.mj.edgo_rp_enabled ~= false)
+											else
+												MODULE.EdgoSettings.cd_slider[0] = (settings.mj.edgo_rp_cd or 3000) / 1000
+												MODULE.EdgoSettings.rp_enabled[0] = settings.mj.edgo_rp_enabled ~= false
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /edgo ' .. fa.GEAR .. '##cc_edgo_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки пробива ЭБГО /edgo")) end	
+									elseif is_frp then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_frp_set_' .. index) then
+											MODULE.FrpSettings = MODULE.FrpSettings or {}
+											if not MODULE.FrpSettings.radius_slider then
+												MODULE.FrpSettings.radius_slider = imgui.new.int(settings.mj.frp_radius or 5)
+											else
+												MODULE.FrpSettings.radius_slider[0] = settings.mj.frp_radius or 5
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /frp ' .. fa.GEAR .. '##cc_frp_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки радиуса /frp")) end
+									elseif is_post then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_post_set_' .. index) then
+											MODULE.PostSettings = MODULE.PostSettings or {}
+											if not MODULE.PostSettings.auto_doklad then
+												MODULE.PostSettings.auto_doklad = imgui.new.bool(settings.general.auto_doklad_post ~= false)
+												MODULE.PostSettings.period_slider = imgui.new.int(settings.general.post_doklad_period or 5)
+											else
+												MODULE.PostSettings.auto_doklad[0] = settings.general.auto_doklad_post ~= false
+												MODULE.PostSettings.period_slider[0] = settings.general.post_doklad_period or 5
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /post ' .. fa.GEAR .. '##cc_post_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки авто-доклада /post")) end
+									elseif is_wanteds then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_wanteds_set_' .. index) then
+											MODULE.WantedsSettings = MODULE.WantedsSettings or {}
+											if not MODULE.WantedsSettings.auto_update then
+												MODULE.WantedsSettings.auto_update = imgui.new.bool(settings.mj.auto_update_wanteds ~= false)
+												MODULE.WantedsSettings.period_slider = imgui.new.int(settings.mj.wanted_update_period or 10)
+											else
+												MODULE.WantedsSettings.auto_update[0] = settings.mj.auto_update_wanteds ~= false
+												MODULE.WantedsSettings.period_slider[0] = settings.mj.wanted_update_period or 10
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /wanteds ' .. fa.GEAR .. '##cc_wanteds_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки авто-обновления /wanteds")) end
+									elseif is_patrool then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_patrool_set_' .. index) then
+											MODULE.PatroolSettings = MODULE.PatroolSettings or {}
+											if not MODULE.PatroolSettings.auto_doklad then
+												MODULE.PatroolSettings.auto_doklad = imgui.new.bool(settings.mj.auto_doklad_patrool ~= false)
+												MODULE.PatroolSettings.period_slider = imgui.new.int(settings.mj.patrool_doklad_period or 5)
+											else
+												MODULE.PatroolSettings.auto_doklad[0] = settings.mj.auto_doklad_patrool ~= false
+												MODULE.PatroolSettings.period_slider[0] = settings.mj.patrool_doklad_period or 5
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /patrool ' .. fa.GEAR .. '##cc_patrool_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки авто-доклада /patrool")) end
+									elseif is_afind then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_afind_set_' .. index) then
+											MODULE.AfindSettings = MODULE.AfindSettings or {}
+											if not MODULE.AfindSettings.cd_slider then
+												MODULE.AfindSettings.cd_slider = imgui.new.float(settings.mj.afind_find_cd or 3)
+												MODULE.AfindSettings.auto_stop = imgui.new.bool(settings.mj.afind_auto_stop ~= false)
+												MODULE.AfindSettings.radius_slider = imgui.new.float(settings.mj.afind_stop_radius or 10)
+											else
+												MODULE.AfindSettings.cd_slider[0] = settings.mj.afind_find_cd or 3
+												MODULE.AfindSettings.auto_stop[0] = settings.mj.afind_auto_stop ~= false
+												MODULE.AfindSettings.radius_slider[0] = settings.mj.afind_stop_radius or 10
+											end
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки /afind ' .. fa.GEAR .. '##cc_afind_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8("Настройки авто-поиска /afind")) end
+									elseif is_forensic then
+										imgui.SameLine()
+										if imgui.SmallButton(fa.GEAR .. '##cc_forensic_set_' .. index) then
+											MODULE.ForensicEditor = MODULE.ForensicEditor or { waiting_slider = imgui.new.float(2), sel = 1 }
+											MODULE.ForensicEditor.waiting_slider[0] = modules.forensic.data.default_wait or 2
+											imgui.OpenPopup(fa.GEAR .. u8' Настройки экспертиз ' .. fa.GEAR .. '##cc_forensic_settings_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8('Настройки отыгровок и задержки экспертиз /forensic')) end
+									end
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 425 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+									if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование стандартной команды ' .. fa.PEN_TO_SQUARE .. '##cc_edit_popup_' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										change_dpi()
+										local edit = MODULE.CustomCmdEdit
+										if imgui.BeginChild('##cc_edit', imgui.ImVec2(589 * settings.general.custom_dpi, 361 * settings.general.custom_dpi), true) then
+											imgui.CenterText(fa.FILE_LINES .. u8' Описание команды (нельзя изменить):')
+											imgui.PushItemWidth(579 * settings.general.custom_dpi)
+											imgui.InputText("##cc_desc_display", edit.input_description, 256, imgui.InputTextFlags.ReadOnly)
+											imgui.Separator()
+											imgui.CenterText(fa.TERMINAL .. u8' Команда для использования в чате (без /):')
+											imgui.PushItemWidth(579 * settings.general.custom_dpi)
+											imgui.InputText("##cc_input_cmd", edit.input_cmd, 256)
+											local cmd = ffi.string(edit.input_cmd)
+											if cmd:sub(1, 1) == '/' then cmd = cmd:gsub("^/+", ""); imgui.StrCopy(edit.input_cmd, cmd) end
+											imgui.Separator()
+											imgui.CenterText(fa.CODE .. u8' Аргументы которые принимает команда:')
+											local args = {[1] = '{arg}', [2] = '{id}', [3] = '{id} {arg}', [4] = '{id} {number} {arg}'}
+											local selected_args = args[edit.ComboTags[0]]
+											if selected_args then
+												for token in selected_args:gmatch("{[^}]+}") do
+													if imgui.Button(token, imgui.ImVec2(65 * settings.general.custom_dpi, 24 * settings.general.custom_dpi)) then insert_to_cursor(token .. ' ', edit.input_text) end
+													imgui.SameLine()
+												end
+											end
+											imgui.PushItemWidth(581 * settings.general.custom_dpi - imgui.GetCursorPos().x)
+											imgui.Combo(u8'', edit.ComboTags, MODULE.Binder.ImItems, #MODULE.Binder.item_list)
+											imgui.Separator()
+											imgui.CenterText(fa.FILE_WORD .. u8' Текстовый бинд команды:')
+											imgui.InputTextMultiline("##cc_input_text", edit.input_text, 8192, imgui.ImVec2(579 * settings.general.custom_dpi, 173 * settings.general.custom_dpi), imgui.InputTextFlags.CallbackAlways + imgui.InputTextFlags.CallbackCompletion, TextEditCallback)
+											if edit.key == 'pnv' or edit.key == 'irv' then
+												imgui.PushTextWrapPos(imgui.GetCursorPosX() + 579 * settings.general.custom_dpi)
+												imgui.TextDisabled(u8'Подсказка: первый текст = включение, второй = выключение. Разделяйте символом &.')
+												imgui.PopTextWrapPos()
+											end
+											imgui.EndChild()
+										end
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cc_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then imgui.CloseCurrentPopup() end
+										imgui.SameLine()
+										if imgui.Button(fa.CLOCK .. u8' Задержка##cc_wait', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then imgui.OpenPopup(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##cc') end
+										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+										if imgui.BeginPopupModal(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##cc', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+											imgui.PushItemWidth(250 * settings.general.custom_dpi)
+											imgui.SliderFloat(u8'##cc_waiting', edit.waiting_slider, 0.3, 10)
+											imgui.Separator()
+											if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cc_wait_menu', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then edit.waiting_slider = imgui.new.float(edit.orig_waiting); imgui.CloseCurrentPopup() end
+											imgui.SameLine()
+											if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##cc_wait_menu', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then imgui.CloseCurrentPopup() end
+											imgui.End()
+										end
+										imgui.SameLine()
+										if imgui.Button(fa.TAGS .. u8' Теги##cc_tags', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then imgui.OpenPopup(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##cc') end
+										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+										if imgui.BeginPopupModal(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##cc', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+											if imgui.BeginChild("cc_taglist", imgui.ImVec2(589 * settings.general.custom_dpi, 361 * settings.general.custom_dpi), true) then
+												imgui.Columns(3, "cc_tags_columns", true)
+												imgui.Text(u8"Тег"); imgui.NextColumn(); imgui.Text(u8"Описание тега"); imgui.NextColumn(); imgui.Text(u8"Результат использования тега"); imgui.NextColumn()
+												imgui.Columns(1); imgui.Separator()
+												imgui.BulletText(u8("Биндер")); imgui.Separator()
+												imgui.Columns(3, "cc_tags_columns", true)
+												if imgui.Selectable("{pause}") then insert_to_cursor("{pause}", edit.input_text); imgui.CloseCurrentPopup() end
+												imgui.NextColumn(); imgui.Text(u8('Поставить команду на паузу')); imgui.NextColumn(); imgui.Text(u8('Менюшка паузы команды')); imgui.NextColumn()
+												imgui.Columns(1); imgui.Columns(3, "cc_tags_columns", true)
+												if imgui.Selectable("{wait(5000)}") then insert_to_cursor("{wait(5000)}", edit.input_text); imgui.CloseCurrentPopup() end
+												imgui.NextColumn(); imgui.Text(u8('Доп.кастомная задержка')); imgui.NextColumn(); imgui.Text(u8('Вместо 5000 любое время в МС')); imgui.NextColumn()
+												imgui.Columns(1)
+												local last_category = nil
+												for _, tag in ipairs(MODULE.Binder.tags) do
+													if tag.category ~= last_category then imgui.Columns(1); imgui.Separator(); imgui.BulletText(u8(tag.category)); imgui.Separator(); imgui.Columns(3, "cc_tags_columns", true); last_category = tag.category end
+													if imgui.Selectable("{" .. tag.key .. "}") then insert_to_cursor("{" .. tag.key .. "}", edit.input_text); imgui.CloseCurrentPopup() end
+													imgui.NextColumn(); imgui.Text(u8(tag.description)); imgui.NextColumn()
+													local example = ""
+													if tag.func and not tag.no_preview then
+														local ok, result = pcall(tag.func)
+														if ok and result then example = tostring(result) end
+													end
+													imgui.Text(u8(example)); imgui.NextColumn()
+												end
+												imgui.Columns(1); imgui.EndChild()
+											end
+											imgui.Separator()
+											if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##cc_tags_close', imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then imgui.CloseCurrentPopup() end
+											imgui.End()
+										end
+										imgui.SameLine()
+										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##cc_save', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then
+											local new_cmd = ffi.string(edit.input_cmd)
+											if new_cmd:find("[^%w_]") or new_cmd == '' then
+												imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Ошибка сохранения команды ' .. fa.TRIANGLE_EXCLAMATION .. '##cc')
+											else
+												local old_cmd = edit.original_cmd or item.cmd
+												new_cmd = u8:decode(new_cmd)
+												local text_value = ffi.string(edit.input_text)
+												local has_id = text_value:find("{id}"); local has_arg = text_value:find("{arg}"); local has_number = text_value:find("{number}")
+												local new_arg = ''
+												if has_number or edit.ComboTags[0] == 4 then new_arg = '{id} {number} {arg}'
+												elseif (has_id and has_arg) or edit.ComboTags[0] == 3 then new_arg = '{id} {arg}'
+												elseif has_id or edit.ComboTags[0] == 2 then new_arg = '{id}'
+												elseif has_arg or edit.ComboTags[0] == 1 then new_arg = '{arg}'
+												else new_arg = '' end
+												item.cmd = new_cmd
+												item.arg = new_arg
+												item.text = u8:decode(text_value):gsub('\n', '&')
+												item.waiting = string.format('%.1f', edit.waiting_slider[0])
+												save_module('custom_commands')
+												sampUnregisterChatCommand(old_cmd)
+												if old_cmd ~= new_cmd then sampUnregisterChatCommand(new_cmd) end
+												register_custom_command(edit.key)
+												local sig_text = ''
+												if new_arg == '{arg}' then sig_text = ' [аргумент]'
+												elseif new_arg == '{id}' then sig_text = ' [ID игрока]'
+												elseif new_arg == '{id} {arg}' then sig_text = ' [ID игрока] [аргумент]'
+												elseif new_arg == '{id} {number} {arg}' then sig_text = ' [ID игрока] [число] [аргумент]' end
+												if edit.key == 'afind' then
+													sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. u8(new_cmd) .. ' [ID игрока]{ffffff}. Для остановки используйте ' .. message_color_hex .. '/' .. u8(new_cmd) .. ' stop', message_color)
+												end
+												sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. u8(new_cmd) .. sig_text .. ' {ffffff}успешно сохранена!', message_color)
+												imgui.CloseCurrentPopup()
+											end
+										end
+										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+										if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Ошибка сохранения команды ' .. fa.TRIANGLE_EXCLAMATION .. '##cc', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+											if ffi.string(edit.input_cmd):find('[^%w_]') then imgui.BulletText(u8" В команде можно использовать только англ.буквы и цифры!") end
+											if ffi.string(edit.input_cmd) == '' then imgui.BulletText(u8" Название команды не может быть пустым!") end
+											imgui.Separator()
+											if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##cc_error_close', imgui.ImVec2(400 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+											imgui.End()
+										end
+										imgui.End()
+									end
+									imgui.Columns(1)
+									imgui.Separator()
+								end
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /edgo ' .. fa.GEAR .. '##cc_edgo_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.EdgoSettings and MODULE.EdgoSettings.cd_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД между отыгровками (сек):'))
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Задержка между отправкой строк РП отыгровки.\nМеньше - быстрее, но может выглядеть нереалистично.'))
+									end
+									imgui.SliderFloat('##edgo_set_cd', MODULE.EdgoSettings.cd_slider, 1, 10, '%.1f')
+									imgui.Separator()
+									imgui.Checkbox(u8' Включить РП отыгровки##edgo_set_rp', MODULE.EdgoSettings.rp_enabled)
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Отправлять РП команды (/me, /do) во время пробива.\nЕсли выключено - только технические команды и результат.'))
+									end
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##edgo_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##edgo_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.mj.edgo_rp_cd = MODULE.EdgoSettings.cd_slider[0] * 1000
+										settings.mj.edgo_rp_enabled = MODULE.EdgoSettings.rp_enabled[0]
+										save_settings()
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки /edgo сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /frp ' .. fa.GEAR .. '##cc_frp_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.FrpSettings and MODULE.FrpSettings.radius_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8(' Радиус поиска игроков (метры):'))
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('На каком расстоянии от вас искать игроков\nдля выдачи /fractionrp.\nДиапазон: от 1 до 50 метров.'))
+									end
+									imgui.SliderInt('##frp_set_radius', MODULE.FrpSettings.radius_slider, 1, 50)
+									local radius = MODULE.FrpSettings.radius_slider[0]
+									imgui.TextDisabled(u8('Будут найдены игроки в радиусе ' .. radius .. ' метров.'))
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##frp_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##frp_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.mj.frp_radius = MODULE.FrpSettings.radius_slider[0]
+										save_settings()
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки /frp сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /post ' .. fa.GEAR .. '##cc_post_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.PostSettings and MODULE.PostSettings.period_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Checkbox(u8' Включить авто-доклады##post_set_auto', MODULE.PostSettings.auto_doklad)
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Автоматически отправлять доклад в рацию\nкаждые N минут, пока вы на посту.\n(вы должны начать /' .. get_custom_cmd('post') .. ' чтобы функция работала)'))
+									end
+									imgui.Separator()
+									if MODULE.PostSettings.auto_doklad[0] then
+										imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-доклада (минут):'))
+										if imgui.IsItemHovered() then
+											imgui.SetTooltip(u8('Как часто отправлять доклад в рацию.\nДиапазон: от 1 до 30 минут.'))
+										end
+										imgui.SliderInt('##post_set_period', MODULE.PostSettings.period_slider, 1, 30)
+										local mins = MODULE.PostSettings.period_slider[0]
+										imgui.TextDisabled(u8('Следующий доклад через ' .. (mins * 60) .. ' сек после начала.'))
+									end
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##post_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##post_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.general.auto_doklad_post = MODULE.PostSettings.auto_doklad[0]
+										settings.general.post_doklad_period = MODULE.PostSettings.period_slider[0]
+										save_settings()
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки /post сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /wanteds ' .. fa.GEAR .. '##cc_wanteds_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.WantedsSettings and MODULE.WantedsSettings.period_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Checkbox(u8' Включить авто-обновление##wanteds_set_auto', MODULE.WantedsSettings.auto_update)
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Автоматически обновлять список преступников\nкаждые N секунд.\n(сканирование занимает до 7 команд по 1с)'))
+									end
+									imgui.Separator()
+									if MODULE.WantedsSettings.auto_update[0] then
+										imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-обновления (сек):'))
+										if imgui.IsItemHovered() then
+											imgui.SetTooltip(u8('Как часто сканировать список /wanted.\nМинимум 10с, т.к. сканирование занимает до 7 команд по 1с.'))
+										end
+										imgui.SliderInt('##wanteds_set_period', MODULE.WantedsSettings.period_slider, 10, 60)
+										local secs = MODULE.WantedsSettings.period_slider[0]
+										imgui.TextDisabled(u8('Следующее обновление через ' .. secs .. ' сек после старта.'))
+									end
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##wanteds_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##wanteds_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.mj.auto_update_wanteds = MODULE.WantedsSettings.auto_update[0]
+										settings.mj.wanted_update_period = MODULE.WantedsSettings.period_slider[0]
+										save_settings()
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки /wanteds сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /patrool ' .. fa.GEAR .. '##cc_patrool_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.PatroolSettings and MODULE.PatroolSettings.period_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Checkbox(u8' Включить авто-доклады##patrool_set_auto', MODULE.PatroolSettings.auto_doklad)
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Автоматически отправлять доклад в рацию\nкаждые N минут, пока вы в патруле.\n(вы должны начать /' .. get_custom_cmd('tsm') .. ' чтобы функция работала)'))
+									end
+									imgui.Separator()
+									if MODULE.PatroolSettings.auto_doklad[0] then
+										imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-доклада (минут):'))
+										if imgui.IsItemHovered() then
+											imgui.SetTooltip(u8('Как часто отправлять доклад в рацию.\nДиапазон: от 1 до 30 минут.'))
+										end
+										imgui.SliderInt('##patrool_set_period', MODULE.PatroolSettings.period_slider, 1, 30)
+										local mins = MODULE.PatroolSettings.period_slider[0]
+										imgui.TextDisabled(u8('Следующий доклад через ' .. (mins * 60) .. ' сек после начала.'))
+									end
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##patrool_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##patrool_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.mj.auto_doklad_patrool = MODULE.PatroolSettings.auto_doklad[0]
+										settings.mj.patrool_doklad_period = MODULE.PatroolSettings.period_slider[0]
+										save_settings()
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки /patrool сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /afind ' .. fa.GEAR .. '##cc_afind_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								if MODULE.AfindSettings and MODULE.AfindSettings.cd_slider then
+									imgui.PushItemWidth(300 * settings.general.custom_dpi)
+									imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД между /find (сек):'))
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Как часто отправлять /find при авто-поиске.\nМеньше - чаще обновление позиции, но выше нагрузка.'))
+									end
+									imgui.SliderFloat('##afind_set_cd', MODULE.AfindSettings.cd_slider, 1, 10, '%.1f')
+									imgui.Separator()
+									imgui.Checkbox(u8' Авто-остановка при приближении к цели##afind_set_autostop', MODULE.AfindSettings.auto_stop)
+									if imgui.IsItemHovered() then
+										imgui.SetTooltip(u8('Автоматически останавливать авто-поиск,\nкогда вы подошли к цели на заданный радиус.'))
+									end
+									if MODULE.AfindSettings.auto_stop[0] then
+										imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8(' Радиус остановки (м):'))
+										if imgui.IsItemHovered() then
+											imgui.SetTooltip(u8('На каком расстоянии от цели авто-поиск будет остановлен.'))
+										end
+										imgui.SliderFloat('##afind_set_radius', MODULE.AfindSettings.radius_slider, 5, 100, '%.0f')
+									end
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##afind_set_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##afind_set_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+										settings.mj.afind_find_cd = MODULE.AfindSettings.cd_slider[0]
+										settings.mj.afind_auto_stop = MODULE.AfindSettings.auto_stop[0]
+										settings.mj.afind_stop_radius = MODULE.AfindSettings.radius_slider[0]
+										save_settings()
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки /afind сохранены.', message_color)
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.EndPopup()
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки экспертиз ' .. fa.GEAR .. '##cc_forensic_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+								change_dpi()
+								local fe = MODULE.ForensicEditor
+								local types = modules.forensic.data.types
+								imgui.CenterText(fa.CLOCK .. u8' Задержка между строками отыгровки (секунды):')
+								imgui.PushItemWidth(579 * settings.general.custom_dpi)
+								imgui.SliderFloat('##forensic_wait', fe.waiting_slider, 0.5, 10, '%.1f')
+								if imgui.IsItemHovered() then imgui.SetTooltip(u8('Общая задержка между строками для ВСЕХ экспертиз.')) end
+								imgui.PopItemWidth()
+								imgui.Separator()
+								imgui.CenterText(fa.LIST .. u8' Отыгровки экспертиз:')
+								local rows_h = math.min(250, 10 + #types * 30) * settings.general.custom_dpi
+								if imgui.BeginChild('##forensic_edit_list', imgui.ImVec2(589 * settings.general.custom_dpi, rows_h), true) then
+									for i, t in ipairs(types) do
+										imgui.Text(u8(t.name))
+										imgui.SameLine()
+										local st2 = imgui.GetStyle()
+										local bw = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + 2 * st2.FramePadding.x
+										local max_x = imgui.GetContentRegionMax().x
+										if imgui.GetCursorPosX() + bw < max_x then imgui.SetCursorPosX(max_x - bw) end
+										if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##fe_edit_' .. i) then
+											fe.sel = i
+											local prepared = u8(t.text):gsub('&', '\n')
+											fe.input_text = imgui.new.char[8192](prepared)
+											imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Отыгровка экспертизы ' .. fa.PEN_TO_SQUARE .. '##fe_edit_popup')
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8'Изменить отыгровку') end
+										imgui.Separator()
+									end
+									if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Отыгровка экспертизы ' .. fa.PEN_TO_SQUARE .. '##fe_edit_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+										change_dpi()
+										local t = types[fe.sel or 1]
+										imgui.CenterText(u8(t.name))
+										imgui.PushTextWrapPos(imgui.GetCursorPosX() + 560 * settings.general.custom_dpi)
+										imgui.TextDisabled(u8('Каждая строка = отдельная команда. & разделяет строки. Теги: {pause}, {wait(мс)}.'))
+										imgui.PopTextWrapPos()
+										imgui.InputTextMultiline('##fe_text', fe.input_text, 8192, imgui.ImVec2(560 * settings.general.custom_dpi, 190 * settings.general.custom_dpi))
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##fe_edit_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then imgui.CloseCurrentPopup() end
+										imgui.SameLine()
+										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##fe_edit_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+											t.text = u8:decode(ffi.string(fe.input_text)):gsub('\n', '&')
+											save_module('forensic')
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Отыгровка «' .. message_color_hex .. t.name .. ' {ffffff}» сохранена.', message_color)
+											imgui.CloseCurrentPopup()
+										end
+										imgui.End()
+									end
+									imgui.EndChild()
+								end
+								imgui.Separator()
+								if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##fe_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+								imgui.SameLine()
+								if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##fe_save', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+									modules.forensic.data.default_wait = fe.waiting_slider[0]
+									save_module('forensic')
+									sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки экспертиз сохранены.', message_color)
+									imgui.CloseCurrentPopup()
+								end
+								imgui.End()
+							end
+							imgui.EndChild()
+						end
+						imgui.EndTabItem()
+					end
+					function render_cmds(isManage)
+						local cmd_array = (isManage and modules.commands.data.commands_manage.my or modules.commands.data.commands.my)
+						local function render_binder_editor(popup_id)
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 425 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+							if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование команды ' .. fa.PEN_TO_SQUARE .. popup_id, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+								change_dpi()
+								if imgui.BeginChild('##binder_edit' .. popup_id, imgui.ImVec2(589 * settings.general.custom_dpi, 361 * settings.general.custom_dpi), true) then
+									imgui.CenterText(fa.FILE_LINES .. u8' Описание команды:')
+									imgui.PushItemWidth(579 * settings.general.custom_dpi)
+									imgui.InputText("##binder_desc" .. popup_id, MODULE.Binder.input_description, 256)
+									imgui.Separator()
+									imgui.CenterText(fa.TERMINAL .. u8' Команда для использования в чате (без /):')
+									imgui.PushItemWidth(579 * settings.general.custom_dpi)
+									imgui.InputText("##binder_cmd" .. popup_id, MODULE.Binder.input_cmd, 256)
+									local cmd = ffi.string(MODULE.Binder.input_cmd)
+									if cmd:sub(1,1) == '/' then cmd = cmd:gsub("^/+", ""); imgui.StrCopy(MODULE.Binder.input_cmd, cmd) end
+									imgui.Separator()
+									imgui.CenterText(fa.CODE .. u8' Аргументы которые принимает команда:')
+									local args = {[1] = '{arg}', [2] = '{id}', [3] = '{id} {arg}', [4] = '{id} {number} {arg}'}
+									local selected_args = args[MODULE.Binder.ComboTags[0]]
+									if selected_args then
+										for token in selected_args:gmatch("{[^}]+}") do
+											if imgui.Button(token .. '##binder_tok' .. popup_id, imgui.ImVec2(65 * settings.general.custom_dpi, 24 * settings.general.custom_dpi)) then insert_to_cursor(token .. ' ', MODULE.Binder.input_text) end
+											imgui.SameLine()
+										end
+									end
+									imgui.PushItemWidth(581 * settings.general.custom_dpi - imgui.GetCursorPos().x)
+									imgui.Combo(u8'##binder_combo' .. popup_id, MODULE.Binder.ComboTags, MODULE.Binder.ImItems, #MODULE.Binder.item_list)
+									imgui.Separator()
+									imgui.CenterText(fa.FILE_WORD .. u8' Текстовый бинд команды:')
+									imgui.InputTextMultiline("##binder_text" .. popup_id, MODULE.Binder.input_text, 8192, imgui.ImVec2(579 * settings.general.custom_dpi, 173 * settings.general.custom_dpi), imgui.InputTextFlags.CallbackAlways + imgui.InputTextFlags.CallbackCompletion, TextEditCallback)
+									imgui.EndChild()
+								end
+								if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##binder_cancel' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then imgui.CloseCurrentPopup() end
+								imgui.SameLine()
+								if imgui.Button(fa.CLOCK .. u8' Задержка##binder_wait' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then imgui.OpenPopup(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##binder_wait' .. popup_id) end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##binder_wait' .. popup_id, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+									imgui.PushItemWidth(250 * settings.general.custom_dpi)
+									imgui.SliderFloat(u8'##binder_waiting' .. popup_id, MODULE.Binder.waiting_slider, 0.3, 10)
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##binder_wait_cancel' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then MODULE.Binder.waiting_slider = imgui.new.float(tonumber(MODULE.Binder.data.change_waiting)); imgui.CloseCurrentPopup() end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##binder_wait_save' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then imgui.CloseCurrentPopup() end
+									imgui.End()
+								end
+								imgui.SameLine()
+								if imgui.Button(fa.TAGS .. u8' Теги##binder_tags' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then imgui.OpenPopup(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##binder_tags' .. popup_id) end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##binder_tags' .. popup_id, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+									if imgui.BeginChild("binder_taglist" .. popup_id, imgui.ImVec2(589 * settings.general.custom_dpi, 361 * settings.general.custom_dpi), true) then
+										imgui.Columns(3, "binder_tags_columns" .. popup_id, true)
+										imgui.Text(u8"Тег"); imgui.NextColumn(); imgui.Text(u8"Описание тега"); imgui.NextColumn(); imgui.Text(u8"Результат использования тега"); imgui.NextColumn()
+										imgui.Columns(1); imgui.Separator()
+										imgui.BulletText(u8("Взаимодействие с биндером")); imgui.Separator()
+										imgui.Columns(3, "binder_tags_columns" .. popup_id, true)
+										if imgui.Selectable("{pause}") then insert_to_cursor("{pause}", MODULE.Binder.input_text); imgui.CloseCurrentPopup() end
+										imgui.NextColumn(); imgui.Text(u8('Поставить команду на паузу')); imgui.NextColumn(); imgui.Text(u8('Менюшка паузы команды')); imgui.NextColumn()
+										imgui.Columns(1); imgui.Columns(3, "binder_tags_columns" .. popup_id, true)
+										if imgui.Selectable("{wait(5000)}") then insert_to_cursor("{wait(5000)}", MODULE.Binder.input_text); imgui.CloseCurrentPopup() end
+										imgui.NextColumn(); imgui.Text(u8('Доп.кастомная задержка')); imgui.NextColumn(); imgui.Text(u8('Вместо 5000 любое время в МС')); imgui.NextColumn()
+										imgui.Columns(1)
+										local last_category = nil
+										for _, tag in ipairs(MODULE.Binder.tags) do
+											if tag.category ~= last_category then imgui.Columns(1); imgui.Separator(); imgui.BulletText(u8(tag.category)); imgui.Separator(); imgui.Columns(3, "binder_tags_columns" .. popup_id, true); last_category = tag.category end
+											if imgui.Selectable("{" .. tag.key .. "}") then insert_to_cursor("{" .. tag.key .. "}", MODULE.Binder.input_text); imgui.CloseCurrentPopup() end
+											imgui.NextColumn(); imgui.Text(u8(tag.description)); imgui.NextColumn()
+											local example = ""
+											if tag.func and not tag.no_preview then
+												local ok, result = pcall(tag.func)
+												if ok and result then example = tostring(result) end
+											end
+											imgui.Text(u8(example)); imgui.NextColumn()
+										end
+										imgui.Columns(1); imgui.EndChild()
+									end
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_tags_close' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then imgui.CloseCurrentPopup() end
+									imgui.End()
+								end
+								if not IS_MOBILE then
+									imgui.SameLine()
+									if imgui.Button(fa.KEYBOARD .. u8' Забиндить##binder_bind' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(5), 0)) then
+										if MODULE.Binder.ComboTags[0] == 0 then
+											if hotkey_ok then
+												if hotkey.HotKeyIsEdit ~= nil then hotkey.HotKeyIsEdit = nil end
+												imgui.OpenPopup(fa.KEYBOARD .. u8' Бинд для команды /' .. MODULE.Binder.data.change_cmd .. '##binder_bind' .. popup_id)
+											else
+												sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Данная функция недоступна, у вас отсуствуют файлы библиотеки mimgui_hotkeys!', message_color)
+											end
+										else
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Данная функция доступа только если команда "Без аргументов"', message_color)
+										end
+									end
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(fa.KEYBOARD .. u8' Бинд для команды /' .. MODULE.Binder.data.change_cmd .. '##binder_bind' .. popup_id, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+										local hotkeyObject = hotkeys[MODULE.Binder.data.change_cmd .. "HotKey"]
+										if hotkeyObject then
+											imgui.CenterText(u8('Клавиша активации бинда:'))
+											local calc
+											if MODULE.Binder.data.change_bind == '{}' or MODULE.Binder.data.change_bind == '[]' then calc = imgui.CalcTextSize('< click and select keys >')
+											elseif MODULE.Binder.data.change_bind == nil then MODULE.Binder.data.change_bind = {}
+											else calc = imgui.CalcTextSize(getNameKeysFrom(MODULE.Binder.data.change_bind)) end
+											local width = imgui.GetWindowWidth()
+											local temp = (calc and calc.x and calc.x / 2) or 0
+											imgui.SetCursorPosX(width / 2 - temp)
+											if hotkeyObject:ShowHotKey() then MODULE.Binder.data.change_bind = encodeJson(hotkeyObject:GetHotKey()) end
+										else
+											if not MODULE.Binder.data.change_bind then MODULE.Binder.data.change_bind = {} end
+											hotkeys[MODULE.Binder.data.change_cmd .. "HotKey"] = hotkey.RegisterHotKey(MODULE.Binder.data.change_cmd .. "HotKey", false, decodeJson(MODULE.Binder.data.change_bind), function()
+												if not sampIsCursorActive() then sampProcessChatInput('/' .. MODULE.Binder.data.change_cmd) end
+											end)
+											hotkeyObject = hotkeys[MODULE.Binder.data.change_cmd .. "HotKey"]
+										end
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_bind_close' .. popup_id, imgui.ImVec2(300 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+										imgui.End()
+									end
+								end
+								imgui.SameLine()
+								if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##binder_save' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then
+									local cmd = ffi.string(MODULE.Binder.input_cmd)
+									local desc = ffi.string(MODULE.Binder.input_description)
+									local text_value = ffi.string(MODULE.Binder.input_text)
+									local has_id = text_value:find("{id}"); local has_arg = text_value:find("{arg}"); local has_number = text_value:find("{number}")
+									if cmd:find("[^%w_]") or cmd == '' or desc == '' or text_value == '' then
+										imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Ошибка сохранения команды ' .. fa.TRIANGLE_EXCLAMATION .. '##binder_err' .. popup_id)
+									else
+										local new_arg = ''
+										if has_number or MODULE.Binder.ComboTags[0] == 4 then new_arg = '{id} {number} {arg}'
+										elseif (has_id and has_arg) or MODULE.Binder.ComboTags[0] == 3 then new_arg = '{id} {arg}'
+										elseif has_id or MODULE.Binder.ComboTags[0] == 2 then new_arg = '{id}'
+										elseif has_arg or MODULE.Binder.ComboTags[0] == 1 then new_arg = '{arg}'
+										else new_arg = '' end
+										local new_command = u8:decode(ffi.string(MODULE.Binder.input_cmd))
+										local temp_array = (MODULE.Binder.data.create_command_9_10) and modules.commands.data.commands_manage.my or modules.commands.data.commands.my
+										for _, command2 in ipairs(temp_array) do
+											if command2.cmd == MODULE.Binder.data.change_cmd and command2.arg == MODULE.Binder.data.change_arg and command2.text:gsub('&', '\n') == MODULE.Binder.data.change_text then
+												command2.cmd = new_command
+												command2.arg = new_arg
+												command2.description = u8:decode(ffi.string(MODULE.Binder.input_description))
+												command2.text = u8:decode(ffi.string(MODULE.Binder.input_text)):gsub('\n', '&')
+												command2.bind = MODULE.Binder.data.change_bind
+												command2.waiting = MODULE.Binder.waiting_slider[0]
+												command2.enable = true
+												save_module('commands')
+												if command2.arg == '' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' {ffffff}успешно сохранена!', message_color)
+												elseif command2.arg == '{arg}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [аргумент] {ffffff}успешно сохранена!', message_color)
+												elseif command2.arg == '{id}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [ID игрока] {ffffff}успешно сохранена!', message_color)
+												elseif command2.arg == '{id} {arg}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [ID игрока] [аргумент] {ffffff}успешно сохранена!', message_color)
+												elseif command2.arg == '{id} {number} {arg}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [ID игрока] [число] [аргумент] {ffffff}успешно сохранена!', message_color) end
+												if MODULE.Binder.data.change_cmd ~= 'afind' then sampUnregisterChatCommand(MODULE.Binder.data.change_cmd) end
+												register_command(command2.cmd, command2.arg, command2.text, tonumber(command2.waiting))
+												if not IS_MOBILE then createHotkeyForCommand(command2) end
+												break
+											end
+										end
+										imgui.CloseCurrentPopup()
+									end
+								end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Ошибка сохранения команды ' .. fa.TRIANGLE_EXCLAMATION .. '##binder_err' .. popup_id, _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+									if ffi.string(MODULE.Binder.input_cmd):find('%W') then imgui.BulletText(u8" В команде можно использовать только англ.буквы и цифры!")
+									elseif ffi.string(MODULE.Binder.input_cmd) == '' then imgui.BulletText(u8" Текстовый бинд команды не может быть пустой!") end
+									if ffi.string(MODULE.Binder.input_description) == '' then imgui.BulletText(u8" Описание команды не может быть пустое!") end
+									if ffi.string(MODULE.Binder.input_text) == '' then imgui.BulletText(u8" Бинд команды не может быть пустой!") end
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_error_close' .. popup_id, imgui.ImVec2(400 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+									imgui.End()
+								end
+								imgui.End()
+							end
+						end
+						imgui.PushItemWidth(-1)
+						imgui.InputTextWithHint('##cmd_search_rp', u8'Поиск команд...', MODULE.Main.cmd_search, 128)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						local list_h = imgui.GetContentRegionAvail().y - (30 * settings.general.custom_dpi)
+						if imgui.BeginChild('##' .. (isManage and 1 or 2), imgui.ImVec2(589 * settings.general.custom_dpi, list_h), true) then
+							imgui.Columns(3)
+							imgui.CenterColumnText(u8"Команда")
+							imgui.SetColumnWidth(-1, 170 * settings.general.custom_dpi)
+							imgui.NextColumn()
+							imgui.CenterColumnText(u8"Описание")
+							imgui.SetColumnWidth(-1, 300 * settings.general.custom_dpi)
+							imgui.NextColumn()
+							imgui.CenterColumnText(u8"Действие")
+							imgui.SetColumnWidth(-1, 150 * settings.general.custom_dpi)
+							imgui.Columns(1)
+							imgui.Separator()
+							if isManage then
+								imgui.Columns(3)
+								imgui.CenterColumnText(u8"/spcar"); imgui.NextColumn()
+								imgui.CenterColumnText(u8"Заспавнить транспорт организации"); imgui.NextColumn()
+								imgui.CenterColumnText(u8"Недоступно"); imgui.Columns(1); imgui.Separator()
+								imgui.Columns(3)
+								imgui.CenterColumnText(u8"/fcleaner"); imgui.NextColumn()
+								imgui.CenterColumnText(u8"Уволить неактивных членов организации"); imgui.NextColumn()
+								imgui.CenterColumnText(u8"Недоступно"); imgui.Columns(1); imgui.Separator()
+							else
+								imgui.Columns(3)
+								imgui.CenterColumnText(u8"/stop"); imgui.NextColumn()
+								imgui.CenterColumnText(u8"Остановить отыгровку любой RP команды"); imgui.NextColumn()
+								imgui.CenterColumnText(u8"Недоступно"); imgui.Columns(1); imgui.Separator()
+							end
+							for index, command in ipairs(cmd_array) do
+								local show_cmd = cmd_matches_search(command.cmd, command.description)
+								if show_cmd then
+									imgui.Columns(3)
+									if command.enable then imgui.CenterColumnText('/' .. u8(command.cmd)) else imgui.CenterColumnTextDisabled('/' .. u8(command.cmd)) end
+									imgui.NextColumn()
+									if command.enable then imgui.CenterColumnText(u8(command.description)) else imgui.CenterColumnTextDisabled(u8(command.description)) end
+									imgui.NextColumn()
+									imgui.Text('  ')
+									imgui.SameLine()
+									if imgui.SmallButton((command.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##' .. index) then
+										command.enable = not command.enable
+										save_module('commands')
+										if command.enable then register_command(command.cmd, command.arg, command.text, tonumber(command.waiting))
+										else sampUnregisterChatCommand(command.cmd) end
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8((command.enable and "Отключение команды /" or "Включение команды /") .. command.cmd)) end
+									imgui.SameLine()
+									if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##' .. index) then
+										if command.arg == '' then MODULE.Binder.ComboTags[0] = 0
+										elseif command.arg == '{arg}' then MODULE.Binder.ComboTags[0] = 1
+										elseif command.arg == '{id}' then MODULE.Binder.ComboTags[0] = 2
+										elseif command.arg == '{id} {arg}' then MODULE.Binder.ComboTags[0] = 3
+										elseif command.arg == '{id} {number} {arg}' then MODULE.Binder.ComboTags[0] = 4 end
+										MODULE.Binder.data = {
+											change_waiting = command.waiting, change_cmd = command.cmd,
+											change_text = command.text:gsub('&', '\n'), change_arg = command.arg,
+											change_bind = command.bind, create_command_9_10 = isManage
+										}
+										MODULE.Binder.input_description = imgui.new.char[256](u8(command.description))
+										MODULE.Binder.input_cmd = imgui.new.char[256](u8(command.cmd))
+										MODULE.Binder.input_text = imgui.new.char[8192](u8(MODULE.Binder.data.change_text))
+										MODULE.Binder.waiting_slider = imgui.new.float(tonumber(command.waiting))
+										imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование команды ' .. fa.PEN_TO_SQUARE .. '##binder_edit_popup_' .. index)
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8"Изменение команды /"..command.cmd) end
+									render_binder_editor('##binder_edit_popup_' .. index)
+									imgui.SameLine()
+									if imgui.SmallButton(fa.TRASH_CAN .. '##' .. index) then
+										imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. index)
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8"Удаление команды /"..command.cmd) end
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. index, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										change_dpi()
+										imgui.CenterText(u8'Вы действительно хотите удалить команду /' .. u8(command.cmd) .. '?')
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##delete_cmd' .. index, imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+										imgui.SameLine()
+										if imgui.Button(fa.TRASH_CAN .. u8' Удалить##delete_cmd' .. index, imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											sampUnregisterChatCommand(command.cmd)
+											table.remove(cmd_array, index)
+											save_module('commands')
+											imgui.CloseCurrentPopup()
+										end
+										imgui.End()
+									end
+									imgui.Columns(1)
+									imgui.Separator()
+								end
+							end
+							imgui.EndChild()
+						end
+						if imgui.Button(fa.CIRCLE_PLUS .. u8' Создать новую команду##new_cmd' .. (isManage and 1 or 2), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+							local new_cmd = {cmd = '', description = '', text = '', arg = '', enable = true, waiting = '2', bind = "{}"}
+							table.insert(cmd_array, new_cmd)
+							MODULE.Binder.data = {
+								change_waiting = new_cmd.waiting, change_cmd = new_cmd.cmd,
+								change_text = new_cmd.text, change_arg = new_cmd.arg,
+								change_bind = new_cmd.bind, create_command_9_10 = isManage
+							}
+							MODULE.Binder.ComboTags[0] = 0
+							MODULE.Binder.input_description = imgui.new.char[256]("")
+							MODULE.Binder.input_cmd = imgui.new.char[256]("")
+							MODULE.Binder.input_text = imgui.new.char[8192]("")
+							MODULE.Binder.waiting_slider = imgui.new.float(1.5)
+							imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование команды ' .. fa.PEN_TO_SQUARE .. '##binder_create_popup')
+						end
+						render_binder_editor('##binder_create_popup')
+					end
+					if imgui.BeginTabItem(fa.BARS..u8' RP-команды ') then
+						render_cmds(false)
+						imgui.EndTabItem()
+					end
+					if imgui.BeginTabItem(fa.BARS..u8' RP-команды (9/10) ') then
+						if modules.player.data.fraction_rank_number >= 9 then
+							render_cmds(true)
+						else
+							if imgui.BeginChild('##no_rank_access', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+								imgui.CenterText(fa.TRIANGLE_EXCLAMATION .. u8" Внимание " .. fa.TRIANGLE_EXCLAMATION)
+								imgui.Separator()
+								imgui.CenterText(u8"У вас нету доступа к данным командам!")
+								imgui.CenterText(u8"Необходимо иметь 9 или 10 ранг, у вас же - " .. modules.player.data.fraction_rank_number .. u8" ранг!")
+								imgui.Separator()
+								imgui.EndChild()
+							end
+						end
+						imgui.EndTabItem()
+					end
+					if imgui.BeginTabItem(fa.COMPASS .. u8' Фаст Меню ') then
+						function render_fastmenu(name, use, text, text2)
+							if imgui.BeginChild('##fastmenu'..name, imgui.ImVec2(193.3 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+								imgui.CenterText(u8(name))
+								imgui.Separator()
+								imgui.CenterText(u8("Использование:"))
+								if name == 'Leader FastMenu' and modules.player.data.fraction_rank_number < 9 then imgui.CenterText(u8"Вам недоступно, вы не 9/10")
+								else imgui.CenterText(use) end
+								imgui.SetCursorPosY(120 * settings.general.custom_dpi)
+								imgui.CenterText(fa.CIRCLE_INFO .. u8(" Описание:"))
+								imgui.CenterText(u8(text))
+								imgui.SetCursorPosY(210 * settings.general.custom_dpi)
+								imgui.CenterText(fa.TAG .. u8(" Требуется аргумент:"))
+								imgui.CenterText(u8(text2))
+								imgui.SetCursorPosY(308 * settings.general.custom_dpi)
+								if imgui.Button(fa.GEAR .. u8(' Настроить команды меню ') .. "##" .. name) then
+									if name == 'Leader FastMenu' and modules.player.data.fraction_rank_number < 9 then
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Данное лидерское фастменю доступно только для 9 или 10 ранга!', message_color)
+									else
+										imgui.OpenPopup(fa.COMPASS .. u8' Настройка команд в ' .. u8(name) .. ' ' .. fa.COMPASS .. "##" .. name)
+									end
+								end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.COMPASS .. u8' Настройка команд в ' .. u8(name) .. ' ' .. fa.COMPASS .. "##" .. name, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+									change_dpi()
+									if imgui.BeginChild('##fastmenu_configurige'..name, imgui.ImVec2(591 * settings.general.custom_dpi, 365 * settings.general.custom_dpi), true) then
+										local arr = (name == 'Leader FastMenu') and modules.commands.data.commands_manage.my or modules.commands.data.commands.my
+										imgui.Columns(3)
+										imgui.CenterColumnText(u8"Нахождение в меню")
+										imgui.SetColumnWidth(-1, 160 * settings.general.custom_dpi)
+										imgui.NextColumn()
+										imgui.CenterColumnText(u8"Команда")
+										imgui.SetColumnWidth(-1, 150 * settings.general.custom_dpi)
+										imgui.NextColumn()
+										imgui.CenterColumnText(u8"Описание")
+										imgui.SetColumnWidth(-1, 300 * settings.general.custom_dpi)
+										imgui.Columns(1)
+										local no_id_commands = true
+										for index, value in ipairs(arr) do
+											if (value.arg == "{id}") then
+												no_id_commands = false
+												imgui.Separator()
+												imgui.Columns(3)
+												local enabled = (value.in_fastmenu == true)
+												if not enabled then
+													imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.5, 0.5, 0.5, 0.6))
+												end
+												local btn = (enabled) and (fa.SQUARE_CHECK .. u8'  (есть)') or (fa.SQUARE .. u8'  (нету)')
+												if imgui.CenterColumnSmallButton(btn .. '##' .. index, imgui.ImVec2(imgui.GetMiddleButtonX(5), 0)) then
+													value.in_fastmenu = not value.in_fastmenu
+													save_module('commands')
+												end
+												imgui.NextColumn()
+												if enabled then imgui.CenterColumnText('/' .. value.cmd)
+												else imgui.CenterColumnTextDisabled('/' .. value.cmd) end
+												imgui.NextColumn()
+												if enabled then imgui.CenterColumnText(u8(value.description))
+												else imgui.CenterColumnTextDisabled(u8(value.description)) end
+												imgui.Columns(1)
+												if not enabled then imgui.PopStyleColor() end
+											end
+										end
+										if no_id_commands then
+											imgui.Separator()
+											imgui.NewLine(); imgui.NewLine(); imgui.NewLine(); imgui.NewLine(); imgui.NewLine(); imgui.NewLine(); imgui.NewLine()
+											imgui.Separator()
+											imgui.CenterText(fa.CIRCLE_EXCLAMATION .. u8" Внимание " .. fa.CIRCLE_EXCLAMATION)
+											imgui.CenterText(u8("У вас нету RP команд, которые принимают и используют аргумент {id}"))
+											local list_name = (name == 'Leader FastMenu') and "'RP команды (9/10)'" or "'RP команды'"
+											imgui.CenterText(u8("Добавьте их в разделе 'Команды' - " .. list_name))
+										end
+										imgui.Separator()
+										imgui.EndChild()
+									end
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##close_fast', imgui.ImVec2(591 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+									imgui.End()
+								end
+								imgui.EndChild()
+							end
+						end
+						render_fastmenu('FastMenu', u8'/hm ID или ' .. fa.KEYBOARD .. (IS_MOBILE and u8' Кнопочки' or u8' Hotkeys'), 'Быстрые RP команды', '{id}')
+						imgui.SameLine()
+						render_fastmenu('Leader FastMenu', u8'/lm ID' .. (IS_MOBILE and '' or (u8' или ' .. fa.KEYBOARD .. u8' Hotkeys')), 'Быстрые RP команды 9-10', '{id}')
+						imgui.SameLine()
+						if imgui.BeginChild('##piemenu_editor', imgui.ImVec2(193.3 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+							imgui.CenterText(u8("PieMenu"))
+							imgui.Separator()
+							imgui.CenterText(u8("Использование:"))
+							if IS_MOBILE then
+								imgui.CenterText(fa.KEYBOARD .. u8' Кнопочки')
+							else
+								imgui.CenterText(fa.COMPUTER_MOUSE .. u8' СКМ (колёсико)')
+								if imgui.CenterButton(settings.general.piemenu and fa.TOGGLE_ON .. u8(' Отключить') or fa.TOGGLE_OFF .. u8(' Включить')) then
+									if pie_ok then
+										settings.general.piemenu = not settings.general.piemenu
+										MODULE.PieMenu.Window[0] = settings.general.piemenu
+										save_settings()
+									else
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}У вас отсуствует библиотека PieMenu, невозможно включить/настроить круговое меню!', message_color)
+									end
+								end
+							end
+							imgui.SetCursorPosY(120 * settings.general.custom_dpi)
+							imgui.CenterText(fa.CIRCLE_INFO .. u8(" Описание:"))
+							imgui.CenterText(u8('Быстрый вызов команд'))
+							imgui.SetCursorPosY(210 * settings.general.custom_dpi)
+							imgui.CenterText(fa.TAG .. u8(" Требуется аргумент:"))
+							imgui.CenterText(u8('Без аргумента'))
+							imgui.SetCursorPosY(308 * settings.general.custom_dpi)
+							if imgui.Button(fa.GEAR .. u8(' Настроить круговое меню ')) then
+								if pie_ok then
+									MODULE.PieMenu.editor.current = modules.piemenu.data
+									MODULE.PieMenu.editor.history = {}
+									MODULE.PieMenu.editor.title = ''
+									imgui.OpenPopup(fa.COMPASS .. u8' Настройка PieMenu ' .. fa.COMPASS)
+								else
+									sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}У вас отсуствует библиотека PieMenu, невозможно включить/настроить круговое меню!', message_color)
+								end
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.COMPASS .. u8' Настройка PieMenu ' .. fa.COMPASS, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+								change_dpi()
+								local dpi = settings.general.custom_dpi
+								local st = imgui.GetStyle()
+								local items = MODULE.PieMenu.editor.current
+								if imgui.BeginChild('##piemenu_configurige', imgui.ImVec2(591 * dpi, 365 * dpi), true) then
+									if MODULE.PieMenu.editor.title ~= '' then
+										imgui.CenterText(u8('Редактирование подменю ') .. iconTextFormat(MODULE.PieMenu.editor.title))
+									else
+										imgui.CenterText(fa.COMPASS .. u8' Корневое меню')
+									end
+									imgui.SameLine()
+									imgui.TextDisabled(u8('(' .. #items .. '/8)'))
+									imgui.Separator()
+									if #items == 0 then
+										imgui.NewLine()
+										imgui.CenterTextDisabled(u8'Меню пусто. Добавьте первый пункт кнопкой внизу.')
+									end
+									for i, item in ipairs(items) do
+										local is_sub = item.next ~= nil
+										imgui.BulletText(iconTextFormat(item))
+										if is_sub then
+											imgui.SameLine()
+											imgui.TextDisabled(u8('(подменю)'))
+										end
+										imgui.SameLine()
+										local bw_edit = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + 2 * st.FramePadding.x
+										local bw_open = imgui.CalcTextSize(fa.GEAR).x + 2 * st.FramePadding.x
+										local bw_up   = imgui.CalcTextSize(fa.ARROW_UP).x + 2 * st.FramePadding.x
+										local bw_down = imgui.CalcTextSize(fa.ARROW_DOWN).x + 2 * st.FramePadding.x
+										local bw_del  = imgui.CalcTextSize(fa.TRASH_CAN).x + 2 * st.FramePadding.x
+										local btn_count = 2 + (is_sub and 1 or 0) + (i > 1 and 1 or 0) + (i < #items and 1 or 0)
+										local total = bw_edit + bw_del
+										if is_sub then total = total + bw_open end
+										if i > 1 then total = total + bw_up end
+										if i < #items then total = total + bw_down end
+										total = total + (btn_count - 1) * st.ItemSpacing.x
+										local max_x = imgui.GetContentRegionMax().x
+										imgui.SetCursorPosX(math.max(imgui.GetCursorPosX(), max_x - total))
+										if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##edit_' .. i) then
+											MODULE.PieMenu.editor.item = item
+											MODULE.PieMenu.editor.name = imgui.new.char[64](u8(item.name))
+											MODULE.PieMenu.editor.action = imgui.new.char[256](u8(item.action or ''))
+											MODULE.PieMenu.editor.icon = item.icon or ''
+											imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование элемента ' .. fa.PEN_TO_SQUARE)
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8'Редактировать') end
+										if is_sub then
+											imgui.SameLine()
+											if imgui.SmallButton(fa.GEAR .. '##open_' .. i) then
+												table.insert(MODULE.PieMenu.editor.history, {title = MODULE.PieMenu.editor.title, items = items})
+												MODULE.PieMenu.editor.current = item.next
+												MODULE.PieMenu.editor.title = item
+											end
+											if imgui.IsItemHovered() then imgui.SetTooltip(u8'Открыть подменю') end
+										end
+										imgui.SameLine()
+										if imgui.SmallButton(fa.TRASH_CAN .. '##del' .. i) then
+											imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. item.name .. i)
+										end
+										if imgui.IsItemHovered() then imgui.SetTooltip(u8'Удалить') end
+										if i > 1 then
+											imgui.SameLine()
+											if imgui.SmallButton(fa.ARROW_UP .. '##up_' .. i) then
+												table.insert(items, i - 1, table.remove(items, i))
+												save_module('piemenu')
+											end
+											if imgui.IsItemHovered() then imgui.SetTooltip(u8'Переместить выше') end
+										end
+										if i < #items then
+											imgui.SameLine()
+											if imgui.SmallButton(fa.ARROW_DOWN .. '##down_' .. i) then
+												table.insert(items, i + 1, table.remove(items, i))
+												save_module('piemenu')
+											end
+											if imgui.IsItemHovered() then imgui.SetTooltip(u8'Переместить ниже') end
+										end
+										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+										if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. item.name .. i, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+											change_dpi()
+											imgui.CenterText(u8'Вы действительно хотите удалить ' .. u8(item.next and 'подменю ' or 'пункт ') .. iconTextFormat(item) .. '?')
+											imgui.Separator()
+											if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##delete' .. i, imgui.ImVec2(200 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+											imgui.SameLine()
+											if imgui.Button(fa.TRASH_CAN .. u8' Удалить##delete' .. i, imgui.ImVec2(200 * dpi, 25 * dpi)) then
+												table.remove(items, i)
+												save_module('piemenu')
+												imgui.CloseCurrentPopup()
+											end
+											imgui.End()
+										end
+										imgui.Separator()
+									end
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование элемента ' .. fa.PEN_TO_SQUARE, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										change_dpi()
+										imgui.CenterText(fa.SIGNATURE .. u8' Название:')
+										imgui.PushItemWidth(205 * settings.general.custom_dpi)
+										imgui.InputTextWithHint(u8'##name', u8'Лучше EN для меньшего размера', MODULE.PieMenu.editor.name, 64)
+										imgui.Separator()
+										if not MODULE.PieMenu.editor.item.next then
+											imgui.CenterText(fa.CIRCLE_PLAY .. u8' Действие (в чат):')
+											imgui.PushItemWidth(205 * settings.general.custom_dpi)
+											imgui.InputTextWithHint(u8'##action', u8'Любой текст/команда для чата', MODULE.PieMenu.editor.action, 256)
+										else
+											imgui.CenterText(fa.CIRCLE_PLAY .. u8' Действие:')
+											imgui.CenterText(u8'Открывает пункты внутри себя')
+										end
+										imgui.Separator()
+										imgui.CenterText(fa.IMAGE .. u8' Иконка в интерфейсе:')
+										if MODULE.PieMenu.editor.icon ~= '' then
+											imgui.SameLine()
+											imgui.Text(fa[MODULE.PieMenu.editor.icon])
+										end
+										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+										imgui.SetNextWindowSize(imgui.ImVec2(250 * settings.general.custom_dpi, 295 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+										if imgui.BeginPopupModal(fa.IMAGE .. u8' Выбор иконки элемента PieMenu ' .. fa.IMAGE, nil, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+											imgui.PushItemWidth(240 * settings.general.custom_dpi)
+											imgui.InputTextWithHint('##icon_filter', u8'Ищите иконки по названию на англ...', MODULE.Icons.input, 32)
+											local filter = ffi.string(MODULE.Icons.input):upper()
+											imgui.GetStyle().ScrollbarSize = 17 * settings.general.custom_dpi
+											if imgui.BeginChild('##icons', imgui.ImVec2(240 * settings.general.custom_dpi, 200 * settings.general.custom_dpi), true) then
+												for _, key in ipairs(MODULE.Icons.keys) do
+													if filter == '' or key:find(filter, 1, true) then
+														if imgui.Selectable(fa[key] .. ' ' .. key) then
+															MODULE.PieMenu.editor.icon = key
+															imgui.CloseCurrentPopup()
+														end
+													end
+												end
+												imgui.EndChild()
+											end
+											imgui.GetStyle().ScrollbarSize = (IS_MOBILE and 15 or 10) * settings.general.custom_dpi
+											if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+											imgui.EndPopup()
+										end
+										if imgui.Button(fa.HAND_POINT_RIGHT .. u8' Выбрать иконку из списка ' .. fa.HAND_POINT_LEFT) then
+											imgui.OpenPopup(fa.IMAGE .. u8' Выбор иконки элемента PieMenu ' .. fa.IMAGE)
+										end
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##pie_editor', imgui.ImVec2(100 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+										imgui.SameLine()
+										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##pie_editor', imgui.ImVec2(100 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											MODULE.PieMenu.editor.item.name = u8:decode(ffi.string(MODULE.PieMenu.editor.name))
+											MODULE.PieMenu.editor.item.icon = MODULE.PieMenu.editor.icon
+											if not MODULE.PieMenu.editor.item.next then
+												MODULE.PieMenu.editor.item.action = u8:decode(ffi.string(MODULE.PieMenu.editor.action))
+											end
+											save_module('piemenu')
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
+									end
+									imgui.EndChild()
+								end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.CIRCLE_PLUS .. u8' Выберите что именно нужно добавить ' .. fa.CIRCLE_PLUS, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+									change_dpi()
+									if imgui.ItemSelector(u8'', { u8'Один пункт', u8'Подменю для пунктов' }, MODULE.PieMenu.editor.selector, 200 * settings.general.custom_dpi) then
+										local bool = (MODULE.PieMenu.editor.selector[0] ~= 2)
+										local number = #MODULE.PieMenu.editor.current
+										if number < 8 then
+											number = number + 1
+											if bool then table.insert(MODULE.PieMenu.editor.current, {name = 'Item ' .. number, icon = '', action = 'Item ' .. number})
+											else table.insert(MODULE.PieMenu.editor.current, {name = 'SubMenu ' .. number, icon = '', next = {}}) end
+											save_module('piemenu')
+										else
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для стабильности лимит 8 элементов в одном меню, используйте подменю!', message_color)
+										end
+										imgui.CloseCurrentPopup()
+									end
+									imgui.End()
+								end
+								if MODULE.PieMenu.editor.current == modules.piemenu.data then
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##close_pie_editor', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+									imgui.SameLine()
+									if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить пункт/подменю##add_pie_item', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then imgui.OpenPopup(fa.CIRCLE_PLUS .. u8' Выберите что именно нужно добавить ' .. fa.CIRCLE_PLUS) end
+								else
+									if imgui.Button(fa.ARROW_LEFT .. u8' Назад##pie_editor_menu', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+										local prev = table.remove(MODULE.PieMenu.editor.history)
+										MODULE.PieMenu.editor.current = prev.items
+										MODULE.PieMenu.editor.title = prev.title
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить пункт/подменю##add_pie_item', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then imgui.OpenPopup(fa.CIRCLE_PLUS .. u8' Выберите что именно нужно добавить ' .. fa.CIRCLE_PLUS) end
+									imgui.SameLine()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##close_pie_editor', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+								end
+								imgui.End()
+							end
+							imgui.EndChild()
+						end
+						imgui.EndTabItem()
+					end
+					if imgui.BeginTabItem(fa.KEYBOARD .. (IS_MOBILE and u8' Кнопочки' or u8' Хоткеи ')) then
+						if IS_MOBILE then
+							if imgui.BeginChild('##999', imgui.ImVec2(589 * settings.general.custom_dpi, 309 * settings.general.custom_dpi), true) then
+								imgui.Columns(3)
+								imgui.CenterColumnText(u8'Кнопка')
+								imgui.SetColumnWidth(-1, 200 * settings.general.custom_dpi)
+								imgui.NextColumn()
+								imgui.CenterColumnText(u8'Действие кнопки')
+								imgui.SetColumnWidth(-1, 250 * settings.general.custom_dpi)
+								imgui.NextColumn()
+								imgui.CenterColumnText(u8'Управление')
+								imgui.SetColumnWidth(-1, 120 * settings.general.custom_dpi)
+								imgui.Columns(1)
+								imgui.Separator()
+								imgui.Columns(3)
+								if settings.general.mobile_fastmenu_button then imgui.CenterColumnText(fa.IMAGE_PORTRAIT .. u8(' Взаимодействие (х32 ONLY)'))
+								else imgui.CenterColumnTextDisabled(fa.IMAGE_PORTRAIT .. u8(' Взаимодействие')) end
+								imgui.NextColumn()
+								if settings.general.mobile_fastmenu_button then imgui.CenterColumnText(u8('Быстрый аналог /hm ID'))
+								else imgui.CenterColumnTextDisabled(u8('Быстрый аналог /hm ID')) end
+								imgui.NextColumn()
+								if imgui.CenterColumnSmallButton((settings.general.mobile_fastmenu_button and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##mobile_fastmenu_button') then
+									settings.general.mobile_fastmenu_button = not settings.general.mobile_fastmenu_button
+									MODULE.FastMenuButton.Window[0] = settings.general.mobile_fastmenu_button
+									save_settings()
+								end
+								if imgui.IsItemHovered() then imgui.SetTooltip(u8(settings.general.mobile_fastmenu_button and "Отключить кнопку" or "Включить кнопку")) end
+								imgui.Columns(1)
+								imgui.Separator()
+								imgui.Columns(3)
+								if settings.general.mobile_stop_button then imgui.CenterColumnText(fa.CIRCLE_STOP..u8' Остановить отыгровку')
+								else imgui.CenterColumnTextDisabled(fa.CIRCLE_STOP..u8' Остановить отыгровку') end
+								imgui.NextColumn()
+								if settings.general.mobile_stop_button then imgui.CenterColumnText(u8('Быстрый аналог /stop'))
+								else imgui.CenterColumnTextDisabled(u8('Быстрый аналог /stop')) end
+								imgui.NextColumn()
+								if imgui.CenterColumnSmallButton((settings.general.mobile_stop_button and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##mobile_stop_button') then
+									settings.general.mobile_stop_button = not settings.general.mobile_stop_button
+									save_settings()
+								end
+								if imgui.IsItemHovered() then imgui.SetTooltip(u8(settings.general.mobile_stop_button and "Отключить кнопку" or "Включить кнопку")) end
+								imgui.Columns(1)
+								imgui.Separator()
+								imgui.Columns(3)
+								if settings.general.piemenu then imgui.CenterColumnText(fa.GEAR .. u8(' PieMenu'))
+								else imgui.CenterColumnTextDisabled(fa.GEAR .. u8(' PieMenu')) end
+								imgui.NextColumn()
+								if settings.general.piemenu then imgui.CenterColumnText(u8('Открыть круговое меню'))
+								else imgui.CenterColumnTextDisabled(u8('Открыть круговое меню')) end
+								imgui.NextColumn()
+								if imgui.CenterColumnSmallButton((settings.general.piemenu and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##mobile_piemenu_button') then
+									if pie_ok then
+										settings.general.piemenu = not settings.general.piemenu
+										MODULE.PieMenu.Window[0] = settings.general.piemenu
+										save_settings()
+									else
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}У вас отсуствует библиотека PieMenu, невозможно включить/настроить круговое меню!', message_color)
+									end
+								end
+								if imgui.IsItemHovered() then imgui.SetTooltip(u8(settings.general.piemenu and "Отключить кнопку" or "Включить кнопку")) end
+								imgui.Columns(1)
+								imgui.Separator()
+								for index, button in ipairs(modules.buttons.data) do
+									imgui.Columns(3)
+									if button.enable then imgui.CenterColumnText(iconTextFormat(button))
+									else imgui.CenterColumnTextDisabled(iconTextFormat(button)) end
+									imgui.NextColumn()
+									if button.enable then imgui.CenterColumnText(u8(button.action))
+									else imgui.CenterColumnTextDisabled(u8(button.action)) end
+									imgui.NextColumn()
+									imgui.SetCursorPosX(imgui.GetCursorPos().x + 17 * settings.general.custom_dpi)
+									if imgui.SmallButton((button.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##mb_toggle' .. index) then
+										button.enable = not button.enable
+										local WindowName = button.name .. index
+										if MODULE.Buttons[WindowName] then MODULE.Buttons[WindowName][0] = button.enable
+										else
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Кнопка заработает только после перезагрузки хелпера или перезахода в игру!', message_color)
+											play_sound()
+										end
+										save_module('buttons')
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8(button.enable and "Отключить кнопку" or "Включить кнопку")) end
+									imgui.SameLine()
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование кнопки ' .. fa.PEN_TO_SQUARE .. '##' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										change_dpi()
+										imgui.CenterText(fa.SIGNATURE .. u8' Название:')
+										imgui.PushItemWidth(205 * settings.general.custom_dpi)
+										imgui.InputTextWithHint(u8'##name', u8'Текст который будет на кнопке', MODULE.Buttons.Editor.name, 64)
+										imgui.Separator()
+										imgui.CenterText(fa.CIRCLE_PLAY .. u8' Действие (в чат):')
+										imgui.PushItemWidth(205 * settings.general.custom_dpi)
+										imgui.InputTextWithHint(u8'##action', u8'Любой текст/команда для чата', MODULE.Buttons.Editor.action, 256)
+										imgui.Separator()
+										imgui.CenterText(fa.IMAGE .. u8' Иконка:')
+										if button.icon ~= '' then imgui.SameLine(); imgui.Text(fa[button.icon]) end
+										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+										imgui.SetNextWindowSize(imgui.ImVec2(250 * settings.general.custom_dpi, 295 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+										if imgui.BeginPopupModal(fa.IMAGE .. u8' Выбор иконки для кнопки ' .. fa.IMAGE, nil, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+											imgui.PushItemWidth(240 * settings.general.custom_dpi)
+											imgui.InputTextWithHint('##icon_filter', u8'Ищите иконки по названию на англ...', MODULE.Icons.input, 32)
+											local filter = ffi.string(MODULE.Icons.input):upper()
+											imgui.GetStyle().ScrollbarSize = 17 * settings.general.custom_dpi
+											if imgui.BeginChild('##icons', imgui.ImVec2(240 * settings.general.custom_dpi, 200 * settings.general.custom_dpi), true) then
+												for _, key in ipairs(MODULE.Icons.keys) do
+													if filter == '' or key:find(filter, 1, true) then
+														if imgui.Selectable(fa[key] .. ' ' .. key) then button.icon = key; imgui.CloseCurrentPopup() end
+													end
+												end
+												imgui.EndChild()
+											end
+											imgui.GetStyle().ScrollbarSize = (IS_MOBILE and 15 or 10) * settings.general.custom_dpi
+											if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+											imgui.EndPopup()
+										end
+										if imgui.Button(fa.HAND_POINT_RIGHT .. u8' Выбрать иконку из списка ' .. fa.HAND_POINT_LEFT) then imgui.OpenPopup(fa.IMAGE .. u8' Выбор иконки для кнопки ' .. fa.IMAGE) end
+										imgui.Separator()
+										imgui.CenterText(fa.MAXIMIZE .. u8(" Размер (X, Y):"))
+										imgui.PushItemWidth(100 * settings.general.custom_dpi)
+										imgui.SliderInt(u8"##sizex", MODULE.Buttons.Editor.size.x, 1, 500)
+										imgui.SameLine()
+										imgui.PushItemWidth(100 * settings.general.custom_dpi)
+										imgui.SliderInt(u8"##sizey", MODULE.Buttons.Editor.size.y, 1, 500)
+										imgui.Separator()
+										imgui.CenterText(fa.DRAW_POLYGON .. u8(" Позиция на экране:"))
+										imgui.CenterText(u8('Зажмите кнопку в углу и двигайте'))
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(100 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+										imgui.SameLine()
+										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(100 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											button.name = u8:decode(ffi.string(MODULE.Buttons.Editor.name))
+											button.action = u8:decode(ffi.string(MODULE.Buttons.Editor.action))
+											button.size.x = MODULE.Buttons.Editor.size.x[0]
+											button.size.y = MODULE.Buttons.Editor.size.y[0]
+											save_module('buttons')
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Размер изменится только после перезагрузки хелпера или перезахода в игру!', message_color)
+											play_sound()
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
+									end
+									if imgui.CenterColumnSmallButton(fa.PEN_TO_SQUARE .. '##mb_edit' .. index) then
+										imgui.StrCopy(MODULE.Buttons.Editor.name, u8(button.name))
+										imgui.StrCopy(MODULE.Buttons.Editor.action, u8(button.action))
+										MODULE.Buttons.Editor.size.x = imgui.new.int(button.size.x)
+										MODULE.Buttons.Editor.size.y = imgui.new.int(button.size.y)
+										imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование кнопки ' .. fa.PEN_TO_SQUARE .. '##' .. index)
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8("Редактировать кнопку")) end
+									imgui.SameLine()
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. index, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										change_dpi()
+										imgui.CenterText(u8("Вы действительно хотите удалить \"" .. button.name .. "\"?"))
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+										imgui.SameLine()
+										if imgui.Button(fa.TRASH_CAN .. u8' Удалить', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											table.remove(modules.buttons.data, index)
+											save_module('buttons')
+											local WindowName = button.name .. index
+											if MODULE.Buttons[WindowName] and MODULE.Buttons[WindowName][0] then MODULE.Buttons[WindowName][0] = false end
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
+									end
+									if imgui.SmallButton(fa.TRASH_CAN .. '##mb_delete' .. index) then
+										imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. index)
+									end
+									if imgui.IsItemHovered() then imgui.SetTooltip(u8("Удалить кнопку")) end
+									imgui.Columns(1)
+									imgui.Separator()
+								end
+								imgui.EndChild()
+							end
+							if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить кнопку##add_mobile_button', imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+								local new_button = {icon = '', name = 'Button ' .. (#modules.buttons.data + 1), action = '', enable = false, size = {x = 100, y = 25}, pos = {x = sizeX / 2, y = sizeY / 2}}
+								table.insert(modules.buttons.data, new_button)
+								save_module('buttons')
+							end
+						else
+							if imgui.BeginChild('##999', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+								imgui.CenterText(fa.KEYBOARD .. u8' Главные бинды для работы хелпера (бинды для RP команд в редакторе команд) ' .. fa.KEYBOARD)
+								if hotkey_ok then
+									imgui.Separator()
+									imgui.CenterText(u8'Открытие/закрытие главного меню хелпера (аналог /helper):')
+									local width = imgui.GetWindowWidth()
+									local calc = imgui.CalcTextSize(getNameKeysFrom(settings.general.bind_mainmenu))
+									imgui.SetCursorPosX(width / 2 - calc.x / 2)
+									if MainMenuHotKey:ShowHotKey() then settings.general.bind_mainmenu = encodeJson(MainMenuHotKey:GetHotKey()); save_settings() end
+									imgui.Separator()
+									imgui.CenterText(u8'Открытие быстрого меню взаимодействия с игроком (аналог /hm):')
+									imgui.CenterText(u8'Навестись на игрока через ПКМ и нажать клавишу')
+									local width = imgui.GetWindowWidth()
+									local calc = imgui.CalcTextSize(getNameKeysFrom(settings.general.bind_fastmenu))
+									imgui.SetCursorPosX(width / 2 - calc.x / 2)
+									if FastMenuHotKey:ShowHotKey() then settings.general.bind_fastmenu = encodeJson(FastMenuHotKey:GetHotKey()); save_settings() end
+									if modules.player.data.fraction_rank_number >= 9 then
+										imgui.Separator()
+										imgui.CenterText(u8'Открытие быстрого меню управления игроком (аналог /lm для 9/10):')
+										imgui.CenterText(u8'Навестись на игрока через ПКМ и нажать клавишу')
+										local width = imgui.GetWindowWidth()
+										local calc = imgui.CalcTextSize(getNameKeysFrom(settings.general.bind_leader_fastmenu))
+										imgui.SetCursorPosX(width / 2 - calc.x / 2)
+										if LeaderFastMenuHotKey:ShowHotKey() then settings.general.bind_leader_fastmenu = encodeJson(LeaderFastMenuHotKey:GetHotKey()); save_settings() end
+									end
+									imgui.Separator()
+									imgui.CenterText(u8'Выполнить действие (например "Продолжить отыгровку", "Хил из чата"):')
+									local width = imgui.GetWindowWidth()
+									local calc = imgui.CalcTextSize(getNameKeysFrom(settings.general.bind_action))
+									imgui.SetCursorPosX(width / 2 - calc.x / 2)
+									if ActionHotKey:ShowHotKey() then settings.general.bind_action = encodeJson(ActionHotKey:GetHotKey()); save_settings() end
+									imgui.Separator()
+									imgui.CenterText(u8'Приостановить отыгровку команды (аналог /stop):')
+									local width = imgui.GetWindowWidth()
+									local calc = imgui.CalcTextSize(getNameKeysFrom(settings.general.bind_command_stop))
+									imgui.SetCursorPosX(width / 2 - calc.x / 2)
+									if CommandStopHotKey:ShowHotKey() then settings.general.bind_command_stop = encodeJson(CommandStopHotKey:GetHotKey()); save_settings() end
+									imgui.Separator()
+								else
+									imgui.Separator()
+									imgui.CenterText(fa.TRIANGLE_EXCLAMATION .. u8' У вас отсутствует библиотека mimgui_hotkeys.lua ' .. fa.TRIANGLE_EXCLAMATION)
+								end
+								imgui.EndChild()
+							end
+						end
+						imgui.EndTabItem()
+					end
+					imgui.EndTabBar()
+				end
+				imgui.EndTabItem()
+			end
+			local fraction = isMode('smi') and 'СМИ' or modules.player.data.fraction_tag:sub(1, 5)
+			if imgui.BeginTabItem(fa.GEARS .. u8' Функции ' .. u8(fraction) .. ' ') then
+				render_fractions_functions()
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.FILE_PEN..u8' Заметки') then
+				local dpi = settings.general.custom_dpi
+				local st = imgui.GetStyle()
+				imgui.PushItemWidth(-1)
+				imgui.InputTextWithHint('##notes_search', u8'Поиск заметок...', MODULE.Main.notes_search, 128)
+				imgui.PopItemWidth()
+				imgui.Separator()
+				local query_raw = u8:decode(ffi.string(MODULE.Main.notes_search))
+				MODULE.Main.notes_last_query = MODULE.Main.notes_last_query or ''
+				if query_raw ~= MODULE.Main.notes_last_query then
+					MODULE.Main.notes_last_query = query_raw
+					if query_raw ~= '' then
+						for i, note in ipairs(modules.notes.data) do
+							if note_matches_search(note, query_raw) then
+								MODULE.Main.notes_selected = i
+								break
+							end
+						end
+					end
+				end
+				local body_h = imgui.GetContentRegionAvail().y
+				local btn_h = 25 * dpi
+				local gap_y = st.ItemSpacing.y
+				local left_w = 160 * dpi
+				MODULE.Main.notes_selected = MODULE.Main.notes_selected or 1
+				if MODULE.Main.notes_selected > #modules.notes.data then
+					MODULE.Main.notes_selected = math.max(1, #modules.notes.data)
+				end
+				local sel = MODULE.Main.notes_selected
+				local sel_note = modules.notes.data[sel]
+				if imgui.BeginChild('##notes_left', imgui.ImVec2(left_w, body_h), false) then
+					if imgui.BeginChild('##notes_list', imgui.ImVec2(-1, body_h - btn_h - gap_y), true) then
+						local any_shown = false
+						for i, note in ipairs(modules.notes.data) do
+							if note_matches_search(note, query_raw) then
+								any_shown = true
+								if imgui.Selectable(su8(note.note_name or '') .. '##note_sel_' .. i, sel == i) then
+									MODULE.Main.notes_selected = i
+									sel = i; sel_note = note
+								end
+							end
+						end
+						if not any_shown then imgui.TextDisabled(u8'Заметок по запросу не найдено.') end
+						imgui.EndChild()
+					end
+					if imgui.Button(fa.CIRCLE_PLUS .. u8' Создать', imgui.ImVec2(-1, btn_h)) then
+						table.insert(modules.notes.data, {note_name = "Новая заметка " .. #modules.notes.data + 1, note_text = "Текст вашей новой заметки"})
+						MODULE.Main.notes_selected = #modules.notes.data
+						sel = MODULE.Main.notes_selected; sel_note = modules.notes.data[sel]
+						save_module('notes')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Создать новую заметку') end
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('##notes_content', imgui.ImVec2(-1, body_h), true, imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoScrollWithMouse) then
+					if sel_note then
+						local top_y = imgui.GetCursorPosY()
+						local name_u8 = su8(sel_note.note_name or '')
+						local text_nl = (sel_note.note_text or ''):gsub('&', '\n')
+						imgui.Text(fa.FILE_PEN .. ' ' .. name_u8)
+						imgui.SameLine()
+						local bw_show = imgui.CalcTextSize(fa.UP_RIGHT_FROM_SQUARE).x + 2 * st.FramePadding.x
+						local bw_edit = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + 2 * st.FramePadding.x
+						local bw_del  = imgui.CalcTextSize(fa.TRASH_CAN).x + 2 * st.FramePadding.x
+						imgui.SetCursorPosX(math.max(imgui.GetCursorPosX(), imgui.GetContentRegionMax().x - bw_show - bw_edit - bw_del - 2 * st.ItemSpacing.x))
+						if imgui.SmallButton(fa.UP_RIGHT_FROM_SQUARE .. '##note_show') then
+							MODULE.Note.show_note_name = sel_note.note_name or ''
+							MODULE.Note.show_note_text = sel_note.note_text or ''
+							local max_w, lines_n = 0, 0
+							for line in (text_nl .. '\n'):gmatch('([^\n]*)\n') do
+								lines_n = lines_n + 1
+								local w = imgui.CalcTextSize(su8(line)).x
+								if w > max_w then max_w = w end
+							end
+							local pad = 40 * dpi
+							local lh = imgui.GetTextLineHeight() + st.ItemSpacing.y
+							MODULE.Note.show_w = math.min(sizeX - 100, math.max(300 * dpi, max_w + pad))
+							MODULE.Note.show_h = math.min(sizeY - 100, math.max(200 * dpi, lines_n * lh + pad))
+							MODULE.Note.show_resize_pending = true
+							MODULE.Note.Window[0] = true
+							MODULE.Main.Window[0] = false
+						end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Вывести заметку на экран без интерфейса хелпера') end
+						imgui.SameLine()
+						if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##note_edit') then
+							imgui.StrCopy(MODULE.Note.input_name, name_u8)
+							imgui.StrCopy(MODULE.Note.input_text, su8(text_nl))
+							MODULE.Note.edit_index = sel
+							MODULE.Main.note_edit_open = true
+						end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Редактирование заметки "' .. name_u8 .. '"') end
+						imgui.SameLine()
+						if imgui.SmallButton(fa.TRASH_CAN .. '##note_del') then
+							MODULE.Main.note_del_open = true
+						end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Удаление заметки "' .. name_u8 .. '"') end
+						imgui.Separator()
+						local inner_h = math.max(50 * dpi, body_h - (imgui.GetCursorPosY() - top_y) - 2 * st.ItemSpacing.y)
+						if imgui.BeginChild('##note_text_scroll', imgui.ImVec2(-1, inner_h), false) then
+							render_note_text(text_nl, query_raw)
+						end
+						imgui.EndChild()
+					else
+						imgui.NewLine()
+						imgui.CenterTextDisabled(u8'Нет заметок. Создайте первую кнопкой внизу.')
+					end
+					imgui.EndChild()
+				end
+				if MODULE.Main.note_edit_open then
+					MODULE.Main.note_edit_open = false
+					imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование заметки ' .. fa.PEN_TO_SQUARE)
+				end
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование заметки ' .. fa.PEN_TO_SQUARE, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+					change_dpi()
+					if imgui.BeginChild('##node_edit_window', imgui.ImVec2(589 * dpi, 369 * dpi), true) then
+						imgui.PushItemWidth(578 * dpi)
+						imgui.InputText(u8'##note_name', MODULE.Note.input_name, 256)
+						imgui.InputTextMultiline("##note_text", MODULE.Note.input_text, 1048576, imgui.ImVec2(578 * dpi, 329 * dpi))
+						imgui.EndChild()
+					end
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##note_edit', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then imgui.CloseCurrentPopup() end
+					imgui.SameLine()
+					if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##note_edit', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+						local n = modules.notes.data[MODULE.Note.edit_index or sel]
+						if n then
+							n.note_name = u8:decode(ffi.string(MODULE.Note.input_name))
+							n.note_text = u8:decode(ffi.string(MODULE.Note.input_text)):gsub('\n', '&')
+							save_module('notes')
+						end
+						imgui.CloseCurrentPopup()
+					end
+					imgui.End()
+				end
+				if MODULE.Accounts.del_open then
+					MODULE.Accounts.del_open = false
+					imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##acc_del')
+				end
+				if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##acc_del', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.AlwaysAutoResize) then					change_dpi()
+					imgui.CenterText(u8'Вы действительно хотите удалить заметку "' .. u8(sel_note and sel_note.note_name or '') .. '" ?')
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отменить', imgui.ImVec2(200 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+					imgui.SameLine()
+					if imgui.Button(fa.TRASH_CAN .. u8' Удалить', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+						table.remove(modules.notes.data, sel)
+						if MODULE.Main.notes_selected > #modules.notes.data then MODULE.Main.notes_selected = math.max(1, #modules.notes.data) end
+						save_module('notes')
+						imgui.CloseCurrentPopup()
+					end
+					imgui.End()
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem((fa.NEWSPAPER or fa.BOOK) .. u8' Новости') then
+				if not MODULE.News.loaded and not MODULE.News.loading then
+					load_news(false)
+				end
+				local dpi = settings.general.custom_dpi
+				local function row_label(n)
+					local parts = { '[' .. u8(n.status_text) .. ']' }
+					if n.title and n.title ~= '' then
+						parts[#parts + 1] = (n.title)
+					end
+					if (not n.hide_version) and n.version and n.version ~= '' then
+						parts[#parts + 1] = u8('(Версия ' .. u8(n.version) .. ')')
+					end
+					local s = table.concat(parts, '  ')
+					if #parts == 1 then s = s .. '  ' .. u8('Без названия') end
+					return s
+				end
+				if imgui.BeginChild('##news_list', imgui.ImVec2(589 * dpi, 338 * dpi), true) then
+					if MODULE.News.loading then
+						imgui.NewLine(); imgui.NewLine()
+						imgui.CenterText(u8'Загрузка новостей...')
+					elseif MODULE.News.error then
+						imgui.NewLine(); imgui.NewLine()
+						imgui.CenterTextDisabled(u8('Не удалось загрузить новости: ') .. tostring(MODULE.News.error))
+					else
+						local list = MODULE.News.visible or MODULE.News.list
+						if #list == 0 then
+							imgui.NewLine(); imgui.NewLine()
+							imgui.CenterTextDisabled(u8'Новостей пока нет.')
+						else
+							local sel = MODULE.News.selected or 1
+							if sel < 1 or sel > #list then sel = 1 end
+							local news = list[sel]
+							local hex = news.status_color or "{FFFFFF}"
+							local r, g, b = hex:match('{?(%x%x)(%x%x)(%x%x)}?')
+							local col = imgui.ImVec4(1.0, 1.0, 1.0, 1.0)
+							if r and g and b then
+								col = imgui.ImVec4(tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, 1.0)
+							end
+							local colored_ok = pcall(function() imgui.TextColored(col, '[' .. u8(news.status_text) .. ']') end)
+							if not colored_ok then imgui.Text('[' .. (news.status_text) .. ']') end
+							if news.title and news.title ~= '' then
+								imgui.SameLine(); imgui.Text((news.title))
+							end
+							if (not news.hide_version) and news.version and news.version ~= '' then
+								imgui.SameLine(); imgui.Text(u8('(Версия ' .. u8(news.version) .. ')'))
+							end
+							if news.date and news.date ~= '' then
+								imgui.SameLine(); imgui.TextDisabled(u8(news.date))
+							end
+							imgui.Spacing()
+							if news.image and news.image ~= '' then
+								if not news._tex then
+									local p = news._img_path or news_img_path(news)
+									news._img_path = p
+									if doesFileExist(p) then
+										local ok, t = pcall(imgui.CreateTextureFromFile, p)
+										if ok and t then news._tex = t end
+									end
+								end
+								if news._tex then
+									local w = 579 * dpi
+									local h = (tonumber(news.image_h) or 180) * dpi
+									local drew = pcall(imgui.Image, news._tex, imgui.ImVec2(w, h))
+									if drew then imgui.Spacing() else news._tex = nil end
+								end
+							end
+							for line in (news.text or ""):gmatch("[^\r\n]+") do
+								if line:find("^%- ") then
+									imgui.Indent(14 * dpi)
+									imgui.Bullet()
+									imgui.TextWrapped(line:sub(3))
+									imgui.Unindent(14 * dpi)
+								elseif line:find("^>") then
+									local q = line:sub(2):gsub("^%s+", "")
+									imgui.SetCursorPosX(imgui.GetCursorPosX() + 14 * dpi)
+									imgui.TextWrapped(q)
+								else
+									imgui.Bullet()
+									imgui.TextWrapped(line)
+								end
+							end
+							if news.button and news.button ~= '' and news.button_url and news.button_url ~= '' then
+								imgui.Spacing()
+								if imgui.Button((fa.LINK or fa.GLOBE) .. ' ' .. (news.button)) then
+									openLink(news.button_url)
+								end
+							end
+							imgui.Separator()
+							imgui.CenterTextDisabled(u8'Другие новости:')
+							for i, n in ipairs(list) do
+								if i ~= sel then
+									local h2 = n.status_color or "{FFFFFF}"
+									local r2, g2, b2 = h2:match('{?(%x%x)(%x%x)(%x%x)}?')
+									local col2 = imgui.ImVec4(1.0, 1.0, 1.0, 1.0)
+									if r2 and g2 and b2 then
+										col2 = imgui.ImVec4(tonumber(r2, 16) / 255, tonumber(g2, 16) / 255, tonumber(b2, 16) / 255, 1.0)
+									end
+									imgui.PushStyleColor(imgui.Col.Text, col2)
+									if imgui.Selectable(row_label(n) .. '##newsrow' .. i) then
+										MODULE.News.selected = i
+									end
+									imgui.PopStyleColor()
+								end
+							end
+						end
+					end
+					imgui.EndChild()
+				end
+				if imgui.Button(fa.DOWNLOAD .. u8' Обновить новости', imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+					load_news(true)
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.GEAR..u8' Настройки ') then
+				local dpi = settings.general.custom_dpi
+				if not MODULE.Main.beta_input then MODULE.Main.beta_input = imgui.new.char[32]("")  end
+				if not MODULE.Main.updater_cb then MODULE.Main.updater_cb = imgui.new.bool(settings.general.updater ~= false)  end
+				if not MODULE.Main.chat_prefix_input then  MODULE.Main.chat_prefix_input = imgui.new.char[64](u8(settings.general.chat_prefix or 'Arizona Helper'))  end
+				if not MODULE.Main.scoreboard_cb then MODULE.Main.scoreboard_cb = imgui.new.bool(settings.general.scoreboard ~= false) end
+				if not MODULE.Main.nmembers_cb   then MODULE.Main.nmembers_cb   = imgui.new.bool(settings.general.nmembers ~= false) end
+				if not MODULE.Main.crosshair_cb  then MODULE.Main.crosshair_cb  = imgui.new.bool(settings.general.crosshair ~= false) end
+				if not MODULE.Accounts then
+					MODULE.Accounts = {
+						list = { { name = 'Гостевой', server = 'Arizona', is_guest = true } },
+						selected = 1,
+						edit_index = nil,
+						del_index = nil,
+						name_buf = imgui.new.char[64](""),
+						server_buf = imgui.new.char[64](""),
+					}
+				end
+				local crosshair_on = memory_ok and settings.general.crosshair
+				local nmembers_on = settings.general.nmembers
+				local scoreboard_on = settings.general.scoreboard
+				local SETTINGS_SECTIONS = {
+					{ icon = fa.CIRCLE_INFO, name = 'О хелпере' },
+					{ icon = fa.PALETTE,     name = 'Интерфейс' },
+					{ icon = fa.CROSSHAIRS,  name = 'Кастомный прицел' },
+					{ icon = fa.USERS, 		 name = 'Кастомный members' },
+					{ icon = fa.TABLE_LIST,  name = 'Кастомный TAB' },
+					{ icon = fa.DOWNLOAD,    name = 'Обновления и бета' },
+					{ icon = fa.HEADSET,     name = 'Поддержка' },
+				}
+				MODULE.Main.settings_section = MODULE.Main.settings_section or 1
+				local action_h = 35 * dpi
+				local gap = imgui.GetStyle().ItemSpacing.y
+				local body_h = math.max(220 * dpi, imgui.GetContentRegionAvail().y - action_h - gap)
+				local btn_h = 25 * dpi
+				local gap_y = imgui.GetStyle().ItemSpacing.y
+				if imgui.BeginChild('##set_left', imgui.ImVec2(160 * dpi, body_h), false) then
+					if imgui.BeginChild('##set_nav', imgui.ImVec2(-1, body_h - btn_h - gap_y), true) then
+						for i, s in ipairs(SETTINGS_SECTIONS) do
+							local disabled = ((i == 3) and not crosshair_on) or ((i == 4) and not nmembers_on) or ((i == 5) and not scoreboard_on)
+							if disabled then imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.5, 0.5, 0.5, 0.55)) end
+							if imgui.Selectable(s.icon .. ' ' .. u8(s.name) .. '##setnav' .. i, MODULE.Main.settings_section == i) then
+								MODULE.Main.settings_section = i
+							end
+							if disabled then imgui.PopStyleColor() end
+						end
+						imgui.EndChild()
+					end
+					if imgui.Button((fa.USER_PLUS or fa.USER) .. u8' Сменить аккаунт', imgui.ImVec2(-1, btn_h)) then
+						MODULE.Main.accounts_open = true
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Управление аккаунтами хелпера') end
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('##set_content', imgui.ImVec2(-1, body_h), true) then
+					local sec = MODULE.Main.settings_section
+					if sec == 1 then
+						imgui.CenterText(fa.CIRCLE_INFO .. u8' Дополнительная информация о хелпере ' .. fa.CIRCLE_INFO)
+						imgui.Separator()
+						imgui.Text(fa.CIRCLE_USER .. u8' Разработчик хелпера: MTG MODS')
+						imgui.Text(fa.CIRCLE_INFO .. u8' Версия хелпера: ' .. u8(thisScript().version))
+						imgui.Text(fa.CODE .. u8' Канал обновлений: ' .. (settings.general.beta_tester and u8'Бета' or u8'Стабильный'))
+						imgui.Separator()
+						imgui.Text(fa.GLOBE .. u8' Модификация: ' .. fa.CROWN .. ' GreenTechYT ' .. fa.CROWN)
+						imgui.Separator()
+						imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+						imgui.Text(u8'Универсальный хелпер для Arizona Online и Rodina Online. ПК и Android. Он включает в себя множество функций и возможностей:')
+						imgui.Bullet(); imgui.TextWrapped(u8'RP возможности: автозаглавная и точка в чатах, отыгровки оружия, биндер RP-команд с тегами, задержками и паузами.')
+						imgui.Bullet(); imgui.TextWrapped(u8'Ассистент в вашей игре: пинг в чате, автофлип домкратом, авто-доклады поста, авто-обновление /members, инвайт/увал по фразе [9/10].')
+						imgui.Bullet(); imgui.TextWrapped(u8'Изменяемый интерфейс: кастомный TAB и /members, цветной прицел с учётом дальности, PieMenu, фаст-меню, темы, заметки.')
+						imgui.Bullet(); imgui.TextWrapped(u8'Множество инструментов для работы в гос.организациях: /edgo, /afind, /sum, /tsm, /cruise, /wanteds, /patrool, /zeks, /pum, /spcar, /fcleaner.')
+						imgui.PopTextWrapPos()
+						imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+					elseif sec == 2 then
+						imgui.CenterText(fa.PALETTE .. u8' Настройки интерфейса ' .. fa.PALETTE)
+						imgui.Separator()
+						imgui.Text(fa.BRUSH .. u8' Тема хелпера:')
+						imgui.Columns(3, '##theme_cols', false)
+						if monet_ok then
+							function moon_monet_edit()
+								local r,g,b = MODULE.Main.mmcolor[0]*255, MODULE.Main.mmcolor[1]*255, MODULE.Main.mmcolor[2]*255
+								local argb = join_argb(0, r, g, b)
+								settings.general.helper_theme = 0
+								settings.general.moonmonet_theme_color = argb
+								settings.general.message_color = argb
+								message_color = "0x" .. argbToHexWithoutAlpha(0, r, g, b)
+								message_color_hex = '{' .. argbToHexWithoutAlpha(0, r, g, b) .. '}'
+								MODULE.Main.msgcolor[0], MODULE.Main.msgcolor[1], MODULE.Main.msgcolor[2] = color_to_float3(settings.general.message_color)
+							end
+							if imgui.RadioButtonIntPtr(u8' Custom', MODULE.Main.theme, 0) then moon_monet_edit(); apply_moonmonet_theme(); save_settings() end
+						else
+							if imgui.RadioButtonIntPtr(u8' Custom', MODULE.Main.theme, 0) then
+								MODULE.Main.theme[0] = settings.general.helper_theme
+								sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Установите библиотеку MoonMonet!', message_color)
+							end
+						end
+						imgui.NextColumn()
+						if imgui.RadioButtonIntPtr(u8' Dark Theme', MODULE.Main.theme, 1) then settings.general.helper_theme = 1; save_settings(); apply_dark_theme() end
+						imgui.NextColumn()
+						if imgui.RadioButtonIntPtr(u8' White Theme', MODULE.Main.theme, 2) then settings.general.helper_theme = 2; save_settings(); apply_white_theme() end
+						imgui.Columns(1)
+						imgui.Separator()
+						imgui.Columns(2, '##color_cols', false)
+						imgui.Text(fa.PALETTE .. u8' Цвет темы (Custom):')
+						if MODULE.Main.theme[0] == 0 then
+							if centered_color('##COLOR1', MODULE.Main.mmcolor) then moon_monet_edit(); apply_moonmonet_theme(); save_settings() end
+						else
+							imgui.TextDisabled(u8'(доступно в Custom)')
+						end
+						imgui.NextColumn()
+						imgui.Text(fa.MESSAGE .. u8' Цвет сообщений:')
+						if MODULE.Main.theme[0] == 0 then
+							imgui.TextDisabled(u8'(доступно в Dark / White)')
+						else
+							if centered_color('##COLOR2', MODULE.Main.msgcolor) then
+								local r,g,b = MODULE.Main.msgcolor[0]*255, MODULE.Main.msgcolor[1]*255, MODULE.Main.msgcolor[2]*255
+								local argb = join_argb(0, r, g, b)
+								settings.general.message_color = argb
+								message_color = "0x" .. argbToHexWithoutAlpha(0, r, g, b)
+								message_color_hex = '{' .. argbToHexWithoutAlpha(0, r, g, b) .. '}'
+								save_settings()
+							end
+						end
+						imgui.Columns(1)
+						imgui.Separator()
+						imgui.Columns(2, '##alpha_cols', false)
+						imgui.Text(fa.FILL_DRIP .. u8' Прозрачность хелпера:')
+						imgui.PushItemWidth(-1)
+						if imgui.SliderInt('##slider_helper_transparent', MODULE.Main.slider.transparent, 10, 100) then
+							settings.general.transparent = MODULE.Main.slider.transparent[0]; save_settings()
+							if settings.general.helper_theme == 0 and monet_ok then apply_moonmonet_theme()
+							elseif settings.general.helper_theme == 1 then apply_dark_theme()
+							elseif settings.general.helper_theme == 2 then apply_white_theme() end
+						end
+						imgui.Text(fa.FILL_DRIP .. u8' Задний фон:')
+						if imgui.SliderInt('##slider_background_transparent', MODULE.Main.slider.background_transparent, 0, 90) then
+							settings.general.background_transparent = MODULE.Main.slider.background_transparent[0]; save_settings()
+							if settings.general.helper_theme == 0 and monet_ok then apply_moonmonet_theme()
+							elseif settings.general.helper_theme == 1 then apply_dark_theme()
+							elseif settings.general.helper_theme == 2 then apply_white_theme() end
+						end
+						imgui.NextColumn()
+						imgui.Text(fa.MAXIMIZE .. u8' Размер интерфейса:')
+						imgui.SliderFloat('##slider_helper_size', MODULE.Main.slider.dpi, 0.5, 3)
+						imgui.PopItemWidth()
+						if settings.general.custom_dpi ~= tonumber(string.format('%.3f', MODULE.Main.slider.dpi[0])) then
+							if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Применить размер ' .. fa.CIRCLE_ARROW_LEFT .. '##change_Size', imgui.ImVec2(-1, 25 * dpi)) then
+								imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##change_size')
+							end
+						end
+						imgui.Columns(1)
+						imgui.Separator()
+						imgui.Text(fa.TAG .. u8' Префикс в чате:')
+						imgui.SameLine()
+						MODULE.Main.chat_prefix_input = MODULE.Main.chat_prefix_input or imgui.new.char[64](u8(settings.general.chat_prefix or 'Arizona Helper'))
+						imgui.PushItemWidth(220 * dpi)
+						imgui.InputText('##chat_prefix', MODULE.Main.chat_prefix_input, 64)
+						imgui.PopItemWidth()
+						local edited_now = false
+						local ok_deact, deact = pcall(imgui.IsItemDeactivatedAfterEdit)
+						if ok_deact then edited_now = (deact == true) end
+						local typed = u8:decode(ffi.string(MODULE.Main.chat_prefix_input)):gsub('^%s+', ''):gsub('%s+$', '')
+						if typed == '' then typed = 'Arizona Helper' end
+						local prefix_changed = typed ~= (settings.general.chat_prefix or 'Arizona Helper')
+						if edited_now and prefix_changed then
+							settings.general.chat_prefix = typed
+							CHAT_PREFIX = '[' .. typed .. ']'
+							save_settings()
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Префикс изменён.', message_color)
+						end
+						if prefix_changed then
+							imgui.SameLine()
+							if imgui.SmallButton(fa.CHECK .. u8'##chat_prefix_apply') then
+								settings.general.chat_prefix = typed
+								CHAT_PREFIX = '[' .. typed .. ']'
+								save_settings()
+								sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Префикс изменён.', message_color)
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Применить новый префикс') end
+						end
+					elseif sec == 3 then
+						if not crosshair_on then
+							imgui.NewLine(); imgui.NewLine()
+							imgui.CenterTextDisabled(fa.CROSSHAIRS .. u8' Кастомный прицел выключен.')
+							imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+							imgui.TextDisabled(u8'Цветной прицел: режимы «обычный / наведение», учёт дальности оружия и надпись дистанции.')
+							imgui.PopTextWrapPos()
+							imgui.NewLine()
+							if memory_ok then
+								if imgui.CenterButton(fa.CIRCLE_CHECK .. u8' Включить кастомный прицел') then
+									settings.general.crosshair = true
+									MODULE.Main.crosshair_cb[0] = true
+									save_settings()
+								end
+							else
+								imgui.CenterTextDisabled(u8'Требуется библиотека memory.dll')
+							end
+						else
+							if not MODULE.Crosshair._font_buf_synced then
+								MODULE.Crosshair._font_buf_synced = true
+								imgui.StrCopy(MODULE.Crosshair.font_name_buf, modules.crosshair.data.font_name or 'Arial')
+								MODULE.Crosshair.font_size[0] = modules.crosshair.data.font_size or 15
+							end
+							imgui.CenterText(fa.CROSSHAIRS .. u8' Настройка кастомного прицела ' .. fa.CROSSHAIRS)
+							imgui.Separator()
+							imgui.Columns(2, '##cross_cols', false)
+							imgui.Text(fa.CIRCLE .. u8' Цвет по умолчанию:')
+							if centered_color('##STANDART_COLOR', MODULE.Crosshair.standart_color) then
+								modules.crosshair.data.standart_color = imguiToRgb(MODULE.Crosshair.standart_color)
+								save_module('crosshair')
+							end
+							imgui.Text(fa.USER .. u8' Цвет при наведении:')
+							if centered_color('##ENEMY_COLOR', MODULE.Crosshair.enemy_color) then
+								modules.crosshair.data.enemy_color = imguiToRgb(MODULE.Crosshair.enemy_color)
+								save_module('crosshair')
+							end
+							imgui.NextColumn()
+							imgui.Text(fa.GEAR .. u8' Функции:')
+							if imgui.Checkbox(u8' Дальность стрельбы оружия', MODULE.Crosshair.check_weapon_range) then
+								modules.crosshair.data.check_weapon_range = MODULE.Crosshair.check_weapon_range[0]
+								if not MODULE.Crosshair.check_weapon_range[0] then
+									MODULE.Crosshair.show_weapon_range[0] = false
+									MODULE.Crosshair.is_legendary_stripe[0] = false
+									modules.crosshair.data.show_weapon_range = false
+									modules.crosshair.data.is_legendary_stripe = false
+								end
+								save_module('crosshair')
+							end
+							if imgui.Checkbox(u8' Дистанция до цели', MODULE.Crosshair.show_weapon_range) then
+								modules.crosshair.data.show_weapon_range = MODULE.Crosshair.show_weapon_range[0]
+								save_module('crosshair')
+							end
+							if imgui.Checkbox(u8' Лег.нашивка (+8 дальности)', MODULE.Crosshair.is_legendary_stripe) then
+								modules.crosshair.data.is_legendary_stripe = MODULE.Crosshair.is_legendary_stripe[0]
+								save_module('crosshair')
+							end
+							imgui.Columns(1)
+							if MODULE.Crosshair.show_weapon_range[0] then
+								imgui.Separator()
+								imgui.Text(fa.FONT .. u8' Надпись дистанции:')
+								imgui.Columns(2, '##cross_cols2', false)
+								imgui.Text(u8' Цвет (цель В радиусе):')
+								if centered_color('##DIST_COLOR_IN', MODULE.Crosshair.distance_color_in) then
+									modules.crosshair.data.distance_color_in = imguiToRgb(MODULE.Crosshair.distance_color_in)
+									save_module('crosshair')
+								end
+								imgui.Text(u8' Цвет (цель ВНЕ радиуса):')
+								if centered_color('##DIST_COLOR_OUT', MODULE.Crosshair.distance_color_out) then
+									modules.crosshair.data.distance_color_out = imguiToRgb(MODULE.Crosshair.distance_color_out)
+									save_module('crosshair')
+								end
+								imgui.NextColumn()
+								imgui.Text(u8' Шрифт надписи:')
+								imgui.PushItemWidth(-1)
+								imgui.InputText('##crosshair_font_name', MODULE.Crosshair.font_name_buf, 64)
+								imgui.Text(u8' Размер шрифта:')
+								imgui.SliderInt('##crosshair_font_size', MODULE.Crosshair.font_size, 8, 40)
+								imgui.PopItemWidth()
+								if imgui.Button(fa.GEAR .. u8' Применить шрифт', imgui.ImVec2(-1, 25 * dpi)) then
+									local nm = ffi.string(MODULE.Crosshair.font_name_buf)
+									if nm == '' then nm = 'Arial' end
+									local sz = MODULE.Crosshair.font_size[0]
+									_G.__crosshair_font = renderCreateFont(nm, sz, 1)
+									modules.crosshair.data.font_name = nm
+									modules.crosshair.data.font_size = sz
+									save_module('crosshair')
+								end
+								if imgui.IsItemHovered() then imgui.SetTooltip(u8'Пересоздаёт шрифт надписи из введённого названия и размера') end
+								imgui.Columns(1)
+							end
+							local pad_y = imgui.GetStyle().WindowPadding.y
+							imgui.SetCursorPosY(math.max(imgui.GetCursorPosY(), body_h - 2 * pad_y - btn_h - (1 + gap_y)))
+							imgui.Separator()
+							if imgui.Button(fa.TOGGLE_OFF .. u8' Отключить кастомный прицел', imgui.ImVec2(-1, btn_h)) then
+								settings.general.crosshair = false
+								if MODULE.Main.crosshair_cb then MODULE.Main.crosshair_cb[0] = false end
+								save_settings()
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Отключить функцию. Включить можно кнопкой в этой же вкладке.') end
+						end
+					elseif sec == 4 then
+						local md = modules.members.data
+						if not nmembers_on then
+							imgui.NewLine(); imgui.NewLine()
+							imgui.CenterTextDisabled((fa.USERS) .. u8' Кастомный /members выключен.')
+							imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+							imgui.TextDisabled(u8'Список сотрудников в кастомном-окне: сортировка, подсветка AFK и выговоров, свои пометки.')
+							imgui.PopTextWrapPos()
+							imgui.NewLine()
+							if imgui.CenterButton(fa.CIRCLE_CHECK .. u8' Включить кастомный /members') then
+								settings.general.nmembers = true
+								MODULE.Main.nmembers_cb[0] = true
+								save_settings()
+							end
+						else
+							imgui.CenterText((fa.USERS) .. u8' Настройки кастомного /members ' .. (fa.USERS))
+							imgui.Separator()
+							if not MODULE.Main.members_auto_cb then MODULE.Main.members_auto_cb = imgui.new.bool(md.auto_update ~= false) end
+							if imgui.Checkbox(u8' Авто-обновление списка сотрудников', MODULE.Main.members_auto_cb) then
+								md.auto_update = MODULE.Main.members_auto_cb[0]
+								settings.general.auto_update_members = MODULE.Main.members_auto_cb[0]
+								save_module('members')
+							end
+							if imgui.IsItemHovered() then
+								imgui.SetTooltip(u8('Автоматически отправлять /members каждые ' .. (md.update_period or 3) .. ' сек.\nМинимум 3с - при меньшем интервал ограничит анти-флуд окно.'))
+							end
+							imgui.Separator()
+							imgui.Columns(2, '##members_cols', false)
+							if not MODULE.Members.open_delay_slider then MODULE.Members.open_delay_slider = imgui.new.int(md.open_delay or 250) end
+							imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8' Задержка /members (мс):')
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Пауза между открытием меню и отправкой /members.\nБольше - безопаснее для анти-флуда.') end
+							imgui.PushItemWidth(-1)
+							if imgui.SliderInt('##members_open_delay', MODULE.Members.open_delay_slider, 0, 2000) then
+								md.open_delay = MODULE.Members.open_delay_slider[0]; save_module('members')
+							end
+							imgui.PopItemWidth()
+							imgui.NextColumn()
+							if md.auto_update then
+								if not MODULE.Members.update_period_slider then MODULE.Members.update_period_slider = imgui.new.int(md.update_period or 3) end
+								imgui.Text((fa.ARROWS_ROTATE or fa.CLOCK or fa.CIRCLE_INFO) .. u8' Интервал (сек):')
+								imgui.PushItemWidth(-1)
+								if imgui.SliderInt('##members_update_period', MODULE.Members.update_period_slider, 2, 60) then
+									md.update_period = MODULE.Members.update_period_slider[0]
+									settings.general.members_update_period = MODULE.Members.update_period_slider[0]
+									save_module('members')
+								end
+								imgui.PopItemWidth()
+							else
+								imgui.TextDisabled(u8'Включите автообновление для настройки интервала.')
+							end
+							imgui.Columns(1)
+							imgui.Separator()
+							if not MODULE.Members.open_cooldown_slider then MODULE.Members.open_cooldown_slider = imgui.new.int(md.open_cooldown or 2) end
+							imgui.Text(fa.SHIELD_HALVED .. u8' КД между открытиями окна (сек):')
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Защита от случайного спама командой.\nМинимум 2 сек для безопасности анти-флуда.') end
+							imgui.PushItemWidth(200 * dpi)
+							if imgui.SliderInt('##members_open_cooldown', MODULE.Members.open_cooldown_slider, 2, 30) then
+								md.open_cooldown = MODULE.Members.open_cooldown_slider[0]; save_module('members')
+							end
+							imgui.PopItemWidth()
+							imgui.Separator()
+							if not MODULE.Members.afk_slider then MODULE.Members.afk_slider = imgui.new.int(md.afk_threshold or 5) end
+							imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8' Порог AFK для подсветки (мин):')
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Игроки с AFK >= порога подсвечиваются.\nПоставь 1, чтобы подсвечивать любой AFK.') end
+							imgui.PushItemWidth(200 * dpi)
+							if imgui.SliderInt('##members_afk_set', MODULE.Members.afk_slider, 1, 60) then
+								md.afk_threshold = MODULE.Members.afk_slider[0]; save_module('members')
+							end
+							imgui.PopItemWidth()
+							imgui.Separator()
+							imgui.Text(fa.PALETTE .. u8' Цвета AFK-подсветки:')
+							if not MODULE.Members.afk_warn_col_buf then
+								local c = md.afk_warn_color or {255, 200, 0}
+								MODULE.Members.afk_warn_col_buf = imgui.new.float[3](c[1] / 255, c[2] / 255, c[3] / 255)
+							end
+							if not MODULE.Members.afk_over_col_buf then
+								local c = md.afk_over_color or {255, 120, 0}
+								MODULE.Members.afk_over_col_buf = imgui.new.float[3](c[1] / 255, c[2] / 255, c[3] / 255)
+							end
+							imgui.Text(u8' Приближается к лимиту:')
+							imgui.SameLine()
+							if imgui.ColorEdit3('##AFK_WARN_COLOR', MODULE.Members.afk_warn_col_buf, imgui.ColorEditFlags.NoInputs) then
+								md.afk_warn_color = imguiToRgb(MODULE.Members.afk_warn_col_buf); save_module('members')
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Цвет игрока, приближающегося к лимиту AFK.') end
+							imgui.SameLine()
+							imgui.Text(u8' Пересёк лимит:')
+							imgui.SameLine()
+							if imgui.ColorEdit3('##AFK_OVER_COLOR', MODULE.Members.afk_over_col_buf, imgui.ColorEditFlags.NoInputs) then
+								md.afk_over_color = imguiToRgb(MODULE.Members.afk_over_col_buf); save_module('members')
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Цвет игрока, пересёкшего лимит AFK.') end
+							local pad_y = imgui.GetStyle().WindowPadding.y
+							imgui.SetCursorPosY(math.max(imgui.GetCursorPosY(), body_h - 2 * pad_y - btn_h - (1 + gap_y)))
+							imgui.Separator()
+							if imgui.Button(fa.TOGGLE_OFF .. u8' Отключить кастомный /members', imgui.ImVec2(-1, btn_h)) then
+								settings.general.nmembers = false
+								if MODULE.Main.nmembers_cb then MODULE.Main.nmembers_cb[0] = false end
+								save_settings()
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Отключить функцию. Включить можно кнопкой в этой же вкладке.') end
+						end
+					elseif sec == 5 then
+						if not scoreboard_on then
+							imgui.CenterTextDisabled((fa.TABLE_LIST) .. u8' Кастомный TAB выключен.')
+							imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+							imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+							imgui.TextDisabled(u8'Заменяет оригинальный TAB на кастомную версию со списком игроков и действиями.')
+							imgui.PopTextWrapPos()
+							imgui.PopTextWrapPos()
+							if imgui.CenterButton(fa.CIRCLE_CHECK .. u8' Включить кастомный TAB') then
+								settings.general.scoreboard = true
+								MODULE.Main.scoreboard_cb[0] = true
+								save_settings()
+							end
+						else
+							imgui.CenterText((fa.TABLE_LIST) .. u8' Настройки кастомного TAB ' .. (fa.TABLE_LIST))
+							imgui.Separator()
+							imgui.NewLine()
+							imgui.CenterTextDisabled(u8'Настройки в разработке.')
+							local pad_y = imgui.GetStyle().WindowPadding.y
+							imgui.SetCursorPosY(math.max(imgui.GetCursorPosY(), body_h - 2 * pad_y - btn_h - (1 + gap_y)))
+							imgui.Separator()
+							if imgui.Button(fa.TOGGLE_OFF .. u8' Отключить кастомный TAB', imgui.ImVec2(-1, btn_h)) then
+								settings.general.scoreboard = false
+								if MODULE.Main.scoreboard_cb then MODULE.Main.scoreboard_cb[0] = false end
+								save_settings()
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Отключить функцию. Включить можно кнопкой в этой же вкладке.') end
+						end
+					elseif sec == 6 then
+						if not MODULE.UpdateInfo.loaded and not MODULE.UpdateInfo.loading then
+							load_update_info()
+						end
+						local on_beta_build = (MODULE.Update.beta_version or '') ~= '' and thisScript().version == MODULE.Update.beta_version and not MODULE.Update.beta_closed
+						local is_beta_ui = (settings.general.beta_tester == true) or on_beta_build
+						local info = MODULE.UpdateInfo.data
+						local stableVer = (info and tostring(info.stable_version or info.version or '')) or (MODULE.Update.stable_version or '')
+						local betaVer = (info and tostring(info.beta_version or '')) or (MODULE.Update.beta_version or '')
+						local closed = (MODULE.Update.beta_closed == true) or (info ~= nil and info.beta_closed == true)
+						imgui.CenterText(fa.DOWNLOAD .. u8' Обновления и бета-тестирование ' .. fa.DOWNLOAD)
+						imgui.Separator()
+						imgui.Text(fa.CIRCLE_INFO .. u8' Текущая версия: ' .. u8(thisScript().version))
+						imgui.SameLine()
+						imgui.Text(fa.CODE .. u8' | Канал: ' .. (is_beta_ui and u8'Бета' or u8'Стабильный'))
+						imgui.Text(fa.SHIELD .. u8' Стабильная: ' .. u8(stableVer ~= '' and stableVer or '-'))
+						if info then
+							local stInfo = UPDATE_STATUS[tostring(info.stable_status or ''):lower()]
+							if stInfo then
+								imgui.SameLine()
+								local r, g, b = stInfo.color:match('{?(%x%x)(%x%x)(%x%x)}?')
+								if r and g and b then
+									imgui.TextColored(imgui.ImVec4(tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, 1), '[' .. u8(stInfo.text) .. ']')
+								else
+									imgui.Text('[' .. u8(stInfo.text) .. ']')
+								end
+							end
+						end
+						imgui.SameLine()
+						imgui.Text('   ' .. fa.FLASK .. u8' ЗБТ: ' .. u8(betaVer ~= '' and betaVer or '-'))
+						imgui.SameLine()
+						if closed then
+							imgui.TextColored(imgui.ImVec4(1, 0.35, 0.35, 1), '[' .. u8'Закрыта' .. ']')
+						else
+							imgui.TextColored(imgui.ImVec4(0.3, 1, 0.3, 1), '[' .. u8'Открыта' .. ']')
+						end
+						imgui.Separator()
+						if imgui.Button(fa.DOWNLOAD .. u8' Проверить обновления', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+							check_update(true)
+							load_update_info()
+						end
+						imgui.SameLine()
+						if imgui.Checkbox(u8' Авто-обновление при запуске##set_updater', MODULE.Main.updater_cb) then
+							settings.general.updater = MODULE.Main.updater_cb[0]; save_settings()
+						end
+						imgui.Separator()
+						if imgui.BeginChild('##update_info', imgui.ImVec2(-1, 115 * dpi), true) then
+							if MODULE.UpdateInfo.loading then
+								imgui.NewLine()
+								imgui.CenterText(u8'Загрузка информации об обновлениях...')
+							elseif MODULE.UpdateInfo.error then
+								imgui.NewLine()
+								imgui.CenterTextDisabled(u8('Не удалось загрузить информацию: ') .. tostring(MODULE.UpdateInfo.error))
+							elseif info then
+								local head = is_beta_ui
+									and u8'Что нового в бете (' .. u8(betaVer) .. '):'
+									or u8'Что нового в стабильной (' .. u8(stableVer) .. '):'
+								imgui.Text(fa.FILE_LINES .. ' ' .. head)
+								imgui.Separator()
+								local text = is_beta_ui and tostring(info.beta_info or '') or tostring(info.stable_info or '')
+								if text == '' then
+									imgui.CenterTextDisabled(u8'Описания изменений нет.')
+								else
+									for line in text:gmatch('[^\r\n]+') do
+										if line:find('^%- ') then
+											imgui.Indent(14 * dpi); imgui.Bullet(); imgui.TextWrapped(line:sub(3)); imgui.Unindent(14 * dpi)
+										else
+											imgui.Bullet(); imgui.TextWrapped(line)
+										end
+									end
+								end
+							else
+								imgui.NewLine()
+								imgui.CenterTextDisabled(u8'Нет данных об обновлениях.')
+							end
+							imgui.EndChild()
+						end
+						imgui.Spacing()
+						if settings.general.beta_tester ~= true then
+							imgui.Text(fa.FLASK .. u8' Вход для бета-тестеров:')
+							imgui.PushItemWidth(200 * dpi)
+							imgui.InputTextWithHint('##beta_pass', u8'Пароль', MODULE.Main.beta_input, 32, imgui.InputTextFlags.Password)
+							imgui.PopItemWidth()
+							imgui.SameLine()
+							if imgui.Button(fa.KEY .. u8' Активировать', imgui.ImVec2(140 * dpi, 25 * dpi)) then
+								local raw = ffi.string(MODULE.Main.beta_input)
+								if raw == '' then
+									sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Введите пароль бета-тестера.', message_color); play_sound()
+								else
+									sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Проверка пароля...', message_color)
+									asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(resp)
+										local ok2, info2 = pcall(function() return decodeJson(resp.text or '') end)
+										local stored = nil
+										if ok2 and type(info2) == 'table' then
+											if type(info2.beta_password_hash) == 'string' and info2.beta_password_hash ~= '' then stored = info2.beta_password_hash
+											elseif type(info2.beta_password) == 'string' and info2.beta_password ~= '' then stored = info2.beta_password end
+										end
+										if not stored then
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось проверить пароль: нет данных в Update.json.', message_color); play_sound()
+										elseif hash_password(raw) == stored then
+											settings.general.beta_tester = true; save_settings()
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Доступ бета-тестера активирован! Обо всех багах пишите разработчику.', message_color)
+											check_update(true)
+										else
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Неверный пароль бета-тестера.', message_color); play_sound()
+										end
+									end, function(err)
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка проверки пароля: ' .. tostring(err), message_color); play_sound()
+									end)
+								end
+							end
+							imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+							imgui.TextDisabled(u8'Внимание: бета-версии могут быть нестабильны. Вы получаете обновления раньше общего релиза, но рискуете столкнуться с багами. Вся ответственность на вас.')
+							imgui.PopTextWrapPos()
+						else
+							if MODULE.Update.beta_closed then
+								imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+								imgui.TextColored(imgui.ImVec4(1, 0.6, 0, 1), fa.FLASK .. u8' Бета-тест завершён: вышла стабильная версия. Установите её кнопкой ниже.')
+								imgui.PopTextWrapPos()
+								imgui.Separator()
+							end
+							imgui.Text(fa.SHIELD .. u8' Вы являетесь бета-тестером')
+							imgui.Separator()
+							if imgui.Button(fa.FLASK .. u8' Скачать последнюю сборку', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+								asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(resp)
+									local ok2, info2 = pcall(function() return decodeJson(resp.text or '') end)
+									if ok2 and type(info2) == 'table' and info2.url then
+										MODULE.Update.url     = info2.url
+										MODULE.Update.version = tostring(info2.beta_version or '')
+										MODULE.Update.info    = tostring(info2.beta_info or '')
+										MODULE.Update.is_need_update = true
+										MODULE.Update.is_emergency = false
+										local statusKey  = tostring(info2.beta_status or ''):lower()
+										local statusInfo = UPDATE_STATUS[statusKey] or { text = "Бета", color = "{FFFFFF}" }
+										MODULE.Update.status = statusInfo.text
+										MODULE.Update.status_color = statusInfo.color
+										MODULE.Update.auto_start_download = true
+										MODULE.Update.popup_opened = false
+										MODULE.Update.Window[0] = true
+										play_sound()
+									else
+										sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось получить ссылку на версию.', message_color)
+									end
+								end, function(err)
+									sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка запроса версии.', message_color)
+								end)
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Установить последнюю сборку с GitHub') end
+							imgui.SameLine()
+							if imgui.Button(fa.CIRCLE_XMARK .. u8' Покинуть бету', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+								settings.general.beta_tester = false; save_settings()
+								sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы вернулись на стабильный канал обновлений.', message_color)
+							end
+						end
+					elseif sec == 7 then
+						imgui.CenterText(fa.HEADSET .. u8' Поддержка и ссылки ' .. fa.HEADSET)
+						imgui.Separator()
+						imgui.Text(fa.BOOK .. u8' Руководство по использованию:')
+						imgui.SameLine()
+						if imgui.SmallButton(u8'YouTube') then openLink('https://www.youtube.com/1eos') end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Открыть видео-обзор хелпера') end
+						imgui.Text(fa.HEADSET .. u8' Техническая поддержка:')
+						imgui.SameLine()
+						if imgui.SmallButton(u8'Discord') then openLink('https://vk.com/homkarpyt') end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Техническая поддержка: Jone8204') end
+						imgui.SameLine()
+						imgui.Separator()
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Скопировать ник Discord') end
+						imgui.Text(fa.GLOBE .. u8' Репозиторий:')
+						imgui.SameLine()
+						if imgui.SmallButton(u8'GitHub') then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited') end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Открыть репозиторий хелпера') end
+						imgui.Separator()
+						imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+						imgui.TextDisabled(u8'По всем вопросам и багам обращайтесь в тех.поддержку. Не забывайте указывать версию хелпера и канал обновлений.')
+						imgui.PopTextWrapPos()
+					end
+					imgui.EndChild()
+				end
+				if imgui.BeginChild('##set_actions', imgui.ImVec2(589 * dpi, action_h), true) then
+					if imgui.Button(fa.POWER_OFF .. u8" Отключить", imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then
+						sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Хелпер приостановил свою работу до следующего входа в игру.', message_color)
+						if not IS_MOBILE then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Либо используйте сочетание клавиш ' .. message_color_hex .. 'CTRL {ffffff}+ ' .. message_color_hex .. 'R{ffffff}, чтобы повторно запустить хелпер.', message_color) end
+						reload_script = true
+						thisScript():unload()
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8"Приостановить работу хелпера до следующего входа в игру") end
+					imgui.SameLine()
+					if imgui.Button(fa.CLOCK_ROTATE_LEFT .. u8" Сброс", imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then
+						imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##reset_helper')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8"Сбросить все данные хелпера (настройки, команды, заметки)") end
+					imgui.SameLine()
+					if imgui.Button(fa.TRASH_CAN .. u8" Удалить", imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then
+						imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##delete_helper')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8"Полностью удалить Arizona&Rodina Helper с устройства") end
+					imgui.EndChild()
+				end
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				if MODULE.Main.accounts_open then
+					MODULE.Main.accounts_open = false
+					imgui.OpenPopup(fa.USER .. u8' Аккаунты ' .. fa.USER .. '##accounts')
+				end
+				if imgui.BeginPopupModal(fa.USER .. u8' Аккаунты ' .. fa.USER .. '##accounts', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+					change_dpi()
+					local st = imgui.GetStyle()
+					imgui.CenterText(fa.USER .. u8' Выберите аккаунт ' .. fa.USER)
+					imgui.Separator()
+					if imgui.BeginChild('##accounts_list', imgui.ImVec2(420 * dpi, 180 * dpi), true) then
+						for i, acc in ipairs(MODULE.Accounts.list) do
+							local has_del = not acc.is_guest
+							local bw_gear = imgui.CalcTextSize(fa.GEAR).x + 2 * st.FramePadding.x
+							local bw_del  = imgui.CalcTextSize(fa.TRASH_CAN).x + 2 * st.FramePadding.x
+							local spacing = st.ItemSpacing.x
+							local avail = imgui.GetContentRegionAvail().x
+							local right_w = bw_gear + spacing + (has_del and (bw_del + spacing) or 0)
+							local sel_w = math.max(50 * dpi, avail - right_w)
+							local label = (acc.is_guest and fa.CIRCLE_USER or fa.USER) .. ' ' .. u8(acc.name) .. '  [' .. u8(acc.server) .. ']'
+							if imgui.Selectable(label .. '##acc' .. i, MODULE.Accounts.selected == i, 0, imgui.ImVec2(sel_w, 0)) then
+								MODULE.Accounts.selected = i
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8(acc.is_guest and 'Аккаунт по умолчанию' or 'Выбрать аккаунт')) end
+							imgui.SameLine()
+							if imgui.SmallButton(fa.GEAR .. '##acc_set' .. i) then
+								MODULE.Accounts.edit_index = i
+								imgui.StrCopy(MODULE.Accounts.name_buf, u8(acc.name))
+								imgui.StrCopy(MODULE.Accounts.server_buf, u8(acc.server))
+								MODULE.Accounts.edit_open = true
+							end
+							if imgui.IsItemHovered() then imgui.SetTooltip(u8'Настроить название и сервер') end
+							if has_del then
+								imgui.SameLine()
+								if imgui.SmallButton(fa.TRASH_CAN .. '##acc_del' .. i) then
+									MODULE.Accounts.del_index = i
+									MODULE.Accounts.del_open = true
+								end
+								if imgui.IsItemHovered() then imgui.SetTooltip(u8'Удалить аккаунт') end
+							end
+						end
+						imgui.EndChild()
+					end
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+						imgui.CloseCurrentPopup()
+					end
+					imgui.SameLine()
+					if imgui.Button(fa.CIRCLE_PLUS .. u8' Создать аккаунт', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+						local n = #MODULE.Accounts.list + 1
+						table.insert(MODULE.Accounts.list, { name = 'Аккаунт ' .. n, server = 'Arizona', is_guest = false })
+						MODULE.Accounts.edit_index = n
+						imgui.StrCopy(MODULE.Accounts.name_buf, u8('Аккаунт ' .. n))
+						imgui.StrCopy(MODULE.Accounts.server_buf, u8('Arizona'))
+						MODULE.Accounts.edit_open = true
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if MODULE.Accounts.edit_open then
+						MODULE.Accounts.edit_open = false
+						imgui.OpenPopup(fa.GEAR .. u8' Настройка аккаунта ' .. fa.GEAR .. '##acc_edit')
+					end
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка аккаунта ' .. fa.GEAR .. '##acc_edit', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						local i = MODULE.Accounts.edit_index
+						local acc = MODULE.Accounts.list[i]
+						if acc then
+							imgui.Text(fa.TAG .. u8' Название аккаунта:')
+							imgui.PushItemWidth(300 * dpi)
+							imgui.InputText('##acc_name', MODULE.Accounts.name_buf, 64)
+							imgui.Text(fa.GLOBE .. u8' Сервер:')
+							imgui.InputText('##acc_server', MODULE.Accounts.server_buf, 64)
+							imgui.PopItemWidth()
+							imgui.Separator()
+							if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##acc_edit', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+								imgui.CloseCurrentPopup()
+							end
+							imgui.SameLine()
+							if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##acc_edit', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+								local nm = u8:decode(ffi.string(MODULE.Accounts.name_buf)):gsub('^%s+', ''):gsub('%s+$', '')
+								local sv = u8:decode(ffi.string(MODULE.Accounts.server_buf)):gsub('^%s+', ''):gsub('%s+$', '')
+								if nm ~= '' then acc.name = nm end
+								if sv ~= '' then acc.server = sv end
+								imgui.CloseCurrentPopup()
+							end
+						end
+						imgui.End()
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if MODULE.Accounts.del_open then
+						MODULE.Accounts.del_open = false
+						imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##acc_del')
+					end
+					local del_acc = MODULE.Accounts.list[MODULE.Accounts.del_index or 0]
+					local del_w = 340 * dpi
+					if del_acc then
+						del_w = math.max(del_w,
+							imgui.CalcTextSize(u8'Удалить аккаунт "' .. u8(del_acc.name or '') .. '"?').x + 60 * dpi,
+							imgui.CalcTextSize(u8'Все данные аккаунта будут безвозвратно удалены!').x + 60 * dpi)
+					end
+					imgui.SetNextWindowSize(imgui.ImVec2(del_w, 0), imgui.Cond.Always)
+					if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##acc_del', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.CenterText(u8'Удалить аккаунт "' .. u8(del_acc and del_acc.name or '') .. '"?')
+						imgui.CenterColorText(imgui.ImVec4(1, 0.2, 0.2, 1), u8'Все данные аккаунта будут безвозвратно удалены!')
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##acc_del', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.TRASH_CAN .. u8' Удалить##acc_del', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+							if del_acc and not del_acc.is_guest then
+								table.remove(MODULE.Accounts.list, MODULE.Accounts.del_index)
+								if MODULE.Accounts.selected > #MODULE.Accounts.list then MODULE.Accounts.selected = 1 end
+							end
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					imgui.End()
+				end
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##change_size', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+					change_dpi()
+					imgui.CenterText(u8'Вы действительно хотите изменить размер интерфейса хелпера?')
+					imgui.CenterText(u8('Текущий размер ') .. settings.general.custom_dpi .. u8(', а выбранный новый ') .. string.format('%.3f', MODULE.Main.slider.dpi[0]))
+					local size_text = (settings.general.custom_dpi < MODULE.Main.slider.dpi[0]) and 'большой' or 'мелкий'
+					imgui.CenterColorText(imgui.ImVec4(1, 0, 0, 1), u8('Если интерфейс станет слишком ') .. u8(size_text) .. u8(', используйте /fixsize'))
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##change_size', imgui.ImVec2(200 * dpi, 25 * dpi)) then MODULE.Main.slider.dpi[0] = settings.general.custom_dpi; imgui.CloseCurrentPopup() end
+					imgui.SameLine()
+					if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Да, изменить##change_size', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+						local new_dpi = tonumber(string.format('%.3f', MODULE.Main.slider.dpi[0]))
+						if IS_MOBILE and new_dpi < MONET_DPI_SCALE then
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для вашего дисплея нельзя сделать размер меньше ' .. MONET_DPI_SCALE, message_color)
+							imgui.CloseCurrentPopup()
+						else
+							settings.general.custom_dpi = new_dpi; save_settings()
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Перезагрузка скрипта для изменения размера интерфейса...', message_color)
+							reload_script = true; thisScript():reload()
+						end
+					end
+					imgui.End()
+				end
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##reset_helper', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+					change_dpi()
+					imgui.CenterText(u8'Вы действительно хотите сбросить все данные хелпера?')
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_restore', imgui.ImVec2(200 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+					imgui.SameLine()
+					if imgui.Button(fa.CLOCK_ROTATE_LEFT .. u8' Сбросить##yes_restore', imgui.ImVec2(200 * dpi, 25 * dpi)) then delete_helper_data() end
+					imgui.End()
+				end
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##delete_helper', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+					change_dpi()
+					imgui.CenterText(u8'Вы действительно хотите удалить Arizona&Rodina Helper?')
+					imgui.CenterText(u8'Также будут удалены все настройки, команды и заметки.')
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_delete_helper', imgui.ImVec2(200 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+					imgui.SameLine()
+					if imgui.Button(fa.TRASH_CAN .. u8' Удалить##delete_helper', imgui.ImVec2(200 * dpi, 25 * dpi)) then delete_helper_data(true) end
+					imgui.End()
+				end
+				imgui.EndTabItem()
+			end
+		imgui.EndTabBar() end
+		imgui.End()
+    end
+)
+imgui.OnFrame(
+	function() return MODULE.TermsConfirm.Window[0] end,
+	function()
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(fa.BOOK .. u8' Пользовательское соглашение ' .. fa.BOOK .. '##terms_reg', MODULE.TermsConfirm.Window,
+			imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		imgui.CenterText(u8'Пользовательское соглашение и политика конфиденциальности')
+		imgui.Separator()
+		if imgui.BeginChild('##terms_reg_text', imgui.ImVec2(520 * settings.general.custom_dpi, 320 * settings.general.custom_dpi), true) then
+			render_terms_text()
+			imgui.EndChild()
+		end
+		imgui.Separator()
+		if imgui.Button(fa.FLAG_CHECKERED .. u8' Принять', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+			settings.general.terms_accepted = true
+			save_settings()
+			MODULE.TermsConfirm.Window[0] = false
+		end
+		imgui.SameLine()
+		if imgui.Button(fa.CIRCLE_XMARK .. u8' Отказаться', imgui.ImVec2(250 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+			MODULE.TermsConfirm.Window[0] = false
+		end
+		imgui.End()
+	end
+)
+imgui.OnFrame(
+	function() return MODULE.Note.Window[0] end,
+	function(player)
+		local dpi = settings.general.custom_dpi
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+		if MODULE.Note.show_resize_pending then
+			imgui.SetNextWindowSize(imgui.ImVec2(MODULE.Note.show_w or 550 * dpi, MODULE.Note.show_h or 420 * dpi), imgui.Cond.Always)
+			MODULE.Note.show_resize_pending = false
+		else
+			imgui.SetNextWindowSize(imgui.ImVec2(550 * dpi, 420 * dpi), imgui.Cond.FirstUseEver)
+		end
+		imgui.Begin(getHelperIcon() .. ' ' .. su8(MODULE.Note.show_note_name or 'Заметка') .. ' ##note_show_window', MODULE.Note.Window, imgui.WindowFlags.NoCollapse)
+		change_dpi()
+		safery_disable_cursor(player)
+		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+			MODULE.Note.Window[0] = false
+		end
+		imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
+		imgui.TextWrapped(su8((MODULE.Note.show_note_text or ''):gsub('&', '\n')))
+		imgui.PopTextWrapPos()
+		imgui.End()
+	end
+)
+imgui.OnFrame(
+	function() return MODULE.Edgo.Window[0] end,
+	function(player)
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function()
+				local d = imgui.GetIO().DisplaySize
+				if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+			end)
+			local PAD = 200
+			local st = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round  = st.WindowRounding  end)
+			pcall(function() old_border = st.WindowBorderSize end)
+			pcall(function() st.WindowRounding  = 0 end)
+			pcall(function() st.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##dim_edgo', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End()
+			imgui.PopStyleColor()
+			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+			pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+		end
+		settings.windows_pos.edgo_menu = settings.windows_pos.edgo_menu or { x = sizeX / 2 - 180, y = sizeY / 2 - 160 }
+		imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.edgo_menu.x, settings.windows_pos.edgo_menu.y), imgui.Cond.FirstUseEver)
+		imgui.Begin(getHelperIcon() .. u8" ЭБГО / EDGO " .. getHelperIcon() .. '##edgo_menu', MODULE.Edgo.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+		change_dpi()
+		player.HideCursor = false
+		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+			MODULE.Edgo.Window[0] = false
+		end
+		local W = 340 * settings.general.custom_dpi
+		imgui.Checkbox(u8'Online (По ID)##edgo_mode', MODULE.Edgo.Online)
+		imgui.Separator()
+		if MODULE.Edgo.Online[0] then
+			imgui.Text(fa.USER .. u8' ID игрока:')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_id', u8'ID', MODULE.Edgo.id_buf, 16); imgui.PopItemWidth()
+		else
+			imgui.Text(fa.USER .. u8' Имя и фамилия (ник):')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_nick', u8'Имя Фамилия', MODULE.Edgo.nick_buf, 64); imgui.PopItemWidth()
+			imgui.Text(fa.CLOCK .. u8' Год рождения:')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_year', u8'напр. 1991', MODULE.Edgo.year_buf, 8); imgui.PopItemWidth()
+			imgui.Text(fa.BUILDING_SHIELD .. u8' Организация:')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_org', u8'напр. LSPD', MODULE.Edgo.org_buf, 64); imgui.PopItemWidth()
+			imgui.Text(fa.STAR .. u8' Должность:')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_rank', u8'напр. Шеф', MODULE.Edgo.rank_buf, 64); imgui.PopItemWidth()
+			imgui.Text(fa.WALKIE_TALKIE .. u8' Номер телефона:')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_phone', u8'напр. 1777333', MODULE.Edgo.phone_buf, 16); imgui.PopItemWidth()
+			imgui.Text(fa.CIRCLE_INFO .. u8' Статус:')
+			imgui.PushItemWidth(W); imgui.InputTextWithHint('##edgo_status', u8'напр. В штате', MODULE.Edgo.status_buf, 32); imgui.PopItemWidth()
+		end
+		imgui.Separator()
+		imgui.Text(fa.CIRCLE_INFO .. u8' Способ пробива:')
+		if MODULE.Edgo.Online[0] then
+			if imgui.Button(fa.CLOCK .. u8' Пробив истории имени##edgo_h', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_history() end
+		end
+		if imgui.Button(fa.WALKIE_TALKIE .. u8' Пробив по голосу##edgo_v', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_voice() end
+		if imgui.Button(fa.STAR .. u8' Пробив по бейджику##edgo_b', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_badge() end
+		if imgui.Button(fa.USER .. u8' Пробив по боди-камере##edgo_bc', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_bodycam() end
+		if imgui.Button(fa.BUILDING_SHIELD .. u8' Пробив по голосу /d##edgo_vd', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then MODULE.Edgo.run_voiced() end
+		if imgui.Button(fa.TRIANGLE_EXCLAMATION .. u8' Пробив по снятию розыска##edgo_unsu', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then
+			imgui.OpenPopup('##edgo_unsu_popup')
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		if imgui.BeginPopupModal('##edgo_unsu_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
+			change_dpi()
+			imgui.Text(u8'Цель пробива (снявший розыск):')
+			imgui.RadioButtonIntPtr(u8' Последний из чата: ' .. (MODULE.Edgo.last_unsu and MODULE.Edgo.last_unsu.officer or u8'Нету'), MODULE.Edgo.unsu_choice, 0)
+			imgui.RadioButtonIntPtr(u8' Ввести ID вручную', MODULE.Edgo.unsu_choice, 1)
+			if MODULE.Edgo.unsu_choice[0] == 1 then
+				imgui.PushItemWidth(W); imgui.InputTextWithHint('##unsu_id', u8'ID', MODULE.Edgo.unsu_id_buf, 16); imgui.PopItemWidth()
+			end
+			imgui.Separator()
+			if imgui.Button(fa.WALKIE_TALKIE .. u8' Пробить', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then
+				if MODULE.Edgo.unsu_choice[0] == 0 then
+					if MODULE.Edgo.last_unsu then MODULE.Edgo.start_unsu(MODULE.Edgo.last_unsu.officer) end
+				else
+					local id = tonumber(u8:decode(ffi.string(MODULE.Edgo.unsu_id_buf)))
+					if id then MODULE.Edgo.start_unsu(id) end
+				end
+				imgui.CloseCurrentPopup()
+			end
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(W, 25 * settings.general.custom_dpi)) then
+				imgui.CloseCurrentPopup()
+			end
+			imgui.EndPopup()
+		end
+		local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+		if posX ~= settings.windows_pos.edgo_menu.x or posY ~= settings.windows_pos.edgo_menu.y then
+			settings.windows_pos.edgo_menu = { x = posX, y = posY }; save_settings()
+		end
+		imgui.End()
+	end
+)
+imgui.OnFrame(
+	function() return MODULE.Cruise.Window[0] end,
+	function(player)
+		settings.windows_pos.cruise_menu = settings.windows_pos.cruise_menu or { x = sizeX / 2 - 170, y = sizeY / 2 - 180 }
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function()
+				local d = imgui.GetIO().DisplaySize
+				if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+			end)
+			local PAD = 200
+			local st = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round  = st.WindowRounding  end)
+			pcall(function() old_border = st.WindowBorderSize end)
+			pcall(function() st.WindowRounding  = 0 end)
+			pcall(function() st.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##cruise_dim', nil,
+				imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+				imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End()
+			imgui.PopStyleColor()
+			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+			pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+		end
+       imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.cruise_menu.x, settings.windows_pos.cruise_menu.y), imgui.Cond.FirstUseEver)
+        imgui.Begin((fa.COMPASS or fa.CIRCLE_INFO) .. u8" Адаптивный круиз-контроль / CRUISE " .. (fa.COMPASS or fa.CIRCLE_INFO) .. '##cruise_menu', MODULE.Cruise.Window,
+            imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+        change_dpi()
+        player.HideCursor = false
+        if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+            MODULE.Cruise.Window[0] = false
+        end
+        local W = 420 * settings.general.custom_dpi
+        local H = 25 * settings.general.custom_dpi
+        local cc = MODULE.CruiseControl
+        local ride_vals  = {0, 2, 3}
+        local drive_vals = {0, 5, 2, 4, 7}
+        local function ensure_combo_items()
+            if not MODULE.Cruise._ride_labels then
+                MODULE.Cruise._ride_labels = {
+                    u8'Держаться своей полосы',
+                    u8'Ехать напрямую, не сворачивая',
+                    u8'Занимать всю ширину дороги',
+                }
+                MODULE.Cruise.ride_ImItems = imgui.new['const char*'][#MODULE.Cruise._ride_labels](MODULE.Cruise._ride_labels)
+            end
+            if not MODULE.Cruise._drive_labels then
+                MODULE.Cruise._drive_labels = {
+                    u8'Стоп на светофорах и перед машинами',
+                    u8'Стоп на светофорах, объезжать машины',
+                    u8'Проезжать светофоры, объезжать машины',
+                    u8'Проезжать светофоры, стоп перед машинами',
+                    u8'Ехать через всё, не останавливаясь',
+                }
+                MODULE.Cruise.drive_ImItems = imgui.new['const char*'][#MODULE.Cruise._drive_labels](MODULE.Cruise._drive_labels)
+            end
+            return true
+        end
+        local combo_ok = ensure_combo_items()
+        local has_marker, mx, my, mz = getTargetBlipCoordinates()
+        local in_car   = isCharInAnyCar(PLAYER_PED)
+        local car      = in_car and storeCarCharIsInNoSave(PLAYER_PED) or nil
+        local engine   = in_car and car and isCarEngineOn(car) or false
+        local is_drv   = in_car and car and (getDriverOfCar(car) == PLAYER_PED) or false
+        local can_drive = in_car and engine and is_drv
+        imgui.Columns(2, '##cruise_status_cols', false)
+            imgui.Text((fa.CIRCLE_INFO or fa.CIRCLE_INFO) .. u8' Состояние:')
+            local state_txt, state_on
+            if cc.pursuit_active then state_txt = u8'Преследование цели'; state_on = true
+            elseif cc.active then state_txt = u8'Едет к цели'; state_on = true
+            elseif cc.wait_point then state_txt = u8'Ожидает метку на карте'; state_on = false
+            else state_txt = u8'Выключен'; state_on = false end
+            if state_on then imgui.TextColored(imgui.ImVec4(0.3, 1.0, 0.3, 1.0), state_txt)
+            else imgui.TextDisabled(state_txt) end
+        imgui.NextColumn()
+            imgui.Text((fa.LOCATION_DOT or fa.CIRCLE_INFO) .. u8' Метка на карте:')
+            if has_marker then
+                imgui.TextColored(imgui.ImVec4(0.3, 1.0, 0.3, 1.0),
+                    u8('Есть (X:' .. math.floor(mx) .. ' Y:' .. math.floor(my) .. ')'))
+            else
+                imgui.TextColored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), u8'Нет - поставьте метку')
+            end
+        imgui.Columns(1)
+        imgui.Separator()
+        imgui.Text((fa.COMPASS or fa.CIRCLE_INFO) .. u8' Обычный маршрут:')
+        if imgui.Button((fa.CIRCLE_ARROW_RIGHT or fa.CIRCLE_INFO) .. u8' Поехать к метке', imgui.ImVec2(imgui.GetMiddleButtonX(2), H)) then
+            if not in_car then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сначала сядьте в транспортное средство.', message_color)
+            elseif not engine then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Заведите двигатель транспортного средства.', message_color)
+            elseif not is_drv then
+                sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы должны быть водителем.', message_color)
+            else
+                cc.wait_point = true
+                if not has_marker then
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Поставьте метку на карту - маршрут запустится автоматически.', message_color)
+                end
+            end
+        end
+        if not can_drive and imgui.IsItemHovered() then imgui.SetTooltip(u8'Сначала сядьте за руль заведённого т/с') end
+        imgui.SameLine()
+        if imgui.Button((fa.CIRCLE_XMARK or fa.CIRCLE_STOP) .. u8' Стоп', imgui.ImVec2(imgui.GetMiddleButtonX(2), H)) then
+            cruise_deactivate(nil)
+        end
+        if imgui.Checkbox(u8'Авто-старт по метке (поедет сам, как только поставите метку)##cruise_auto', MODULE.Cruise._auto_cb) then
+            settings.general.cruise_auto_accept = MODULE.Cruise._auto_cb[0]; save_settings()
+        end
+        if imgui.Checkbox(u8'Показывать HUD во время езды (координаты, дистанция, скорость)##cruise_hud', MODULE.Cruise._hud_cb) then
+            settings.general.cruise_hud = MODULE.Cruise._hud_cb[0]; save_settings()
+        end
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Компактное окно поверх игры с данными о маршруте') end
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Без RP-отыгровки, чтобы не спамить в чат при каждой метке') end
+        imgui.Separator()
+        imgui.Text((fa.STAR or fa.CIRCLE_INFO) .. u8' Преследование (погоня):')
+        imgui.PushItemWidth(W * 0.62)
+        imgui.InputTextWithHint('##cruise_pursuit_id', u8'ID цели', MODULE.Cruise.pursuit_id_buf, 16)
+        imgui.PopItemWidth()
+        imgui.SameLine()
+        local _pid_str = u8:decode(ffi.string(MODULE.Cruise.pursuit_id_buf)):gsub('%D', '')
+        local pid = tonumber(_pid_str)
+        if cc.pursuit_active then
+            if imgui.Button((fa.CIRCLE_XMARK or fa.CIRCLE_STOP) .. u8' Стоп', imgui.ImVec2(W * 0.36, 22 * settings.general.custom_dpi)) then
+                cruise_deactivate('преследование остановлено вручную.')
+            end
+        else
+            if imgui.Button((fa.CIRCLE_ARROW_RIGHT or fa.CIRCLE_INFO) .. u8' Начать', imgui.ImVec2(W * 0.36, 22 * settings.general.custom_dpi)) then
+                if not can_drive then
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сначала сядьте за руль заведённого т/с.', message_color)
+                elseif not pid or not sampIsPlayerConnected(pid) then
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Введите корректный ID цели, находящейся в сети.', message_color); play_sound()
+                else
+                    cc.pursuit_active = true; cc.pursuit_target_id = pid; cc.active = true
+                    cc.driving = false; cc.last_drive_set = 0
+                    sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Преследование цели ' .. message_color_hex .. (sampGetPlayerNickname(pid) or '?') .. '[' .. pid .. ']{ffffff} запущено.', message_color)
+                    lua_thread.create(function()
+                        local my_id = pid
+                        local function alive() return cc.pursuit_active and cc.pursuit_target_id == my_id and sampIsPlayerConnected(my_id) end
+                        while alive() do sampSendChat('/find ' .. my_id); wait(3000) end
+                        if cc.pursuit_target_id == my_id and cc.pursuit_active then
+                            cruise_deactivate('Цель преследования отключилась от сервера.')
+                        end
+                    end)
+                end
+            end
+        end
+        imgui.Separator()
+        imgui.Text((fa.GEAR or fa.CIRCLE_INFO) .. u8' Настройки вождения:')
+		imgui.Text(u8'Скорость (км/ч)')
+		if imgui.IsItemHovered() then imgui.SetTooltip(u8'Целевая скорость в км/ч') end
+        imgui.PushItemWidth(W)
+        if imgui.SliderFloat('##cruise_speed', MODULE.Cruise.speed_slider, 10, 120, '%.0f') then
+            settings.general.cruise_speed = math.floor(MODULE.Cruise.speed_slider[0]); save_settings()
+        end
+        imgui.Text(u8'Радиус прибытия')
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'На каком расстоянии от цели считать, что приехали (игровые метры)') end
+        if imgui.SliderFloat('##cruise_radius', MODULE.Cruise.radius_slider, 5, 50, '%.0f') then
+            settings.general.cruise_radius = math.floor(MODULE.Cruise.radius_slider[0]); save_settings()
+        end
+        imgui.Text(u8'Поведение на дороге')
+        if combo_ok then
+            if imgui.Combo('##cruise_ride', MODULE.Cruise.ride_combo, MODULE.Cruise.ride_ImItems, #MODULE.Cruise._ride_labels) then
+                settings.general.cruise_ride = ride_vals[MODULE.Cruise.ride_combo[0] + 1]; save_settings()
+            end
+        end
+        imgui.Text(u8'Поведение в трафике')
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Как машина ведёт себя со светофорами и другими авто') end
+        if combo_ok then
+            if imgui.Combo('##cruise_drive', MODULE.Cruise.drive_combo, MODULE.Cruise.drive_ImItems, #MODULE.Cruise._drive_labels) then
+                settings.general.cruise_drive = drive_vals[MODULE.Cruise.drive_combo[0] + 1]; save_settings()
+            end
+        end
+        imgui.PopItemWidth()
+        if imgui.Checkbox(u8'Если застрял - пробиваться через машины##cruise_aggr', MODULE.Cruise._aggr_cb) then
+            settings.general.cruise_aggressive = MODULE.Cruise._aggr_cb[0]; save_settings()
+        end
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'При застревании переключится на проезд через машины; иначе остановится') end
+
+        local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+        if posX ~= settings.windows_pos.cruise_menu.x or posY ~= settings.windows_pos.cruise_menu.y then
+            settings.windows_pos.cruise_menu = { x = posX, y = posY }; save_settings()
+        end
+        imgui.End()
+    end
+)
+function iconTextFormat(item)
+	if item.icon and item.icon ~= '' and fa[item.icon] then
+		return fa[item.icon] .. ' ' .. u8(item.name)
+	end
+	return u8(item.name)
+end
+function render_buttons()
+	for index, value in ipairs(modules.buttons.data) do
+		local WindowName = value.name .. index
+		if not MODULE.Buttons[WindowName] then
+			MODULE.Buttons[WindowName] = imgui.new.bool(value.enable)
+		end
+		imgui.OnFrame(
+			function() return MODULE.Buttons[WindowName][0] end,
+			function(player)
+				imgui.SetNextWindowPos(imgui.ImVec2(value.pos.x, value.pos.y), imgui.Cond.FirstUseEver)
+				imgui.Begin("##BUTTON" .. value.name, MODULE.Buttons[WindowName], imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoScrollbar)
+				change_dpi()
+				if imgui.Button(iconTextFormat(value), imgui.ImVec2(value.size.x * settings.general.custom_dpi, value.size.y * settings.general.custom_dpi)) then
+					sampProcessChatInput(value.action)
+				end
+				local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+				if posX ~= value.pos.x or posY ~= value.pos.y then
+					value.pos.x = posX
+					value.pos.y = posY
+					save_module('buttons')
+				end
+				imgui.End()
+			end
+		)
+	end
+end
+--------------------------------------------[ CRUISE ]-----------------------------------------------
+imgui.OnFrame(
+    function()
+        local cc = MODULE.CruiseControl
+        return (cc.active or cc.pursuit_active) and (settings.general.cruise_hud ~= false)
+    end,
+    function(player)
+        local cc = MODULE.CruiseControl
+        local dpi = settings.general.custom_dpi
+        local W = 244 * dpi
+        settings.windows_pos.cruise_hud = settings.windows_pos.cruise_hud or { x = sizeX - 250, y = 50 }
+        pcall(function()
+            imgui.SetNextWindowSizeConstraints(imgui.ImVec2(W, 0), imgui.ImVec2(W, sizeY - 20 * dpi))
+        end)
+        imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.cruise_hud.x, settings.windows_pos.cruise_hud.y), imgui.Cond.FirstUseEver)
+        imgui.Begin((fa.GAUGE or fa.CIRCLE_INFO) .. u8' CRUISE-CONTROL##cruise_hud', nil,
+            imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		if not (MODULE.Cruise and MODULE.Cruise.Window[0]) then
+			player.HideCursor = true
+		end
+        local in_car = isCharInAnyCar(PLAYER_PED)
+        local car    = in_car and storeCarCharIsInNoSave(PLAYER_PED) or nil
+        local cx, cy, cz = 0, 0, 0
+        if car then cx, cy, cz = getCarCoordinates(car) end
+        local now = os.clock()
+        local dt  = now - (cc.hud_last_t or 0)
+        if car and (cc.hud_last_t or 0) ~= 0 and dt > 0 and dt < 2.0 then
+            local moved = getDistanceBetweenCoords3d(cx, cy, cz,
+                cc.hud_last_x or 0, cc.hud_last_y or 0, cc.hud_last_z or 0)
+            local inst = moved / dt
+            cc.hud_speed = (cc.hud_speed or 0) * 0.8 + inst * 0.2
+        end
+        if car then
+            cc.hud_last_x, cc.hud_last_y, cc.hud_last_z = cx, cy, cz
+            cc.hud_last_t = now
+        end
+        local dist = 0
+        if car then
+            dist = getDistanceBetweenCoords3d(cx, cy, cz, cc.point.x, cc.point.y, cc.point.z)
+        end
+        local sd = cc.hud_start_dist or 0
+        if sd == 0 or (not cc.pursuit_active and dist > sd) then
+            cc.hud_start_dist = dist; sd = dist
+        end
+        local pursuit = cc.pursuit_active and true or false
+        local spd     = cc.hud_speed or 0
+        local moving  = spd > 0.5
+        local function fmt_eta(sec)
+            if not sec or sec < 0 then return '--' end
+            local m = math.floor(sec / 60)
+            local s = math.floor(sec % 60)
+            if m > 0 then return string.format('%dm %02ds', m, s) end
+            return string.format('%ds', s)
+        end
+        local eta = (not pursuit and moving) and (dist / spd) or nil
+        local t = os.clock()
+        local hdr_icon, hdr_text, hdr_col
+        if pursuit then
+            local pulse = 0.55 + 0.45 * math.sin(t * 7)
+            hdr_icon = fa.STAR or fa.CIRCLE_INFO
+            hdr_text = u8'ПОГОНЯ'
+            hdr_col  = imgui.ImVec4(1.0, 0.30 + 0.25 * pulse, 0.30 + 0.25 * pulse, 1.0)
+        else
+            hdr_icon = fa.GAUGE or fa.COMPASS or fa.CIRCLE_INFO
+            hdr_text = moving and u8'В ПУТИ' or u8'МАРШРУТ'
+            hdr_col  = moving and imgui.ImVec4(0.35, 1.0, 0.45, 1.0) or imgui.ImVec4(0.75, 0.85, 1.0, 1.0)
+        end
+        local hdr_str = hdr_icon .. ' ' .. hdr_text
+        imgui.PushStyleColor(imgui.Col.Text, hdr_col)
+        local _tw = imgui.CalcTextSize(hdr_str).x
+        imgui.SetCursorPosX((imgui.GetWindowWidth() - _tw) * 0.5)
+        imgui.Text(hdr_str)
+        imgui.PopStyleColor()
+        imgui.Separator()
+        imgui.Columns(2, '##cruise_hud_cols', false)
+        imgui.SetColumnWidth(-1, 92 * dpi)
+        imgui.Text((fa.LOCATION_DOT or fa.CIRCLE_INFO) .. u8' Цель')
+        imgui.NextColumn()
+        if pursuit then
+            imgui.TextColored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), u8('ID ' .. tostring(cc.pursuit_target_id or -1)))
+        else
+            imgui.Text(u8(string.format('X: %.0f | Y: %.0f', cc.point.x, cc.point.y)))
+        end
+        if imgui.IsItemHovered() then imgui.SetTooltip(pursuit and u8'Преследуемый игрок' or u8'Координаты метки на карте') end
+        imgui.NextColumn()
+        imgui.Text((fa.GAUGE or fa.CIRCLE_INFO) .. u8' Скорость')
+        imgui.NextColumn()
+        local HUD_MS_TO_KMH = 3.6
+        imgui.TextColored(imgui.ImVec4(1.0, 1.0, 1.0, 1.0), u8(string.format('%.0f км/ч', (cc.hud_speed or 0) * HUD_MS_TO_KMH)))
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Текущая скорость по факту смещения т/с (приблизительно в км/ч)') end
+        imgui.NextColumn()
+        imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8' Расстояние')
+        imgui.NextColumn()
+        local dist_col = pursuit and imgui.ImVec4(1.0, 0.55, 0.3, 1.0) or imgui.ImVec4(0.3, 1.0, 0.45, 1.0)
+        imgui.TextColored(dist_col, u8(string.format('%.0f м', dist)))
+        imgui.NextColumn()
+        imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8' В пути')
+        imgui.NextColumn()
+        if pursuit then
+            imgui.TextDisabled(u8'--')
+        else
+            imgui.TextColored(imgui.ImVec4(1.0, 0.85, 0.2, 1.0), u8(fmt_eta(eta)))
+        end
+        if imgui.IsItemHovered() then imgui.SetTooltip(u8'Примерно = осталось / скорость; при погоне неприменимо') end
+        imgui.NextColumn()
+        imgui.Columns(1)
+        if not pursuit and sd > 1 then
+            local prog = 1 - dist / sd
+            if prog < 0 then prog = 0 elseif prog > 1 then prog = 1 end
+            imgui.ProgressBar(prog, imgui.ImVec2(-1, 5 * dpi))
+        end
+        imgui.Spacing()
+        imgui.PushStyleColor(imgui.Col.Button,        imgui.ImVec4(0.70, 0.12, 0.12, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.85, 0.20, 0.20, 1.0))
+        imgui.PushStyleColor(imgui.Col.ButtonActive,  imgui.ImVec4(0.55, 0.08, 0.08, 1.0))
+        if imgui.Button((fa.CIRCLE_STOP or fa.CIRCLE_XMARK) .. u8'  Остановить круиз', imgui.ImVec2(-1, 24 * dpi)) then
+            cruise_deactivate('Остановлено из HUD.')
+        end
+        imgui.PopStyleColor()
+        imgui.PopStyleColor()
+        imgui.PopStyleColor()
+        local px, py = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+        if px ~= settings.windows_pos.cruise_hud.x or py ~= settings.windows_pos.cruise_hud.y then
+            settings.windows_pos.cruise_hud = { x = px, y = py }; save_settings()
+        end
+        imgui.End()
+    end
+)
+------------------------------------------[ SCOREBOARD ]---------------------------------------------
+function drawScoreboardPlayer(id)
+	local nickname = u8(sampGetPlayerNickname(id))
+	local score = sampGetPlayerScore(id)
+	local ping = sampGetPlayerPing(id)
+	local color = sampGetPlayerColor(id)
+	if IS_MOBILE then if mobileColors[color] then color = mobileColors[color] end end
+	local rgbNormalized = argbToRgbNormalized(color)
+	local imgui_RGBA = imgui.ImVec4(rgbNormalized[1], rgbNormalized[2], rgbNormalized[3], 1)
+	imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(id)).x / 2)
+	if modules.scoreboard.data.colored_id then
+		if score == 0 then imgui.Text(tostring(id)) else imgui.TextColored(imgui_RGBA, tostring(id)) end
+	else
+		imgui.Text(tostring(id))
+	end
+	imgui.NextColumn()
+	if modules.scoreboard.data.colored_nickname then
+		if score == 0 then
+			imgui.Text(" " .. tostring(nickname)) imgui.SameLine() imgui.Text(u8"[Connecting...]")
+		else
+			imgui.TextColored(imgui_RGBA, ' ' .. nickname)
+		end
+	else
+		if score == 0 then
+			imgui.Text(" " .. tostring(nickname)) imgui.SameLine() imgui.Text(u8"[Connecting...]")
+		else
+			imgui.Text(' ' .. nickname)
+		end
+	end
+	imgui.NextColumn()
+	imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(score)).x / 2)
+	if modules.scoreboard.data.colored_score then
+		if score == 0 then imgui.Text(tostring(score)) else imgui.TextColored(imgui_RGBA, tostring(score)) end
+	else
+		imgui.Text(tostring(score))
+	end
+	imgui.NextColumn()
+	if modules.scoreboard.data.colored_ping then
+		if score == 0 then
+			imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(0)).x / 2)
+			imgui.Text("0")
+		else
+			imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(ping)).x / 2)
+			imgui.TextColored(imgui_RGBA, tostring(ping))
+		end
+	else
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(tostring(ping)).x / 2)
+		imgui.Text(tostring(ping))
+	end
+	imgui.NextColumn()
+	if modules.scoreboard.data.show_actions_menu then
+		if imgui.Button(fa.COPY .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
+			setClipboardText(tostring(nickname))
+		end
+		imgui.SameLine()
+		if imgui.Button(fa.PHONE .. "##" .. id, imgui.ImVec2(21 * settings.general.custom_dpi, 22 * settings.general.custom_dpi)) then
+			MODULE.Scoreboard.call_checker = id
+			MODULE.Scoreboard.Window[0] = false
+			sampSendChat("/number " .. id)
+		end
+		imgui.NextColumn()
+	end
+end
+local mobileColors = {
+	[4261215253] = 368966908, [4294967168] = 368966908, [4294967040] = 368966908,
+	[1717460481] = 23486046, [4286480000] = 2164227710, [2570282624] = 2157523814,
+	[2573611904] = 2157536819, [4284887936] = 2164221491, [9643929] = 2566951719,
+	[3484370560] = 2161094470, [4286578816] = 2164228096, [139422719] = 2150852249,
+	[2516714112] = 2157314562, [5177216] = 2147503871, [4849536] = 2147503871,
+	[3126074752] = 2159694877, [3439263872] = 2160918272, [3183328640] = 2159918525,
+	[3422604441] = 2580283596, [1718026137] = 2573625087, [4294967295] = 2580667164,
+	[3520797849] = 2580667164, [2826467456] = 2158524536, [16769689] = 2566979554
+}
+------------------------------------------[ FRACTION GUI ]-------------------------------------------
+function render_assist_item(name, description, tbl, key, isVip, func, manual_func)
+	imgui.Separator()
+	imgui.Columns(3)
+	if tbl and tbl[key] then
+		if isVip then
+			imgui.CenterColumnColorText(imgui.ImVec4(0.93, 0.79, 0.15, 1.0), fa.TRIANGLE_EXCLAMATION .. ' ' .. u8(name))
+		else
+			imgui.CenterColumnText(u8(name))
+		end
+	else
+		if isVip then
+			imgui.CenterColumnColorText(imgui.ImVec4(0.55, 0.45, 0.08, 1.0), fa.TRIANGLE_EXCLAMATION .. ' ' .. u8(name))
+		else
+			imgui.CenterColumnTextDisabled(u8(name))
+		end
+	end
+	imgui.NextColumn()
+	local wrap_w = 500 * settings.general.custom_dpi
+	local st = imgui.GetStyle()
+	local desc_size = imgui.CalcTextSize(u8(description), false, wrap_w)
+	local win_w = wrap_w + st.WindowPadding.x * 2
+	local win_h = desc_size.y + 25 * settings.general.custom_dpi + st.WindowPadding.y * 2 + st.ItemSpacing.y * 2 + 3
+	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+	if imgui.BeginPopupModal(fa.CIRCLE_INFO .. ' ' .. u8(name) .. ' ' .. fa.CIRCLE_INFO, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+		change_dpi()
+		local wrap_w = 500 * settings.general.custom_dpi
+		imgui.PushTextWrapPos(imgui.GetCursorPosX() + wrap_w)
+		imgui.TextWrapped(u8(description))
+		imgui.PopTextWrapPos()
+		imgui.Separator()
+		if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(wrap_w, 25 * settings.general.custom_dpi)) then
+			imgui.CloseCurrentPopup()
+		end
+		imgui.EndPopup()
+	end
+	if manual_func then
+		if imgui.CenterColumnSmallButton(fa.DOWNLOAD .. u8(' Ручное обновление##' .. name .. key)) then
+			manual_func()
+		end
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip(u8(description))
+		end
+	else
+		if imgui.CenterColumnSmallButton(u8('Посмотреть##' .. name .. key)) then
+			imgui.OpenPopup(fa.CIRCLE_INFO .. ' ' .. u8(name) .. ' ' .. fa.CIRCLE_INFO)
+		end
+	end
+	imgui.NextColumn()
+	if imgui.CenterColumnSmallButton((((tbl and tbl[key]) and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##' .. name .. key)) then
+		tbl[key] = not tbl[key]
+		save_settings()
+	end
+	if imgui.IsItemHovered() then
+		imgui.SetTooltip((tbl and tbl[key]) and u8('Включено') or u8('Выключено'))
+	end
+	if func and tbl and tbl[key] then
+		imgui.SameLine()
+		if imgui.SmallButton(fa.GEAR .. '##' .. name) then
+			func()
+		end
+		if imgui.IsItemHovered() then
+			imgui.SetTooltip(u8("Настроить"))
+		end
+	end
+	imgui.Columns(1)
+end
+function firs_render_assist_gui()
+	imgui.Columns(3)
+	imgui.CenterColumnText(u8("Функция Ассистента"))
+	imgui.SetColumnWidth(-1, 320 * settings.general.custom_dpi)
+	imgui.NextColumn()
+	imgui.CenterColumnText(u8("Описание функции"))
+	imgui.SetColumnWidth(-1, 150 * settings.general.custom_dpi)
+	imgui.NextColumn()
+	imgui.CenterColumnText(u8("Управление"))
+	imgui.SetColumnWidth(-1, 100 * settings.general.custom_dpi)
+	imgui.NextColumn()
+	imgui.Columns(1)
+	render_assist_item(
+		"RP общение в чатах",
+		"Ваши сообщения в чат будут отправляться с заглавной буквы и точкой в конце.\nТак-же работает и в таких чатах как: /s /do /f /fb /r /rb /j /jb /fam /al",
+		settings.general,
+		"rp_chat"
+	)
+	render_assist_item(
+		"RP отыгровка оружия",
+		"При использовании или скролле оружия, в чате будут RP отыгровки.\n\nДля настройки используйте кнопку шестерёнки справа.",
+		settings.general,
+		"rp_weapon",
+		false,
+		function()
+			imgui.OpenPopup(fa.GUN .. u8' RP отыгровка оружия в чате ' .. fa.GUN)
+		end
+	)
+	render_assist_item(
+		"RP проверка документов",
+		"Автоматически принимает документы из /offer\nТак-же через RP отыгровку проверяет их, затем возвращает.",
+		settings.general,
+		"auto_accept_docs"
+	)
+	render_assist_item(
+		"Пинг в чате @" .. MODULE.Binder.tag.my_nick(),
+		"Звуковое оповещение на пинг вашего никнейма в игровых чатах",
+		settings.general,
+		"ping"
+	)
+	render_assist_item(
+		"Автофлип домкратом",
+		"Если перевернётесь на авто, автоматически используется /domkrat для спасения.\nЕсли у вас не будет их в инвентаре, то ваше авто не перевернётся!\n\nДля настройки используйте кнопку шестерёнки справа.",
+		settings.general,
+		"aflip_domkrat",
+		false,
+		function()
+			if not MODULE.AutoFlipDomkrat.delay_slider then
+				MODULE.AutoFlipDomkrat.delay_slider = imgui.new.int(settings.general.aflip_domkrat_delay or 5)
+			else
+				MODULE.AutoFlipDomkrat.delay_slider[0] = settings.general.aflip_domkrat_delay or 5
+			end
+			imgui.OpenPopup(fa.GEAR .. u8' Настройка автофлипа ' .. fa.GEAR)
+		end
+	)
+	render_assist_item(
+		"Переодевание маски",
+		"Если ваша маска слетает, сразу же автоматически надевает новую.\nВаш цветной клист даже не успеет появиться на карте.",
+		settings.general,
+		"auto_mask"
+	)
+	local rank_num = modules.player.data.fraction_rank_number or 0
+	if rank_num >= 9 and not isMode('fbi') then
+		render_assist_item(
+			"Инвайт игроков по фразе [9/10]",
+			'Автоматически инвайтит игроков, которые просят инвайт в чате.\nДля настройки выдачи ранга нажмите на шестерёнку справа от кнопки',
+			settings.general,
+			"auto_invite",
+			false,
+			function()
+				imgui.OpenPopup(fa.PERSON_CIRCLE_CHECK .. u8' Ранг для авто-инвайта ' .. fa.PERSON_CIRCLE_CHECK)
+			end
+		)
+		render_assist_item(
+			"Увал сотрудников по ПСЖ [9/10]",
+			"Автоматическое увольнение сотрудников, которые просят увал ПСЖ в /r /rb /f /fb\nПример ситуации как это работает:\n1) Игрок пишет в /r Увольте меня по псж\n2) Cкрипт отвечает: /rb Nick_Name, отправьте /rb +++ чтобы уволиться ПСЖ!\n3) Игрок отправляет /rb +++ и скрипт его увольняет по ПСЖ\n\nP.S. Если игрок флудит просьбами об увале, скрипт САМ его уволит, без +++\nP.S.S. Данная функция работает только если вы одеты в рабочую форму.",
+			settings.general,
+			"auto_uninvite"
+		)
+	end
+	render_assist_item(
+		"Адаптивный круиз-контроль",
+		"Автоматическое построение маршрута к цели и автоматическое управление т/c к точке.\n\nИспользовать на свой страх и риск! (Может быть воспринято как бот)",
+		settings.general,
+		"adaptive_cruise",
+		true
+	)
+	render_assist_item(
+		"Авто-снаряжение",
+		"После открытия меню оружейной/раздевалки автоматически берёт выбранное снаряжение.\nДля настройки используйте шестерёнку справа.",
+		settings.general, 
+		"armory_enable", 
+		true,
+		function() imgui.OpenPopup((fa.SHIELD_HALVED or fa.GUN) .. u8' Авто-снаряжение ' .. (fa.SHIELD_HALVED or fa.GUN)) end
+	)
+	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+	if imgui.BeginPopupModal(fa.PERSON_CIRCLE_CHECK .. u8' Ранг для авто-инвайта ' .. fa.PERSON_CIRCLE_CHECK, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+		change_dpi()
+		imgui.CenterText(u8('Выберите ранг для автоматического инвайта:'))
+		imgui.Separator()
+		if not MODULE.AutoInvite.rank_slider then
+			MODULE.AutoInvite.rank_slider = imgui.new.int(settings.general.auto_invite_rank or 1)
+		end
+		imgui.PushItemWidth(250 * settings.general.custom_dpi)
+		if imgui.SliderInt('##auto_invite_rank', MODULE.AutoInvite.rank_slider, 1, 10) then
+			settings.general.auto_invite_rank = MODULE.AutoInvite.rank_slider[0]
+			save_settings()
+		end
+		imgui.PopItemWidth()
+		imgui.Separator()
+		imgui.Text(u8('Текущий ранг: ') .. (settings.general.auto_invite_rank or 1))
+		imgui.Separator()
+		if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+			imgui.CloseCurrentPopup()
+		end
+		imgui.SameLine()
+		if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+			settings.general.auto_invite_rank = MODULE.AutoInvite.rank_slider[0]
+			save_settings()
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ранг для авто-инвайта установлен на ' .. settings.general.auto_invite_rank, message_color)
+			imgui.CloseCurrentPopup()
+		end
+		imgui.EndPopup()
+	end
+	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+	if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка автофлипа ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+		change_dpi()
+		imgui.CenterText(u8('Укажите задержку перед использованием /domkrat:'))
+		imgui.Separator()
+		imgui.PushItemWidth(300 * settings.general.custom_dpi)
+		if imgui.SliderInt('##aflip_delay_slider', MODULE.AutoFlipDomkrat.delay_slider, 1, 15) then
+			settings.general.aflip_domkrat_delay = MODULE.AutoFlipDomkrat.delay_slider[0]
+		end
+		imgui.PopItemWidth()
+		imgui.Separator()
+		imgui.Text(u8('Текущая задержка: ') .. (settings.general.aflip_domkrat_delay or 5) .. u8(' сек.'))
+		imgui.Separator()
+		if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+			imgui.CloseCurrentPopup()
+		end
+		imgui.SameLine()
+		if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+			settings.general.aflip_domkrat_delay = MODULE.AutoFlipDomkrat.delay_slider[0]
+			save_settings()
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Задержка автофлипа установлена на ' .. settings.general.aflip_domkrat_delay .. ' сек.', message_color)
+			imgui.CloseCurrentPopup()
+		end
+		imgui.EndPopup()
+	end
+	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+	imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 425 * settings.general.custom_dpi), imgui.Cond.Always)
+	if imgui.BeginPopupModal(fa.GUN .. u8' RP отыгровка оружия в чате ' .. fa.GUN, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize) then
+		change_dpi()
+		imgui.PushItemWidth(385 * settings.general.custom_dpi)
+		imgui.InputTextWithHint(u8'##inputsearch_weapon_name', u8('Вводите чтобы искать оружие по его ID или названию...'), MODULE.RPWeapon.input_search, 256)
+		imgui.SameLine()
+		if imgui.Button(u8("Включить всё")) then
+			for index, value in ipairs(modules.weapon.data.rp_weapon) do value.enable = true end
+			initialize_weapon()
+			save_module('weapon')
+		end
+		imgui.SameLine()
+		if imgui.Button(u8("Отключить всё")) then
+			for index, value in ipairs(modules.weapon.data.rp_weapon) do value.enable = false end
+			save_module('weapon')
+		end
+		imgui.PopItemWidth()
+		if imgui.BeginChild('##weapons1', imgui.ImVec2(588 * settings.general.custom_dpi, 320 * settings.general.custom_dpi), true) then
+			imgui.Columns(3)
+			imgui.CenterColumnText(u8"Работоспособность")
+			imgui.SetColumnWidth(-1, 150 * settings.general.custom_dpi)
+			imgui.NextColumn()
+			imgui.CenterColumnText(u8"ID и название оружия")
+			imgui.SetColumnWidth(-1, 300 * settings.general.custom_dpi)
+			imgui.NextColumn()
+			imgui.CenterColumnText(u8"Расположение")
+			imgui.SetColumnWidth(-1, 150 * settings.general.custom_dpi)
+			imgui.Columns(1)
+			imgui.Separator()
+			local decoded_input = u8:decode(ffi.string(MODULE.RPWeapon.input_search))
+			for index, value in ipairs(modules.weapon.data.rp_weapon) do
+				if decoded_input == '' or (value.name and value.name:upper():find(decoded_input:upper())) or value.id == tonumber(decoded_input) then
+					imgui.Columns(3)
+					if value.enable then
+						if imgui.CenterColumnSmallButton(fa.SQUARE_CHECK .. u8'  (работает)##' .. index, imgui.ImVec2(imgui.GetMiddleButtonX(5), 0)) then
+							value.enable = not value.enable
+							save_module('weapon')
+						end
+					else
+						if imgui.CenterColumnSmallButton(fa.SQUARE .. u8' (отключён)##' .. index, imgui.ImVec2(imgui.GetMiddleButtonX(5), 0)) then
+							value.enable = not value.enable
+							save_module('weapon')
+						end
+					end
+					imgui.NextColumn()
+					imgui.CenterColumnText('[' .. value.id .. '] ' .. u8(value.name))
+					imgui.SameLine()
+					if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##weapon_name' .. index) then
+						_G.weapon_input = imgui.new.char[256]()
+						imgui.StrCopy(_G.weapon_input, u8(value.name))
+						imgui.OpenPopup(fa.GUN .. u8' Название оружия ' .. fa.GUN .. '##weapon_name' .. index)
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GUN .. u8' Название оружия ' .. fa.GUN .. '##weapon_name' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.PushItemWidth(400 * settings.general.custom_dpi)
+						imgui.InputText(u8'##weapon_name', _G.weapon_input, 256)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							value.name = u8:decode(ffi.string(_G.weapon_input))
+							save_module('weapon')
+							initialize_weapon()
+							_G.weapon_input = nil
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
+					imgui.NextColumn()
+					local position = ''
+					if value.rpTake == 1 then position = 'Спина'
+					elseif value.rpTake == 2 then position = 'Карман'
+					elseif value.rpTake == 3 then position = 'Пояс'
+					elseif value.rpTake == 4 then position = 'Кобура' end
+					imgui.CenterColumnText(u8(position))
+					imgui.SameLine()
+					if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##weapon_position' .. index) then
+						MODULE.RPWeapon.ComboTags[0] = value.rpTake - 1
+						imgui.OpenPopup(fa.GUN .. u8' Расположение оружия##weapon_name' .. index)
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GUN .. u8' Расположение оружия##weapon_name' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+						change_dpi()
+						imgui.PushItemWidth(400 * settings.general.custom_dpi)
+						imgui.Combo(u8'##' .. index, MODULE.RPWeapon.ComboTags, MODULE.RPWeapon.ImItems, 4)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							value.rpTake = MODULE.RPWeapon.ComboTags[0] + 1
+							save_module('weapon')
+							initialize_weapon()
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
+					imgui.Columns(1)
+					imgui.Separator()
+				end
+			end
+			imgui.EndChild()
+		end
+		imgui.Separator()
+		if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(588 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+			imgui.CloseCurrentPopup()
+		end
+		imgui.EndPopup()
+	end
+	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+	if imgui.BeginPopupModal((fa.SHIELD_HALVED or fa.GUN) .. u8' Авто-снаряжение ' .. (fa.SHIELD_HALVED or fa.GUN), _,
+		imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+		change_dpi()
+		settings.general.armory = settings.general.armory or {
+			auto_armory = true, auto_locker = false, grace_ms = 350, step_ms = 550,
+			swat = true, mask = true, bodycam = true, objects = false, heals = false,
+			vest = true, taser = true, baton = true, rifle = true, shotgun = true,
+			smg = true, sniper = false, smoke = true, shield = true, spikes = false, pistol = 'de',
+		}
+		local c = settings.general.armory
+		MODULE.Armory._b = MODULE.Armory._b or {}
+		if not MODULE.Armory._pistol_buf then MODULE.Armory._pistol_buf = imgui.new.int(c.pistol == 'stun' and 1 or 0) end
+		local function cb(key, label, tip)
+			if not MODULE.Armory._b[key] then MODULE.Armory._b[key] = imgui.new.bool(c[key] and true or false) end
+			imgui.Checkbox(label .. '##arm_' .. key, MODULE.Armory._b[key])
+			c[key] = MODULE.Armory._b[key][0]
+			if tip and imgui.IsItemHovered() then imgui.SetTooltip(u8(tip)) end
+		end
+		local colW = 150 * settings.general.custom_dpi
+		local colH = 205 * settings.general.custom_dpi
+
+		if imgui.BeginChild('##arm_col1', imgui.ImVec2(colW, colH), false) then
+			imgui.Text((fa.USER or fa.CIRCLE_INFO) .. u8' Раздевалка')
+			cb('auto_locker', u8'Авто-вход', 'Авто в раздевалке. По умолчанию ВЫКЛ.')
+			cb('mask', u8'Маска МО', 'Только при форме S.W.A.T.')
+			cb('swat', u8'Форма S.W.A.T.')
+			cb('bodycam', u8'Бодикамера')
+			cb('objects', u8'Набор объектов')
+			cb('heals', u8'Рабочая аптечка')
+		end
+		imgui.EndChild()
+		imgui.SameLine()
+		if imgui.BeginChild('##arm_col2', imgui.ImVec2(colW, colH), false) then
+			imgui.Text((fa.GUN or fa.CIRCLE_INFO) .. u8' Оружие')
+			cb('auto_armory', u8'Авто-взятие', 'Брать оружие при открытии оружейной.')
+			cb('vest', u8'Бронежилет')
+			imgui.Text(u8'Пистолет:')
+			if imgui.RadioButtonIntPtr(u8' DE ', MODULE.Armory._pistol_buf, 0) then c.pistol = 'de' end
+			imgui.SameLine()
+			if imgui.RadioButtonIntPtr(u8' Оглуш. ', MODULE.Armory._pistol_buf, 1) then c.pistol = 'stun' end
+			cb('taser', u8'Тазер')
+			cb('baton', u8'Дубинка')
+			cb('rifle', u8'Автомат M4')
+		end
+		imgui.EndChild()
+		imgui.SameLine()
+		if imgui.BeginChild('##arm_col3', imgui.ImVec2(colW, colH), false) then
+			imgui.Text((fa.BOX or fa.CIRCLE_INFO) .. u8' Снаряжение')
+			cb('shotgun', u8'Дробовик')
+			cb('smg', u8'MP5')
+			cb('sniper', u8'Снайперка')
+			cb('smoke', u8'Дымовые')
+			cb('shield', u8'Щит')
+			cb('spikes', u8'Шипы')
+		end
+		imgui.EndChild()
+		imgui.Separator()
+		if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+			save_settings()
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки авто-снаряжения сохранены.', message_color)
+			imgui.CloseCurrentPopup()
+		end
+		imgui.EndPopup()
+	end
+end
+function render_fractions_functions() 
+	if (isMode('police') or isMode('fbi')) then 
+		if imgui.BeginTabBar('FractinFunctions') then
+			if imgui.BeginTabItem(fa.ROBOT .. u8' Личный помощник "Ассистент" ') then 
+				if imgui.BeginChild('##mj_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					firs_render_assist_gui()
+					render_assist_item(
+						"Пробив /time на обыск/розыск/арест",
+						"Автоматически делает /time для скриншотов при важных действиях.",
+						settings.mj,
+						"auto_time"
+					)
+					render_assist_item(
+						"Смена CODE 3/4 от статуса мигалок т/с",
+						"Автоматически меняет ситуационный код при управлении мигалками.",
+						settings.mj,
+						"auto_change_code_siren"
+					)
+					render_assist_item(
+						"Анти-взлом наручников скрепами",
+						"Если игрок попытается взломать наруники скрепками, вы получите уведомление.\nТак-же скрипт попробует автоматически изьять скрепки у игрока, если вы рядом.",
+						settings.mj,
+						"anti_screpki"
+					)
+					render_assist_item(
+						"Доклад CODE 0 при нападении",
+						"При получении урона отправляет доклад /r CODE 0 с указанием ника нападавшего.",
+						settings.mj,
+						"auto_doklad_damage"
+					)
+					render_assist_item(
+						"Доклад после ареста игрока",
+						"После завершения ареста автоматически отправляет доклад в рацию с именем арестованного.",
+						settings.mj,
+						"auto_doklad_arrest"
+					)
+					render_assist_item(
+						"Заполнение расследований",
+						"Автоматически заполняет практически все данные в диалогах расследования убийств.",
+						settings.mj,
+						"auto_case_documentation",
+						true
+					)
+					render_assist_item(
+						"Кликер на ГРП",
+						"Автокликер в менюшках на Случайных Ситуациях (разбор завалов).\n\nДля настройки задержки между кликами используйте шестерёнку справа.",
+						settings.general,
+						"auto_clicker",
+						true,
+						function()
+							if not MODULE.ClickerDelay.slider then
+								MODULE.ClickerDelay.slider = imgui.new.int(settings.general.clicker_delay or 10)
+							else
+								MODULE.ClickerDelay.slider[0] = settings.general.clicker_delay or 10
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Настройка КД кликера ' .. fa.GEAR)
+						end
+					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка КД кликера ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Задержка между кликами (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Интервал между авто-кликами в мини-играх ГРП.\nМеньше - быстрее (выше риск флуда/детекта), больше - медленнее.')) end
+						imgui.SliderInt('##clicker_delay', MODULE.ClickerDelay.slider, 10, 2000)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.general.clicker_delay = MODULE.ClickerDelay.slider[0]
+							save_settings()
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}КД кликера сохранён.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
+					render_assist_item(
+						"Авто-отыгровки RP на ГРП",
+						"Автоматические RP отыгровки на Случайных Ситуациях (системных ГРП).\nВместо вас будет отыгрывать действия с завалами для получения RP point\n\nДля настройки КД каждого паттерна используйте шестерёнку справа.",
+						settings.mj,
+						"auto_rp_situation",
+						false,
+						function()
+							settings.mj.rp_delay = settings.mj.rp_delay or { pickup = 0, drop = 1200, place = 1200 }
+							if not MODULE.RPDelay.pickup_slider then
+								MODULE.RPDelay.pickup_slider = imgui.new.int(settings.mj.rp_delay.pickup or 0)
+								MODULE.RPDelay.drop_slider   = imgui.new.int(settings.mj.rp_delay.drop or 1200)
+								MODULE.RPDelay.place_slider  = imgui.new.int(settings.mj.rp_delay.place or 1200)
+							else
+								MODULE.RPDelay.pickup_slider[0] = settings.mj.rp_delay.pickup or 0
+								MODULE.RPDelay.drop_slider[0]   = settings.mj.rp_delay.drop or 1200
+								MODULE.RPDelay.place_slider[0]  = settings.mj.rp_delay.place or 1200
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Настройка КД авто-отыгровок RP ' .. fa.GEAR)
+						end
+					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка КД авто-отыгровок RP ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД после подбора обломка (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Задержка перед RP-отыгровкой после "Вы подобрали обломок".')) end
+						imgui.SliderInt('##rp_delay_pickup', MODULE.RPDelay.pickup_slider, 0, 5000)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД после выброса завала (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Задержка перед RP-отыгровкой после "Вы выбросили завал".')) end
+						imgui.SliderInt('##rp_delay_drop', MODULE.RPDelay.drop_slider, 0, 5000)
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' КД после установки обломка (мс):'))
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Задержка перед RP-отыгровкой после "Вы положили обломок".')) end
+						imgui.SliderInt('##rp_delay_place', MODULE.RPDelay.place_slider, 0, 5000)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.mj.rp_delay = {
+								pickup = MODULE.RPDelay.pickup_slider[0],
+								drop   = MODULE.RPDelay.drop_slider[0],
+								place  = MODULE.RPDelay.place_slider[0],
+							}
+							save_settings()
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}КД авто-отыгровок RP сохранены.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
+					render_assist_item(
+						"AutoWANTED",
+						"Оповещает вас, если в зоне прорисовки появился преступник.\nТак-же кидает на него /find и /z (если рядом)",
+						settings.mj,
+						"awanted",
+						false,
+						function()
+							if not MODULE.Awanted.scan_radius_slider then
+								MODULE.Awanted.scan_radius_slider      = imgui.new.float(settings.mj.scan_radius or 50)
+								MODULE.Awanted.scan_delay_slider       = imgui.new.int(settings.mj.scan_delay or 2)
+								MODULE.Awanted.target_timeout_slider   = imgui.new.int(settings.mj.target_timeout or 10)
+								MODULE.Awanted.reset_interval_slider   = imgui.new.int(settings.mj.reset_interval or 45)
+							else
+								MODULE.Awanted.scan_radius_slider[0]    = settings.mj.scan_radius or 50
+								MODULE.Awanted.scan_delay_slider[0]     = settings.mj.scan_delay or 2
+								MODULE.Awanted.target_timeout_slider[0] = settings.mj.target_timeout or 10
+								MODULE.Awanted.reset_interval_slider[0] = settings.mj.reset_interval or 45
+							end
+							imgui.OpenPopup(fa.GEAR .. u8' Настройка AutoWANTED ' .. fa.GEAR)
+						end
+					)
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.GEAR .. u8' Настройка AutoWANTED ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.PushTextWrapPos(imgui.GetCursorPosX() + 320 * settings.general.custom_dpi)
+						imgui.Separator()
+						imgui.PushItemWidth(300 * settings.general.custom_dpi)
+						imgui.Text((fa.RULER or fa.CIRCLE_INFO) .. u8(' Радиус сканирования (метры):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Расстояние от вас, в пределах которого ищутся преступники.\nБольше радиус - шире зона поиска, но выше нагрузка.'))
+						end
+						if imgui.SliderFloat('##awanted_radius', MODULE.Awanted.scan_radius_slider, 10, 200, '%.0f') then
+							settings.mj.scan_radius = MODULE.Awanted.scan_radius_slider[0]
+						end
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Задержка после /z (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Сколько секунд ждать после отправки /z на игрока перед следующим действием.\nУвеличьте, если сервер не успевает отвечать.'))
+						end
+						if imgui.SliderInt('##awanted_delay', MODULE.Awanted.scan_delay_slider, 1, 10) then
+							settings.mj.scan_delay = MODULE.Awanted.scan_delay_slider[0]
+						end
+						imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Таймаут цели (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Через сколько секунд игрок считается обработанным и может быть проверен снова,\nесли первая попытка не дала результата (не успел прийти ответ сервера).'))
+						end
+						if imgui.SliderInt('##awanted_timeout', MODULE.Awanted.target_timeout_slider, 5, 30) then
+							settings.mj.target_timeout = MODULE.Awanted.target_timeout_slider[0]
+						end
+						imgui.Text((fa.CLOCK_ROTATE_LEFT or fa.CIRCLE_INFO) .. u8(' Интервал сброса проверенных (сек):'))
+						if imgui.IsItemHovered() then
+							imgui.SetTooltip(u8('Через сколько секунд список уже проверенных игроков очищается,\nчтобы тех же игроков можно было просканировать повторно.'))
+						end
+						if imgui.SliderInt('##awanted_reset', MODULE.Awanted.reset_interval_slider, 15, 120) then
+							settings.mj.reset_interval = MODULE.Awanted.reset_interval_slider[0]
+						end
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+							settings.mj.scan_radius    = MODULE.Awanted.scan_radius_slider[0]
+							settings.mj.scan_delay     = MODULE.Awanted.scan_delay_slider[0]
+							settings.mj.target_timeout = MODULE.Awanted.target_timeout_slider[0]
+							settings.mj.reset_interval = MODULE.Awanted.reset_interval_slider[0]
+							save_settings()
+							sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройки AutoWANTED сохранены.', message_color)
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
+					imgui.Separator()
+					imgui.EndChild()
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.STAR .. u8' Система умного розыска ') then 
+				renderSmartGUI(
+					'Система умного розыска',
+					fa.STAR,
+					'https://mtgmods.github.io/arizona-helper/SmartUK/' .. getServerNumber() .. '/SmartUK.json',
+					'системы умного розыска',
+					modules.smart_uk.data,
+					function() save_module("smart_uk") end,
+					'Используйте: /' .. get_custom_cmd('sum') .. ' [ID игрока]',
+					modules.smart_uk.path,
+					'smart_uk',
+					'умный розыск'
+				)
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.TICKET .. u8' Система умных штрафов ') then 
+				renderSmartGUI(
+					'Система умных штрафов', 
+					fa.TICKET, 
+					'https://mtgmods.github.io/arizona-helper/SmartPDD/' .. getServerNumber() .. '/SmartPDD.json', 
+					'системы умных штрафов', 
+					modules.smart_pdd.data, 
+					function() save_module("smart_pdd") end, 
+					'Используйте: /' .. get_custom_cmd('tsm') .. ' [ID игрока]', 
+					modules.smart_pdd.path,
+					'smart_pdd',
+					'умные штрафы'
+				)
+				imgui.EndTabItem()
+			end
+			imgui.EndTabBar() 
+		end
+	elseif isMode('army') then
+		if imgui.BeginChild('##army_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 367 * settings.general.custom_dpi), true) then
+			firs_render_assist_gui()
+			render_assist_item(
+				"Доклад CODE 0 при нападении",
+				"При получении урона отправляет доклад /r CODE 0 с указанием ника нападавшего.",
+				settings.md,
+				"auto_doklad_damage"
+			)
+			render_assist_item(
+				"Авто-доклад при патруле територии",
+				"При системном патрулировании территории с оружием в руках, делает доклады /r.\n(вы должны начать патрулирование территории, чтобы функция работала)",
+				settings.md,
+				"auto_doklad_patrool",
+				true
+			)
+			imgui.Separator()
+			imgui.EndChild()
+		end
+	elseif isMode('prison') then
+		if imgui.BeginTabBar('FractinFunctions') then
+			if imgui.BeginTabItem(fa.ROBOT .. u8' Личный помощник "Ассистент"') then 
+				if imgui.BeginChild('##assist', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					firs_render_assist_gui()
+					render_assist_item(
+						"Доклад CODE 0 при нападении",
+						"При получении урона отправляет доклад /r CODE 0 с указанием ника нападавшего.",
+						settings.md,
+						"auto_doklad_damage"
+					)
+					render_assist_item(
+						"Авто-доклад при патруле територии",
+						"При системном патрулировании территории с оружием в руках, делает доклады /r.\n(вы должны начать патрулирование территории, чтобы функция работала)",
+						settings.md,
+						"auto_doklad_patrool",
+						true
+					)
+					imgui.Separator()
+					imgui.EndChild()	
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.STAR .. u8' Система умного продления срока') then 
+				renderSmartGUI(
+					'Система умного продления срока', 
+					fa.TICKET, 
+					'https://mtgmods.github.io/arizona-helper/SmartRPTP/' .. getServerNumber() .. '/SmartRPTP.json', 
+					'системы умного срока', 
+					modules.smart_rptp.data, 
+					function() save_module("smart_rptp") end, 
+					'Использование: /pum [ID игрока]', 
+					modules.smart_rptp.path,
+					'smart_rptp',
+					'умный срок'
+				)
+				imgui.EndTabItem()
+			end
+			imgui.EndTabBar() 
+		end
+	elseif isMode('smi') then
+		if imgui.BeginTabBar('FractinFunctions') then
+			if imgui.BeginTabItem(fa.ROBOT .. u8' Личный помощник "Ассистент"') then 
+				if imgui.BeginChild('##smi_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then	
+					firs_render_assist_gui()
+					render_assist_item(
+						"Звуковое оповещение о обьявлениях",
+						"Созадёт звуковое уведомление при поступлении новых обьявлений от игроков.",
+						settings.smi,
+						"notify_new_ads"
+					)
+					render_assist_item(
+						"Кнопки вставки текста в меню редакта",
+						"Кнопки с готовым текстом для вставки в строчку редактирования обьявлений.\nДля пременения состояния необходимо перезагрузить скрипт / перезайти в игру",
+						settings.smi,
+						"ads_buttons"
+					)
+					render_assist_item(
+						"История отредаченных обьявлений",
+						"Сохрание в историю обьявлений, которые были отредаченны лично вами.\nТаким образом, вы сможете вставлять из истории в строчку редакта.",
+						settings.smi,
+						"ads_history"
+					)
+					render_assist_item(
+						"Взятие свободных обьявлений",
+						"В списке обьяв автоматически будет выбираться первое свободное обьявление.\nТаким образом, вам не нужно будет вручную выбирать обьявления в том списке.",
+						settings.smi,
+						"auto_select_first_ad"
+					)
+					render_assist_item(
+						"Копирование чужих редактов",
+						"Сохрание в историю обьявлений, которые отредактировали ваши коллеги.\nТаким образом, у вас будет возможность быстрой отправки такого обьявления.\n\nЕсли 2+ обьявы одновременно, то функция может дать сбой и сохранит неверно!",
+						settings.smi,
+						"steal_other_ads",
+						true
+					)
+					render_assist_item(
+						"AI генерация обьявлений",
+						"Генерация редактирования обьявлений с помощью AI теперь доступна в хелпере!\n\nПоддерживает 2 режима работы:\n1) По кнопке робота, в менюшке редактирования (РЕКОМЕНДУЮ)\n2) Автоматически с отправкой, без открытия менюшки редактирования.\n\nПЕРЕД ИСПОЛЬЗОВАНИЕМ ВАМ НУЖНО НАСТРОИТЬ СВОЙ Gemini API key\n\nДля настройки AI генерации используйте кнопку шестеренки справа\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+						settings.smi.ai_generate,
+						"enable",
+						true,
+						function() imgui.OpenPopup(fa.ROBOT .. u8' Настройка AI генерации обьявлений ' .. fa.ROBOT) end
+					)
+					render_assist_item(
+						"Авто-редакт из истории обьяв",
+						"Авто-отправа сохранённой объявы от того же игрока, если он кидает повторно.\nЛибо вставит текст обьявки в строчку редактирования, если функция отключена\n\nМожно настроить свою задержку перед отправкой кнопкой шестеренки справа\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+						settings.smi,
+						"send_from_history",
+						true,
+						function() imgui.OpenPopup(fa.FILE_LINES .. u8' Настройка авторедакта с истории ' .. fa.FILE_LINES) end
+					)
+					render_assist_item(
+						"Ловля новых объявлений",
+						"При поступлении новой обьявки прописывает /newsredak и пытается словить её.\nЕсли сразу два игрока с функций, то словит тот, у кого меньше PING & PacketLoss.\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+						settings.smi,
+						"auto_catch_ads",
+						true
+					)
+					imgui.Separator()
+					imgui.EndChild()
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.CLOCK_ROTATE_LEFT .. u8' Управление историей обьявявлений') then
+				if imgui.BeginChild('##ads_history_menu', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					if settings.smi.ads_history then
+						if modules.ads_history.data then 
+							if #modules.ads_history.data == 0 then
+								imgui.CenterText(u8('История обьявлений пуста'))
+								imgui.Separator()
+								imgui.CenterText(u8('Отредактированные обьявления будут отображаться здесь'))
+							else
+								imgui.PushItemWidth(570 * settings.general.custom_dpi)
+								imgui.InputTextWithHint(u8'##input_ads_search', u8'Поиск обьявлений по нужной фразе, начинайте вводить её сюда...', MODULE.SmiEdit.input_search, 128)
+								imgui.Separator()
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.CLOCK_ROTATE_LEFT .. u8' Обьявление из истории отредаченных обьяв', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+									change_dpi()
+									imgui.CenterText(u8(MODULE.SmiEdit.adshistory_orig))
+									imgui.PushItemWidth(500 * settings.general.custom_dpi)
+									imgui.InputTextWithHint(u8'##input_ads_my_edit', u8'Введите ваш вариант редакции данного обьяаления...', MODULE.SmiEdit.adshistory_input_text, 128)
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.TRASH_CAN .. u8' Удалить', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+										for id, ad in ipairs(modules.ads_history.data) do
+											if ad.text == MODULE.SmiEdit.adshistory_orig then
+												table.remove(modules.ads_history.data, id)
+												save_module('ads_history')
+												sampAddChatMessage(CHAT_PREFIX .. " {ffffff}Обьявление из истории успешно удалено!", message_color)
+												break
+											end
+										end
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+										for id, ad in ipairs(modules.ads_history.data) do
+											if ad.text == MODULE.SmiEdit.adshistory_orig then
+												ad.my_text = u8:decode(ffi.string(MODULE.SmiEdit.adshistory_input_text))
+												save_module('ads_history')
+												sampAddChatMessage(CHAT_PREFIX .. " {ffffff}Обьявление из истории успешно изменено и сохранено!", message_color)
+												break
+											end
+										end
+										imgui.CloseCurrentPopup()
+									end
+									imgui.EndPopup()
+								end
+								local input_ads_decoded = u8:decode(ffi.string(MODULE.SmiEdit.input_search))
+								for id, ad in ipairs(modules.ads_history.data) do
+									if (ad and ad.text and ad.my_text) then
+										if ((input_ads_decoded == '') or (ad.my_text:rupper():find(input_ads_decoded:rupper(), 1, true))) then
+											if imgui.Button(u8(ad.my_text .. '##' .. id), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+												MODULE.SmiEdit.adshistory_orig = ad.text
+												imgui.StrCopy(MODULE.SmiEdit.adshistory_input_text, u8(ad.my_text))
+												imgui.OpenPopup(fa.CLOCK_ROTATE_LEFT .. u8' Обьявление из истории отредаченных обьяв')
+											end
+										end
+									end
+								end
+							end
+						else
+							imgui.CenterText(u8('Ошибка загрузки истории обьявлений, что-то сломалось'))
+							imgui.Separator()
+							imgui.CenterText(u8('Чтобы пофиксить, удалите файлик Ads.json, который находится по пути:'))
+							imgui.TextWrapped(u8(modules.ads_history.path))
+							imgui.Separator()
+							imgui.CenterText(u8('Либо если вы опытный юзер, вручную откройте файл в CP1251 и исправьте ошибку'))
+						end
+					else
+						imgui.CenterText(u8('Вы отключили функцию "История обьявлений" в /helper - Функции СМИ, включите её'))
+					end
+					imgui.EndChild()
+				end
+				imgui.EndTabItem()
+			end
+			imgui.EndTabBar() 
+		end
+	elseif isMode('hospital') then
+		if imgui.BeginTabBar('FractinFunctions') then
+			if imgui.BeginTabItem(fa.ROBOT .. u8' Личный помощник "Ассистент"') then 
+				if imgui.BeginChild('##hospital_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					firs_render_assist_gui()
+					render_assist_item(
+						"Хил из чата",
+						"Позволяет быстро лечить пациентов которые просят чтобы их вылечили\n\nЕсть два режима работы хила из чата:\n1) По нажатию кнопки\n2) Автоматический\nДля смены режима используйте кнопочку шестерёнки справа\n\nАВТОХИЛ МОЖЕТ БЫТЬ ЗАПРЕЩЕН НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REP",
+						settings.mh.heal_in_chat,
+						"enable",
+						false,
+						function() imgui.OpenPopup(fa.KIT_MEDICAL .. u8' Режим лечения игроков ' .. fa.KIT_MEDICAL) end
+					)
+					render_assist_item(
+						"Авто-кликер на ГРП",
+						"Автокликер в менюшках на Случайных Ситуациях (хил, носилки)\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+						settings.general,
+						"auto_clicker",
+						true
+					)
+					render_assist_item(
+						"Авто-отыгровки RP на ГРП",
+						"Автоматические RP отыгровки на Случайных Ситуациях (системных ГРП).\nВместо вас будет отыгрывать действия с NPC для получения RP point\n(карета, раненные, пострадавшие, операции, морг)",
+						settings.mh,
+						"auto_rp_situation",
+						true
+					)
+					imgui.Separator()
+					imgui.EndChild()	
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.SACK_DOLLAR .. u8' Ценовая политика больницы') then 
+				if imgui.BeginChild('##hospital_price', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					local med_price_fields = {}
+					local server = getServerNumber()
+					if tonumber(server) > 300 then --Rodina RP
+						med_price_fields = {
+							{label = '  Лечение игрока',              					key = 'heal',},
+							{label = '  Выдача рецепта',                     			key = 'recept'},
+							{label = '  Выдача мед.карты на 7 дней',         			key = 'med7'},
+							{label = '  Выдача мед.карты на 14 дней',        			key = 'med14'},
+							{label = '  Выдача мед.карты на 30 дней',        			key = 'med30'},
+							{label = '  Выдача мед.карты на 60 дней',       			key = 'med60'},
+						}
+					else
+						med_price_fields = {
+							{label = '  Лечение игрока (SA $)',              			key = 'heal', same_line = true},
+							{label = '  Лечение игрока (VC $)',             			key = 'heal_vc'},
+							{label = '  Лечение охранника (SA $)',           			key = 'healactor', same_line = true},
+							{label = '  Лечение охранника (VC $)',           			key = 'healactor_vc'},
+							{label = '  Проведение мед. осмотра для пилотов', 			key = 'medosm'},
+							{label = '  Проведение мед. осмотра для военного билета', 	key = 'mticket'},
+							{label = '  Проведение лечения зависимости от укропа', 	key = 'healbad'},
+							{label = '  Выдача рецепта',                     			key = 'recept'},
+							{label = '  Выдача антибиотика',                 			key = 'ant'},
+							{label = '  Выдача мед.карты на 7 дней',         			key = 'med7', same_line = true},
+							{label = '  Выдача мед.карты на 14 дней',        			key = 'med14'},
+							{label = '  Выдача мед.карты на 30 дней',        			key = 'med30', same_line = true},
+							{label = '  Выдача мед.карты на 60 дней',       			key = 'med60'},
+						}
+					end
+					for i, field in ipairs(med_price_fields) do
+						imgui.PushItemWidth(65 * settings.general.custom_dpi)
+						local buf = MODULE.MedicalPrice[field.key]
+						if imgui.InputText(u8(field.label), buf, 8) then
+							local str = u8:decode(ffi.string(buf)):gsub("%D", "")
+							local num = tonumber(str)
+							if num then
+								settings.mh.price[field.key] = num
+								save_settings()
+							end
+						end
+						if field.same_line then 
+							imgui.SameLine()
+							imgui.SetCursorPosX((320 * settings.general.custom_dpi))
+						else 
+							imgui.Separator() 
+						end
+					end
+					imgui.EndChild()
+				end
+				imgui.EndTabItem()
+			end
+			imgui.EndTabBar() 
+		end
+	elseif isMode('lc') then
+		if imgui.BeginTabBar('FractinFunctions') then
+			if imgui.BeginTabItem(fa.ROBOT .. u8' Личный помощник "Ассистент"') then 
+				if imgui.BeginChild('##assist', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					firs_render_assist_gui()
+					render_assist_item(
+						"Авто-выбор ближайшего знака",
+						"Автоматически выбирает ближайший дорожный знак для обслуживания.",
+						settings.lc,
+						"auto_find_clorest_znak"
+					)
+					render_assist_item(
+						"Авто-кликер на ремонт знаков",
+						"Автокликер в менюшке ремонта сломанного дорожного знака.",
+						settings.lc.auto_repair_znak,
+						"enable",
+						true,
+						function() imgui.OpenPopup(fa.GEAR .. u8' Настройка авто-ремонта знаков ' .. fa.GEAR) end
+					)
+					render_assist_item(
+						"Авто-кликер на установку знака",
+						"Автокликер в менюшке установки нового дорожного знака.",
+						settings.lc.auto_install_znak,
+						"enable",
+						true,
+						function() imgui.OpenPopup(fa.GEAR .. u8' Настройка авто-установки знаков ' .. fa.GEAR) end
+					)
+					render_assist_item(
+						"Авто-выдача лицензий",
+						"Автоматечески выдаёт лицензии игрокам пока вы стоите за стойкой.\nИгроки должны написать в чат тип лицензии (частоиспользуемые фразы) и срок.\nЕсли срок не написан, например просто \"права\", то автовыдача выдаст на 3 месяца.\n\nЕсть два режима работы авто-выдачи лицензий:\n1) Без RP отыгровки\n2) Используя RP отыгровку\nДля смены режима используйте кнопочку шестерёнки справа\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+						settings.lc.auto_lic,
+						"enable",
+						true,
+						function() imgui.OpenPopup(fa.FILE_LINES .. u8' Режим выдачи лицензий ' .. fa.FILE_LINES) end
+					)
+					imgui.Separator()
+					imgui.EndChild()	
+				end
+				imgui.EndTabItem()
+			end
+			if imgui.BeginTabItem(fa.SACK_DOLLAR .. u8' Ценовая политика лицензий') then 
+				if imgui.BeginChild('##license_price', imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true) then
+					local isRodina = tonumber(getServerNumber()) > 300
+					local license_types = {
+						{name = 'Авто', key = 'avto'},
+						{name = 'Мото', key = 'moto'},
+						{name = 'Лодки', key = 'swim'},
+						{name = 'Полеты', key = 'fly'},
+						{name = 'Оружие', key = 'gun'},
+						{name = 'Рыбалка', key = 'fish'},
+						{name = 'Охота', key = 'hunt'},
+					}
+					if isRodina then
+						table.insert(license_types, {name = 'Поезд', key = 'train'})
+					else
+						table.insert(license_types, {name = 'Раскопки', key = 'klad'})
+						table.insert(license_types, {name = 'Такси', key = 'taxi'})
+						table.insert(license_types, {name = 'Механик', key = 'mexa'})
+					end
+					for i, license in ipairs(license_types) do
+						for month = 1, (isRodina and 1 or 3) do
+							local month_label = (month == 1) and " %s (месяц)" or string.format(" %%s (%d месяца)", month)
+							local label = string.format(month_label, license.name)
+							local key = license.key .. month
+							local buf = MODULE.LicensePrice[key]
+							imgui.PushItemWidth(65 * settings.general.custom_dpi)
+							if imgui.InputText(u8(label), buf, 9) then
+								local str = u8:decode(ffi.string(buf))
+								str = str:gsub("%D","")
+								local num = tonumber(str)
+								if num then
+									settings.lc.price[key] = num
+									save_settings()
+								end
+							end
+							if month == 1 and not isRodina then
+								imgui.SameLine()
+								imgui.SetCursorPosX(195 * settings.general.custom_dpi)
+							elseif month == 2 then
+								imgui.SameLine()
+								imgui.SetCursorPosX(395 * settings.general.custom_dpi)
+							elseif i ~= #license_types then
+								imgui.Separator()
+							end
+						end
+					end
+					imgui.EndChild()
+				end
+				imgui.EndTabItem()
+			end
+			imgui.EndTabBar() 
+		end
+	elseif isMode('gov') then
+		if imgui.BeginChild('##gov_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 367 * settings.general.custom_dpi), true) then
+			firs_render_assist_gui()
+			render_assist_item(
+				"Анти Тревожная Кнопка",
+				"Убирает тревожную кнопку которая находится на 2 этаже.\nТем самым вы не будете случайно вызывать МЮ из-за этой кнопки.",
+				settings.gov,
+				"anti_trivoga"
+			)
+			render_assist_item(
+				"Кастомная менюшка /" .. get_custom_cmd('zeks'),
+				"Выводит список заключенных на экран, чтобы не открывать каждый раз /" .. get_custom_cmd('zeks'),
+				settings.gov,
+				"custom_zeks"
+			)
+			render_assist_item(
+				"Автообновление менюшки /" .. get_custom_cmd('zeks'),
+				"Автоматически (раз в " .. (settings.gov.zeks_update_period or 10) .. " секунд) обновляет список менюшки /" .. get_custom_cmd('zeks') .. "\n\nДля настройки интервала используйте шестерёнку справа.",
+				settings.gov,
+				"auto_update_zeks",
+				false,
+				function()
+					if not MODULE.Zeks.update_period_slider then
+						MODULE.Zeks.update_period_slider = imgui.new.int(settings.gov.zeks_update_period or 10)
+					else
+						MODULE.Zeks.update_period_slider[0] = settings.gov.zeks_update_period or 10
+					end
+					imgui.OpenPopup(fa.GEAR .. u8' Интервал обновления списка заключенных ' .. fa.GEAR)
+				end
+			)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+			if imgui.BeginPopupModal(fa.GEAR .. u8' Интервал обновления списка заключенных ' .. fa.GEAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+				change_dpi()
+				imgui.PushItemWidth(300 * settings.general.custom_dpi)
+				imgui.Text((fa.CLOCK or fa.CIRCLE_INFO) .. u8(' Интервал авто-обновления (сек):'))
+				imgui.SliderInt('##zeks_update_period', MODULE.Zeks.update_period_slider, 5, 60)
+				imgui.PopItemWidth()
+				imgui.Separator()
+				imgui.Text(u8('Текущая задержка: ') .. (settings.gov.zeks_update_period or 10) .. u8(' сек.'))
+				imgui.Separator()
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					imgui.CloseCurrentPopup()
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					settings.gov.zeks_update_period = MODULE.Zeks.update_period_slider[0]
+					save_settings()
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Интервал обновления списка заключенных сохранён.', message_color)
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
+			imgui.Separator()
+			imgui.EndChild()
+		end
+	elseif isMode('fd') then
+		if imgui.BeginChild('##fd_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 367 * settings.general.custom_dpi), true) then
+			firs_render_assist_gui()
+			render_assist_item(
+				"Доклад про принятие пожара",
+				"Автодоклад в рацию /r о принятии пожара из списка /fires и выезде к нему.",
+				settings.fd.doklads,
+				"togo"
+			)
+			render_assist_item(
+				"Доклад про прибытии на пожар",
+				"Автодоклад в рацию /r о прибытии в зону пожара.",
+				settings.fd.doklads,
+				"here"
+			)
+			render_assist_item(
+				"Доклад про тушение пожара",
+				"Автодоклад в рацию /r об устранении очагов пожара.",
+				settings.fd.doklads,
+				"fire",
+				true
+			)
+			render_assist_item(
+				"Доклад про носилки",
+				"Автодоклад в рацию /r о наличии носилок в зоне пожара.",
+				settings.fd.doklads,
+				"stretcher",
+				true
+			)
+			render_assist_item(
+				"Доклад про пострадавшего",
+				"Автодоклад в рацию /r о спасении пострадавшего в зоне пожара.",
+				settings.fd.doklads,
+				"npc_save",
+				true
+			)
+			render_assist_item(
+				"Доклад про завершение пожара",
+				"Автодоклад в рацию /r о полном завершении пожара.",
+				settings.fd.doklads,
+				"file_end"
+			)
+			render_assist_item(
+				"Доклад про сбор палатки",
+				"Автодоклад в рацию /r о сборе палатки после пожара.",
+				settings.fd.doklads,
+				"tent"
+			)
+			imgui.Separator()
+			imgui.EndChild()
+		end
+	elseif isMode('ins') then
+		if imgui.BeginChild('##ins_assist', imgui.ImVec2(589 * settings.general.custom_dpi, 367 * settings.general.custom_dpi), true) then
+			firs_render_assist_gui()
+			render_assist_item(
+				"Анти Тревожная Кнопка",
+				"Убирает тревожную кнопку вызова полиции с интерьера.\nТем самым вы не будете случайно вызывать МЮ из-за этой кнопки.",
+				settings.ins,
+				"anti_trivoga"
+			)
+			render_assist_item(
+				"Звуковое оповещение о заявках",
+				"Создаёт звуковое уведомление при поступлении новых заявок на страховку",
+				settings.ins,
+				"notify_new_ticket"
+			)
+			render_assist_item(
+				"Быстрый выбор заявок",
+				"Автоматически выбирает последнего игрока, подавшего заявку, в списке заявок.",
+				settings.ins,
+				"auto_catch_ticket",
+				true
+			)
+			render_assist_item(
+				"Кликер (1 каб)",
+				"Автоматические нажатия при работе в 1 кабинете.\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+				settings.general,
+				"auto_clicker",
+				true
+			)
+			if not IS_MOBILE then
+				render_assist_item(
+					"Подсказки конвертов (2 каб)",
+					"Подсказки правильных конвертов при работе во 2 кабинете.",
+					settings.ins,
+					"hint_in_sort"
+				)
+			end
+			render_assist_item(
+				"Мини-игра (2 каб)",
+				"Автоматическое прохождение мини-игры с конвератами во 2 кабинете.\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+				settings.ins,
+				"auto_find_game",
+				true
+			)
+			render_assist_item(
+				"Заполнение диалогов (3 каб)",
+				"Автоматическое заполнение диалогов при работе в 3 кабинете.",
+				settings.ins,
+				"auto_input_ticket"
+			)
+			render_assist_item(
+				"Автокликер пунктов (3 каб)",
+				"Дополнение к заполнению диалогов в 3 кабинете, без него НЕ работает.\nТем самым полностью автоматизирует работу в 3 кабинете, нажимая всё за вас.\n\nМОЖЕТ БЫТЬ ЗАПРЕЩЕНО НА НЕКОТОРЫХ СЕРВЕРАХ! УТОЧНЯЙТЕ В /REPORT",
+				settings.ins,
+				"auto_clicker_step3",
+				true
+			)
+			imgui.Separator()
+			imgui.EndChild()
+		end
+	else
+		if imgui.BeginChild('##assist', imgui.ImVec2(589 * settings.general.custom_dpi, 367 * settings.general.custom_dpi), true) then
+			firs_render_assist_gui()
+			imgui.Separator()
+			imgui.EndChild()
+		end
+	end	
+end
+local MEMBERS_SORTS = {
+	{ name = u8'По рангу',     key = function(v) return tonumber(v.rank_number) or 0 end },
+	{ name = u8'По нику',      key = function(v) return (v.nick or ''):rlower() end },
+	{ name = u8'По выговорам', key = function(v) return tonumber(v.warns) or 0 end },
+}
+if (not isMode('none')) then
+	imgui.OnFrame(
+		function() return MODULE.Members.Window[0] end,
+		function(player)
+		local md = modules.members.data
+		if not MODULE.MembersUI then
+			MODULE.MembersUI = {
+				info_buf = imgui.new.char[64](""),
+				info_col = imgui.new.float[3](0.2, 0.8, 1),
+				info_open = false,
+				info_edit_nick = nil,
+			}
+		end
+		local MU = MODULE.MembersUI
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function() local d = imgui.GetIO().DisplaySize; if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end end)
+			local PAD = 200; local stg = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round = stg.WindowRounding end); pcall(function() old_border = stg.WindowBorderSize end)
+			pcall(function() stg.WindowRounding = 0 end); pcall(function() stg.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##dim_members', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End(); imgui.PopStyleColor()
+			pcall(function() if old_round then stg.WindowRounding = old_round end end)
+			pcall(function() if old_border then stg.WindowBorderSize = old_border end end)
+		end
+		if #MODULE.Members.all == 0 then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка, список сотрудников пустой!', message_color)
+			MODULE.Members.Window[0] = false
+			return
+		end
+		local dpi = settings.general.custom_dpi
+		local list = {}
+		for _, v in ipairs(MODULE.Members.all) do table.insert(list, v) end
+		local sort_def = MEMBERS_SORTS[(md.sort_mode or 0) + 1]
+		local key = sort_def.key
+		local asc = (md.sort_dir or 0) == 1
+		table.sort(list, function(a, b)
+			local ka, kb = key(a), key(b)
+			if ka == kb then return false end
+			if asc then return ka < kb end
+			return ka > kb
+		end)
+		local n = #list
+		local rows = math.min(n, 15)
+		local win_h = (24.5 * (rows + 1) + 21) * dpi
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+		imgui.SetNextWindowSize(imgui.ImVec2(730 * dpi, win_h), imgui.Cond.Always)
+		imgui.Begin(getHelperIcon() .. " " .. u8(MODULE.Members.info.fraction) .. " - " .. n .. u8' сотрудников онлайн ' .. getHelperIcon() .. '##members_window', MODULE.Members.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+		change_dpi()
+		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+			MODULE.Members.Window[0] = false
+		end
+		local avail = imgui.GetContentRegionAvail()
+		if imgui.BeginChild('##members_table', imgui.ImVec2(avail.x, avail.y), false) then
+			local function col_header(label, width, mode)
+				imgui.SetColumnWidth(-1, width)
+				local active = (md.sort_mode or 0) == mode
+				if active then imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.3, 0.8, 1, 1)) end
+				local arrow = active and (((md.sort_dir or 0) == 0) and u8(' (V)') or u8(' (^)')) or ''
+				imgui.CenterColumnText(label .. arrow)
+				if mode >= 0 then
+					if imgui.IsItemClicked() then
+						if active then
+							md.sort_dir = 1 - (md.sort_dir or 0)
+						else
+							md.sort_mode = mode; md.sort_dir = 0
+						end
+						save_module('members')
+					end
+					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Клик - сортировка по столбцу.\nПовторный клик - смена направления.') end
+				end
+				if active then imgui.PopStyleColor() end
+				imgui.NextColumn()
+			end
+			imgui.Columns(4)
+			col_header(getUserIcon() .. u8(" Cотрудник"), 300 * dpi, 1)
+			col_header(fa.RANKING_STAR .. u8(" Должность"), 230 * dpi, 0)
+			col_header(fa.TRIANGLE_EXCLAMATION .. u8(" Выговоры"), 100 * dpi, 2)
+			col_header(fa.INFO .. u8(" Инфо"), 100 * dpi, -1)
+			imgui.Columns(1)
+			local thr = (md.afk_threshold or 5) * 60
+			local over_c = md.afk_over_color or {255, 120, 0}
+			local warn_c = md.afk_warn_color or {255, 200, 0}
+			for i, v in ipairs(list) do
+				imgui.Separator()
+				imgui.Columns(4)
+				local afk_sec = tonumber(v.afk) or 0
+				if not v.working then
+					imgui_RGBA = imgui.ImVec4(1, 0.231, 0.231, 1)
+				elseif afk_sec >= thr then
+					imgui_RGBA = imgui.ImVec4(over_c[1] / 255, over_c[2] / 255, over_c[3] / 255, 1)
+				elseif afk_sec >= thr / 2 then
+					imgui_RGBA = imgui.ImVec4(warn_c[1] / 255, warn_c[2] / 255, warn_c[3] / 255, 1)
+				else
+					imgui_RGBA = (settings.general.helper_theme ~= 2) and imgui.ImVec4(1, 1, 1, 1) or imgui.ImVec4(0, 0, 0, 1)
+				end
+				local text = u8(v.nick) .. ' [' .. v.id .. ']'
+				if afk_sec > 0 then
+					text = text .. (afk_sec < 60 and (' [AFK ' .. afk_sec .. 's]') or (' [AFK ' .. math.floor(afk_sec / 60) .. 'm]'))
+				end
+				imgui.CenterColumnColorText(imgui_RGBA, text)
+				if (imgui.IsItemClicked() and modules.player.data.fraction_rank_number >= 9) then
+					show_leader_fast_menu(v.id); MODULE.Members.Window[0] = false
+				end
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8(v.rank) .. ' (' .. u8(v.rank_number) .. ')')
+				imgui.NextColumn()
+				if tonumber(v.warns) == 0 then imgui.CenterColumnText(u8(v.warns .. '/3'))
+				elseif tonumber(v.warns) == 1 then imgui.CenterColumnColorText(imgui.ImVec4(1, 1, 0.231, 1), u8(v.warns .. '/3'))
+				else imgui.CenterColumnColorText(imgui.ImVec4(1, 0.231, 0.231, 1), u8(v.warns .. '/3')) end
+				imgui.NextColumn()
+				local custom = (md.custom_info or {})[v.nick or '']
+				local ctxt, ccol = nil, nil
+				if type(custom) == 'table' then ctxt, ccol = custom.txt, custom.col
+				elseif type(custom) == 'string' then ctxt = custom end
+				if ctxt and ctxt ~= '' then
+					local r, g, b = 51, 204, 255
+					if type(ccol) == 'table' then r, g, b = ccol[1] or r, ccol[2] or g, ccol[3] or b end
+					imgui.CenterColumnColorText(imgui.ImVec4(r / 255, g / 255, b / 255, 1), u8(ctxt))
+				elseif v.info == '-' then
+					imgui.CenterColumnText(u8'-')
+				else
+					imgui.CenterColumnColorText(imgui.ImVec4(1, 0.231, 0.231, 1), u8(v.info))
+				end
+				if imgui.IsItemClicked() then
+					MU.info_edit_nick = v.nick
+					imgui.StrCopy(MU.info_buf, u8(ctxt or ''))
+					local r, g, b = 51, 204, 255
+					if type(ccol) == 'table' then r, g, b = ccol[1] or r, ccol[2] or g, ccol[3] or b end
+					MU.info_col[0], MU.info_col[1], MU.info_col[2] = r / 255, g / 255, b / 255
+					MU.info_open = true
+				end
+				if imgui.IsItemHovered() then imgui.SetTooltip(u8'Клик - своя пометка для игрока.') end
+				imgui.Columns(1)
+			end
+			imgui.EndChild()
+		end
+		if MU.info_open then
+			MU.info_open = false
+			imgui.OpenPopup(fa.INFO .. u8' Своя пометка ' .. fa.INFO .. '##members_info')
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		if imgui.BeginPopupModal(fa.INFO .. u8' Своя пометка ' .. fa.INFO .. '##members_info', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+			change_dpi()
+			local max_len = md.label_max or 16
+			local nick = MU.info_edit_nick or ''
+			imgui.CenterText(fa.INFO .. u8' Своя пометка ' .. fa.INFO)
+			imgui.Separator()
+			imgui.Text(u8'Игрок: ' .. u8(nick))
+			imgui.Text(u8('Текст (до ' .. max_len .. ' символов):'))
+			local cur_len = #u8:decode(ffi.string(MU.info_buf))
+			imgui.SameLine()
+			if cur_len > max_len then imgui.TextColored(imgui.ImVec4(1, 0.231, 0.231, 1), cur_len .. '/' .. max_len)
+			else imgui.TextDisabled(cur_len .. '/' .. max_len) end
+			imgui.PushItemWidth(300 * dpi)
+			imgui.InputText('##members_info_buf', MU.info_buf, 64)
+			imgui.PopItemWidth()
+			imgui.Text(u8'Цвет надписи:')
+			imgui.SameLine()
+			imgui.ColorEdit3('##members_info_col', MU.info_col, imgui.ColorEditFlags.NoInputs)
+			imgui.SameLine()
+			imgui.TextColored(imgui.ImVec4(MU.info_col[0], MU.info_col[1], MU.info_col[2], 1), u8'Пример надписи')
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then imgui.CloseCurrentPopup() end
+			imgui.SameLine()
+			if imgui.Button(fa.TRASH_CAN .. u8' Очистить', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then
+				md.custom_info = md.custom_info or {}
+				md.custom_info[nick] = nil
+				save_module('members'); imgui.CloseCurrentPopup()
+			end
+			imgui.SameLine()
+			if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then
+				local txt = u8:decode(ffi.string(MU.info_buf)):gsub('^%s+', ''):gsub('%s+$', ''):sub(1, max_len)
+				md.custom_info = md.custom_info or {}
+				if txt == '' or txt == '-' then md.custom_info[nick] = nil
+				else
+					md.custom_info[nick] = {
+						txt = txt,
+						col = { math.floor(MU.info_col[0] * 255 + 0.5), math.floor(MU.info_col[1] * 255 + 0.5), math.floor(MU.info_col[2] * 255 + 0.5) },
+					}
+				end
+				save_module('members'); imgui.CloseCurrentPopup()
+			end
+			imgui.End()
+		end
+		imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.GiveRank.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+				local dsx, dsy = sizeX, sizeY
+				pcall(function()
+					local d = imgui.GetIO().DisplaySize
+					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+				end)
+				local PAD = 200
+				local st = imgui.GetStyle()
+				local old_round, old_border = nil, nil
+				pcall(function() old_round  = st.WindowRounding  end)
+				pcall(function() old_border = st.WindowBorderSize end)
+				pcall(function() st.WindowRounding  = 0 end)
+				pcall(function() st.WindowBorderSize = 0 end)
+				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+				imgui.Begin('##dim_giverank', nil,
+					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+				imgui.End()
+				imgui.PopStyleColor()
+				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+			end
+			imgui.Begin(getHelperIcon().." Arizona Helper Unlimited " .. getHelperIcon() .. "##rank", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			change_dpi()
+			imgui.CenterText(u8'Выберите ранг для '.. u8(sampGetPlayerNickname(MODULE.GiveRank.player_id)) .. ':')
+			imgui.PushItemWidth(250 * settings.general.custom_dpi)
+			imgui.SliderInt('', MODULE.GiveRank.number, 1, (modules.player.data.fraction_rank_number == 9) and 8 or 9)
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.GiveRank.cancel = true
+				MODULE.GiveRank.Window[0] = false
+			end
+			imgui.SameLine()
+			local label = ' Выдать ранг'
+			if imgui.Button(fa.USER .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.GiveRank.cancel = false
+				MODULE.GiveRank.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+end
+if not (isMode('ghetto') or isMode('mafia')) then
+	imgui.OnFrame(
+		function() return MODULE.Sobes.Window[0] end,
+		function(player)
+			if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg then
+				local dsx, dsy = sizeX, sizeY
+				pcall(function()
+					local d = imgui.GetIO().DisplaySize
+					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+				end)
+				local PAD = 200
+				local st = imgui.GetStyle()
+				local old_round, old_border = nil, nil
+				pcall(function() old_round  = st.WindowRounding  end)
+				pcall(function() old_border = st.WindowBorderSize end)
+				pcall(function() st.WindowRounding  = 0 end)
+				pcall(function() st.WindowBorderSize = 0 end)
+				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+				imgui.Begin('##dim_sobes', nil,
+					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+				imgui.End()
+				imgui.PopStyleColor()
+				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+			end
+			if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+				MODULE.Sobes.Window[0] = false
+			end
+			if MODULE.Sobes.player_id ~= nil and isParamSampID(MODULE.Sobes.player_id) then
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+				imgui.Begin(fa.PERSON_CIRCLE_CHECK..u8' Проведение собеседования игроку ' .. u8(sampGetPlayerNickname(MODULE.Sobes.player_id)) .. ' ' .. fa.PERSON_CIRCLE_CHECK, MODULE.Sobes.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize)
+				change_dpi()
+				if imgui.BeginChild('sobes1', imgui.ImVec2(240 * settings.general.custom_dpi, 180 * settings.general.custom_dpi), true) then
+					imgui.CenterColumnText(fa.BOOKMARK .. u8" Основное")
+					imgui.Separator()
+					if imgui.Button(fa.PLAY .. u8" Начать собеседование", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						lua_thread.create(function()
+							sampSendChat("Здравствуйте, я " .. modules.player.data.name_surname .. " - " .. modules.player.data.fraction_rank .. ' ' .. modules.player.data.fraction_tag)
+							wait(1500)
+							sampSendChat("Вы пришли к нам на собеседование?")
+						end)
+					end
+					if imgui.Button(fa.PASSPORT .. u8" Попросить документы", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						lua_thread.create(function()
+							sampSendChat("Хорошо, предоставьте мне все ваши документы для проверки.")
+							wait(1500)
+							sampSendChat("Мне нужен ваш Паспорт, Мед.карта и Лицензии.")
+							wait(1500)
+							sampSendChat("/n " .. sampGetPlayerNickname(MODULE.Sobes.player_id) .. ", используйте /showpass")
+							wait(1500)
+							sampSendChat("/n Обязательно с RP отыгровками!")
+						end)
+					end
+					if imgui.Button(fa.USER .. u8" Расскажите о себе", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("Немного расскажите о себе.")
+					end		
+					if imgui.Button(fa.CHECK .. u8" Собеседование пройдено", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("/todo Поздравляю! Вы успешно прошли собеседование!*улыбаясь")
+					end
+					if imgui.Button(fa.USER_PLUS .. u8" Пригласить в организацию", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						find_and_use_command('/invite {id}', MODULE.Sobes.player_id)
+						MODULE.Sobes.Window[0] = false
+					end
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('sobes2', imgui.ImVec2(240 * settings.general.custom_dpi, 180 * settings.general.custom_dpi), true) then
+					imgui.CenterColumnText(fa.BOOKMARK..u8" Дополнительно")
+					imgui.Separator()
+					if imgui.Button(fa.GLOBE .. u8" Наличие спец.рации Discord", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("Имеется ли у Вас спец. рация Discord?")
+					end
+					if imgui.Button(fa.CIRCLE_QUESTION .. u8" Наличие опыта работы", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("Имеется ли у Вас опыт работы в нашей сфере?")
+					end
+					if imgui.Button(fa.CIRCLE_QUESTION .. u8" Почему именно мы?", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("Скажите почему Вы выбрали именно нас?")
+					end
+					if imgui.Button(fa.CIRCLE_QUESTION .. u8" Что такое адекватность?", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("Скажите что по вашему значит \"Адекватность\"?")
+					end
+					if imgui.Button(fa.CIRCLE_QUESTION .. u8" Что такое ДМ?", imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						sampSendChat("Скажите как вы думаете, что такое \"ДМ\"?")
+					end
+				imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('sobes3', imgui.ImVec2(150 * settings.general.custom_dpi, -1), true, imgui.WindowFlags.NoScrollbar) then
+					imgui.CenterColumnText(fa.CIRCLE_XMARK .. u8" Отказы")
+					imgui.Separator()
+					local function otkaz(reason)
+						lua_thread.create(function()
+							MODULE.Sobes.Window[0] = false
+							sampSendChat("/todo К сожалению, вы нам не подходите*с разочарованием на лице")
+							wait(1500)
+							sampSendChat(reason)
+						end)
+					end
+					if imgui.Selectable(u8"Законопослушность") then
+						otkaz("У вас плохая законопослушность.")
+					end
+					if imgui.Selectable(u8"Укропозависимость") then
+						otkaz("Вам необходимо вылечить зависимость от укропа в любой больнице!")
+					end
+					if imgui.Selectable(u8"Активная повестка") then
+						otkaz("У вас повестка, отслужите либо пройдите обследования в больнице.")
+					end
+					if imgui.Selectable(u8"Нету мед.карты") then
+						otkaz("У вас нету мед.карты, получите её в любой больнице.")
+					end
+					if imgui.Selectable(u8"Нету военного билета") then
+						otkaz("У вас нету военного билета!")
+					end
+					if imgui.Selectable(u8"Нету жилья") then
+						otkaz("У вас нету жилья! Найдите себе дом/отель/трейлер.")
+					end
+					if imgui.Selectable(u8"Состоит в ЧС") then
+						otkaz("Вы состоите в Чёрном Списке нашей организации!")
+					end
+					if imgui.Selectable(u8"Проф.непригодность") then
+						otkaz("Вы не подходите для нашей работы по профессиональным качествам.")
+					end
+				end
+				imgui.EndChild()
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Прозиошла ошибка, ID игрока недействителен!', message_color)
+				MODULE.Sobes.Window[0] = false
+			end
+		end
+	)
+	local function getQuickReplies()
+		if type(modules.departament.data.dep_quick_replies) ~= 'table' then
+			modules.departament.data.dep_quick_replies = {}
+		end
+		return modules.departament.data.dep_quick_replies
+	end
+	local function saveQuickReplies() save_module('departament') end
+	imgui.OnFrame(
+		function() return MODULE.Departament.Window[0] end,
+		function(player)
+			local dpi = settings.general.custom_dpi
+			local st = imgui.GetStyle()
+			local WIN_W = 500 * dpi
+			local function center_next(w)
+				local min_x = 0
+				pcall(function() min_x = imgui.GetWindowContentRegionMin().x end)
+				local max_x = imgui.GetWindowContentRegionMax().x
+				imgui.SetCursorPosX(min_x + math.max(0, (max_x - min_x - w) / 2))
+			end
+			local function createTagPopup(tag_type, input_var, setting_key)
+				local pos_key = 'dep_tags_menu_' .. tag_type
+				settings.windows_pos[pos_key] = settings.windows_pos[pos_key] or { x = sizeX / 2 - 270, y = sizeY / 2 - 150 }
+				MODULE.Departament.popup_pos_applied = MODULE.Departament.popup_pos_applied or {}
+				local applied_key = 'tags_' .. tag_type
+				if not MODULE.Departament.popup_pos_applied[applied_key] then
+					imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos[pos_key].x, settings.windows_pos[pos_key].y), imgui.Cond.Always)
+				end
+				if imgui.BeginPopupModal(fa.TAG .. u8' Теги организаций##'..tag_type, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+					MODULE.Departament.popup_pos_applied[applied_key] = true
+					change_dpi()
+					player.HideCursor = false
+					local st = imgui.GetStyle()
+					if imgui.BeginTabBar('TabTags') then
+						local function createTagTab(title, tags)
+							if imgui.BeginTabItem(fa.BARS..u8' '..title..' ') then
+								local is_custom = title:find(u8'кастом') ~= nil
+								local extra_h = is_custom and 0 or (25 * dpi + 1 + 2 * st.ItemSpacing.y)
+								if imgui.BeginChild('##tags_list_' .. tag_type, imgui.ImVec2(520 * dpi, 170 * dpi + extra_h), true) then
+									local max_x = imgui.GetWindowContentRegionMax().x
+									local next_x = nil
+									for i, tag in ipairs(tags) do
+										if tag ~= 'skip' then
+											local visible = ' ' .. u8(tag) .. ' '
+											local bw = imgui.CalcTextSize(visible).x + 2 * st.FramePadding.x
+											if (next_x == nil) or (next_x + bw > max_x) then
+												next_x = st.WindowPadding.x
+											else
+												imgui.SameLine()
+												imgui.SetCursorPosX(next_x)
+											end
+											if tags == modules.departament.data.dep_tags_custom then
+												imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+												if imgui.BeginPopupModal(fa.GEAR .. u8' Выберите что именно нужно сделать ' .. fa.GEAR .. '##' .. i, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+													change_dpi()
+													if imgui.ItemSelector(u8'', { u8'Использовать тег', u8'Удалить тег' }, MODULE.Departament.selector.tag, 200 * dpi) then
+														local bool = (MODULE.Departament.selector.tag[0] ~= 2)
+														if bool then
+															imgui.StrCopy(input_var, u8(tag))
+														else
+															table.remove(tags, i)
+														end
+														save_module('departament')
+														imgui.CloseCurrentPopup()
+													end
+													imgui.End()
+												end
+											end
+											if imgui.Button(visible .. '##' .. i) then
+												if tags == modules.departament.data.dep_tags_custom then
+													imgui.OpenPopup(fa.GEAR .. u8' Выберите что именно нужно сделать ' .. fa.GEAR .. '##' .. i)
+												else
+													imgui.StrCopy(input_var, u8(tag))
+													save_module('departament')
+													imgui.CloseCurrentPopup()
+												end
+											end
+											next_x = next_x + bw + st.ItemSpacing.x
+										else
+											next_x = nil
+										end
+									end
+									imgui.EndChild()
+								end
+								if is_custom then
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить тег##depAddTag', imgui.ImVec2(-1, 25 * dpi)) then
+										imgui.OpenPopup(fa.TAG .. u8' Добавление нового тега ' .. fa.TAG .. '##'..tag_type)
+									end
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(fa.TAG .. u8' Добавление нового тега ' .. fa.TAG .. '##'..tag_type, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										imgui.CenterText(u8('Если нужен переход на следущую'))
+										imgui.CenterText(u8('строку, вместо тега укажите skip'))
+										imgui.PushItemWidth(215 * dpi)
+										imgui.InputText('##MODULE.Departament.new_tag', MODULE.Departament.new_tag, 256)
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##dep_add_tag'..tag_type, imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+											imgui.CloseCurrentPopup()
+										end
+										imgui.SameLine()
+										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##dep_add_tag'..tag_type, imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+											table.insert(modules.departament.data.dep_tags_custom, u8:decode(ffi.string(MODULE.Departament.new_tag)))
+											save_module('departament')
+											imgui.CloseCurrentPopup()
+										end
+										imgui.End()
+									end
+								end
+								imgui.EndTabItem()
+							end
+						end
+						createTagTab(u8'Стандартные теги (ru)', modules.departament.data.dep_tags)
+						createTagTab(u8'Стандартные теги (en)', modules.departament.data.dep_tags_en)
+						createTagTab(u8'Ваши кастомные теги', modules.departament.data.dep_tags_custom)
+						imgui.EndTabBar()
+					end
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##depCloseTag', imgui.ImVec2(-1, 25 * dpi)) then
+						imgui.CloseCurrentPopup()
+					end
+					local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+					if posX ~= settings.windows_pos[pos_key].x or posY ~= settings.windows_pos[pos_key].y then
+						settings.windows_pos[pos_key] = { x = posX, y = posY }; save_settings()
+					end
+					imgui.End()
+				else
+					MODULE.Departament.popup_pos_applied[applied_key] = false
+				end
+			end
+
+			local function createFrequencyPopup()
+				settings.windows_pos.dep_fm_menu = settings.windows_pos.dep_fm_menu
+					or { x = sizeX / 2 - 270, y = sizeY / 2 - 120 }
+				MODULE.Departament.popup_pos_applied = MODULE.Departament.popup_pos_applied or {}
+				if not MODULE.Departament.popup_pos_applied['fm'] then
+					imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.dep_fm_menu.x, settings.windows_pos.dep_fm_menu.y), imgui.Cond.Always)
+				end
+				if imgui.BeginPopupModal(fa.WALKIE_TALKIE .. u8' Частота для использования рации /d', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+					MODULE.Departament.popup_pos_applied['fm'] = true
+					change_dpi()
+					if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+						imgui.CloseCurrentPopup()
+					end
+					local st = imgui.GetStyle()
+					if imgui.BeginChild('##fm_list', imgui.ImVec2(520 * dpi, 90 * dpi), true) then
+						local max_x = imgui.GetWindowContentRegionMax().x
+						local next_x = nil
+						local shown = 0
+						for i, tag in ipairs(modules.departament.data.dep_fms) do
+							if tag ~= 'skip' then
+								shown = shown + 1
+								local visible = ' ' .. u8(tag) .. ' '
+								local bw = imgui.CalcTextSize(visible).x + 2 * st.FramePadding.x
+								if (next_x == nil) or (next_x + bw > max_x) then
+									next_x = st.WindowPadding.x
+								else
+									imgui.SameLine()
+									imgui.SetCursorPosX(next_x)
+								end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.GEAR .. u8' Выберите что именно нужно сделать ' .. fa.GEAR .. '##' .. i, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+									change_dpi()
+									if imgui.ItemSelector(u8'', { u8'Использовать частоту', u8'Удалить частоту' }, MODULE.Departament.selector.fm, 200 * dpi) then
+										local bool = (MODULE.Departament.selector.fm[0] ~= 2)
+										if bool then
+											imgui.StrCopy(MODULE.Departament.fm, u8(tag))
+											modules.departament.data.dep_fm = u8:decode(ffi.string(MODULE.Departament.fm))
+										else
+											table.remove(modules.departament.data.dep_fms, i)
+										end
+										save_module('departament')
+										imgui.CloseCurrentPopup()
+									end
+									imgui.End()
+								end
+								if imgui.Button(visible .. '##' .. i) then
+									imgui.OpenPopup(fa.GEAR .. u8' Выберите что именно нужно сделать ' .. fa.GEAR .. '##' .. i)
+								end
+								next_x = next_x + bw + st.ItemSpacing.x
+							else
+								next_x = nil
+							end
+						end
+						if shown == 0 then
+							imgui.TextDisabled(u8'Нет частот.')
+						end
+						imgui.EndChild()
+					end
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить частоту', imgui.ImVec2(-1, 25 * dpi)) then
+						imgui.OpenPopup(fa.TAG .. u8' Добавление новой частоты##2')
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(fa.TAG .. u8' Добавление новой частоты##2', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar) then
+						imgui.CenterText(u8('Если нужен переход на следущую'))
+						imgui.CenterText(u8('строку, вместо частоты укажите skip'))
+						imgui.PushItemWidth(215 * dpi)
+						imgui.InputText('##MODULE.Departament.new_tag', MODULE.Departament.new_tag, 256)
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+							table.insert(modules.departament.data.dep_fms, u8:decode(ffi.string(MODULE.Departament.new_tag)))
+							save_module('departament')
+							imgui.CloseCurrentPopup()
+						end
+						imgui.End()
+					end
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##fm_close', imgui.ImVec2(-1, 25 * dpi)) then
+						imgui.CloseCurrentPopup()
+					end
+					local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+					if posX ~= settings.windows_pos.dep_fm_menu.x or posY ~= settings.windows_pos.dep_fm_menu.y then
+						settings.windows_pos.dep_fm_menu = { x = posX, y = posY }; save_settings()
+					end
+					imgui.End()
+				else
+					MODULE.Departament.popup_pos_applied['fm'] = false
+				end
+			end
+			local function createQuickRepliesPopup()
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				MODULE.Departament.popup_pos_applied = MODULE.Departament.popup_pos_applied or {}
+				if imgui.BeginPopupModal(fa.COMMENTS .. u8' Быстрые ответы', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
+					MODULE.Departament.popup_pos_applied['qr'] = true
+					if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+						imgui.CloseCurrentPopup()
+					end
+					change_dpi()
+					local dpi = settings.general.custom_dpi
+					local st = imgui.GetStyle()
+					local replies = getQuickReplies()
+					if #replies == 0 then
+						imgui.TextDisabled(u8'У вас нет настроенных быстрых ответов.')
+						imgui.TextDisabled(u8'Добавьте свой через кнопку "Добавить".')
+					else
+						if imgui.BeginChild('##quick_replies_list', imgui.ImVec2(470 * dpi, 250 * dpi), true) then
+							for i, reply in ipairs(replies) do
+								imgui.Text(u8(reply.name))
+								imgui.SameLine()
+								imgui.TextDisabled('- ' .. u8(reply.text))
+								imgui.SameLine()
+								local btns_w = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + imgui.CalcTextSize(fa.TRASH_CAN).x + 4 * st.FramePadding.x + st.ItemSpacing.x
+								local max_x = imgui.GetWindowContentRegionMax().x
+								if imgui.GetCursorPosX() + btns_w < max_x then imgui.SetCursorPosX(max_x - btns_w) end
+								if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##qr_edit_' .. i) then
+									imgui.StrCopy(MODULE.Departament.quick_reply_name, u8(reply.name))
+									imgui.StrCopy(MODULE.Departament.quick_reply, u8(reply.text))
+									imgui.OpenPopup(fa.PEN_TO_SQUARE .. u8' Редактирование ответа##qr_edit_' .. i)
+								end
+								imgui.SameLine()
+								if imgui.SmallButton(fa.TRASH_CAN .. '##qr_del_' .. i) then
+									imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Удаление ответа##qr_del_' .. i)
+								end
+								imgui.Separator()
+								if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование ответа##qr_edit_' .. i, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
+									change_dpi()
+									imgui.Text(fa.SIGNATURE .. u8' Название:')
+									imgui.PushItemWidth(280 * dpi)
+									imgui.InputText('##qr_edit_name', MODULE.Departament.quick_reply_name, 64)
+									imgui.Text(fa.COMMENTS .. u8' Текст ответа:')
+									imgui.InputText('##qr_edit_text', MODULE.Departament.quick_reply, 256)
+									imgui.PopItemWidth()
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(135 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(135 * dpi, 25 * dpi)) then
+										reply.name = u8:decode(ffi.string(MODULE.Departament.quick_reply_name))
+										reply.text = u8:decode(ffi.string(MODULE.Departament.quick_reply))
+										saveQuickReplies()
+										imgui.CloseCurrentPopup()
+									end
+									imgui.End()
+								end
+								if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Удаление ответа##qr_del_' .. i, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
+									change_dpi()
+									imgui.Text(u8('Удалить ответ "') .. u8(reply.name) .. u8('"?'))
+									imgui.Separator()
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(135 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+									imgui.SameLine()
+									if imgui.Button(fa.TRASH_CAN .. u8' Удалить', imgui.ImVec2(135 * dpi, 25 * dpi)) then
+										table.remove(replies, i)
+										saveQuickReplies()
+										imgui.CloseCurrentPopup()
+									end
+									imgui.End()
+								end
+							end
+							imgui.EndChild()
+						end
+					end
+					imgui.Separator()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+						imgui.CloseCurrentPopup()
+					end
+					imgui.SameLine()
+					if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
+						imgui.OpenPopup(fa.CIRCLE_PLUS .. u8' Новый быстрый ответ')
+					end
+					if imgui.BeginPopupModal(fa.CIRCLE_PLUS .. u8' Новый быстрый ответ', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize) then
+						change_dpi()
+						imgui.Text(fa.SIGNATURE .. u8' Название:')
+						imgui.PushItemWidth(280 * dpi)
+						imgui.InputTextWithHint('##qr_new_name', u8'Например: Принято', MODULE.Departament.quick_reply_name, 64)
+						imgui.Text(fa.COMMENTS .. u8' Текст ответа:')
+						imgui.InputTextWithHint('##qr_new_text', u8'Например: 10-4', MODULE.Departament.quick_reply, 256)
+						imgui.PopItemWidth()
+						imgui.Separator()
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(135 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
+						imgui.SameLine()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(135 * dpi, 25 * dpi)) then
+							local n = u8:decode(ffi.string(MODULE.Departament.quick_reply_name))
+							local t = u8:decode(ffi.string(MODULE.Departament.quick_reply))
+							if n ~= '' and t ~= '' then
+								table.insert(replies, {name = n, text = t})
+								saveQuickReplies()
+								imgui.CloseCurrentPopup()
+							end
+						end
+						imgui.End()
+					end
+					imgui.End()
+				end
+			end
+			if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+				local dsx, dsy = sizeX, sizeY
+				pcall(function()
+					local d = imgui.GetIO().DisplaySize
+					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+				end)
+				local PAD = 200
+				local old_round, old_border = nil, nil
+				pcall(function() old_round  = st.WindowRounding  end)
+				pcall(function() old_border = st.WindowBorderSize end)
+				pcall(function() st.WindowRounding  = 0 end)
+				pcall(function() st.WindowBorderSize = 0 end)
+				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+				imgui.Begin('##dim_dep', nil,
+					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+				imgui.End()
+				imgui.PopStyleColor()
+				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+			end
+			settings.windows_pos.dep_menu = settings.windows_pos.dep_menu or { x = sizeX / 2 - 250, y = sizeY / 2 - 160 }
+			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.dep_menu.x, settings.windows_pos.dep_menu.y), imgui.Cond.FirstUseEver)
+			imgui.Begin(fa.WALKIE_TALKIE .. u8" Рация департамента " .. fa.WALKIE_TALKIE, MODULE.Departament.Window,
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize +
+				imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+			change_dpi()
+			player.HideCursor = false
+			local any_dep_popup = false
+			for _, v in pairs(MODULE.Departament.popup_pos_applied or {}) do
+				if v then any_dep_popup = true end
+			end
+			if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() and not any_dep_popup then
+				MODULE.Departament.Window[0] = false
+			end
+			if imgui.BeginChild('##2', imgui.ImVec2(500 * dpi, 190 * dpi), true) then
+				imgui.Columns(3)
+				imgui.CenterColumnText(u8('Ваш тег:'))
+				imgui.PushItemWidth(155 * dpi)
+				if imgui.InputText('##MODULE.Departament.tag1', MODULE.Departament.tag1, 256) then
+					modules.departament.data.dep_tag1 = u8:decode(ffi.string(MODULE.Departament.tag1))
+					save_module('departament')
+				end
+				if imgui.CenterColumnButton(u8('Выбрать тег##1')) then
+					imgui.OpenPopup(fa.TAG .. u8' Теги организаций##1')
+				end
+				createTagPopup('1', MODULE.Departament.tag1, 'dep_tag1')
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8('Частота рации:'))
+				imgui.PushItemWidth(155 * dpi)
+				if imgui.InputText('##MODULE.Departament.fm', MODULE.Departament.fm, 256) then
+					modules.departament.data.dep_fm = u8:decode(ffi.string(MODULE.Departament.fm))
+					save_module('departament')
+				end
+				if imgui.CenterColumnButton(u8('Выбрать частоту##1')) then
+					imgui.OpenPopup(fa.WALKIE_TALKIE .. u8' Частота для использования рации /d')
+				end
+				createFrequencyPopup()
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8('Тег получателя:'))
+				imgui.PushItemWidth(155 * dpi)
+				if imgui.InputText('##MODULE.Departament.tag2', MODULE.Departament.tag2, 256) then
+					modules.departament.data.dep_tag2 = u8:decode(ffi.string(MODULE.Departament.tag2))
+					save_module('departament')
+				end
+				if imgui.CenterColumnButton(u8('Выбрать тег##2')) then
+					imgui.OpenPopup(fa.TAG .. u8' Теги организаций##2')
+				end
+				createTagPopup('2', MODULE.Departament.tag2, 'dep_tag2')
+				imgui.Columns(1)
+				imgui.Separator()
+				imgui.CenterText(u8('Текст:'))
+				imgui.PushItemWidth(405 * dpi)
+				imgui.InputText(u8'##dep_input_text', MODULE.Departament.text, 256)
+				imgui.SameLine()
+				if imgui.Button(u8' Отправить ') then
+					local tag1 = modules.departament.data.anti_skobki and u8:decode(ffi.string(MODULE.Departament.tag1)):gsub("[%[%]]", "") or u8:decode(ffi.string(MODULE.Departament.tag1))
+					local tag2 = modules.departament.data.anti_skobki and u8:decode(ffi.string(MODULE.Departament.tag2)):gsub("[%[%]]", "") or u8:decode(ffi.string(MODULE.Departament.tag2))
+					sampSendChat('/d ' .. tag1 .. ' ' .. u8:decode(ffi.string(MODULE.Departament.fm)) .. ' ' .. tag2 .. ' ' .. u8:decode(ffi.string(MODULE.Departament.text)))
+				end
+				local tag1 = ffi.string(MODULE.Departament.tag1)
+				local tag2 = ffi.string(MODULE.Departament.tag2)
+				local fm = ffi.string(MODULE.Departament.fm)
+				local text = ffi.string(MODULE.Departament.text)
+				if modules.departament.data.anti_skobki then
+					tag1 = tag1:gsub("[%[%]]", "")
+					tag2 = tag2:gsub("[%[%]]", "")
+				end
+				imgui.CenterText('/d ' .. tag1 .. ' ' .. fm .. ' ' .. tag2 .. ' ' .. text)
+				imgui.Separator()
+				if imgui.Checkbox(u8(' Отключить использование символов [] (скобок) в тегах организаций'), MODULE.Departament.checkbox.anti_skobki) then
+					modules.departament.data.anti_skobki = MODULE.Departament.checkbox.anti_skobki[0]
+					save_module('departament')
+				end
+				imgui.EndChild()
+			end
+			imgui.Separator()
+			imgui.CenterText(fa.COMMENTS .. u8' Быстрые ответы ' .. fa.COMMENTS)
+			local replies = getQuickReplies()
+			if #replies > 0 then
+				local max_x = st.WindowPadding.x + WIN_W
+				local next_x = nil
+				for i, reply in ipairs(replies) do
+					local visible = ' ' .. u8(reply.name) .. ' '
+					local bw = imgui.CalcTextSize(visible).x + 2 * st.FramePadding.x
+					local on_new_line = (next_x == nil) or (next_x + bw > max_x)
+					if on_new_line then
+						next_x = st.WindowPadding.x
+					else
+						imgui.SameLine()
+						imgui.SetCursorPosX(next_x)
+					end
+					if imgui.Button(visible .. '##qr_send_' .. i) then
+						local raw1 = u8:decode(ffi.string(MODULE.Departament.tag1))
+						local raw2 = u8:decode(ffi.string(MODULE.Departament.tag2))
+						local q1 = modules.departament.data.anti_skobki and raw1:gsub("[%[%]]", "") or raw1
+						local q2 = modules.departament.data.anti_skobki and raw2:gsub("[%[%]]", "") or raw2
+						sampSendChat('/d ' .. q1 .. ' ' .. u8:decode(ffi.string(MODULE.Departament.fm)) .. ' ' .. q2 .. ' ' .. reply.text)
+					end
+					next_x = next_x + bw + st.ItemSpacing.x
+				end
+			else
+				imgui.TextDisabled(u8'Нет настроенных быстрых ответов - нажмите "Настроить быстрые ответы".')
+			end
+			if imgui.Button(fa.GEAR .. u8' Настроить быстрые ответы', imgui.ImVec2(-1, 25 * dpi)) then
+				imgui.OpenPopup(fa.COMMENTS .. u8' Быстрые ответы')
+			end
+			createQuickRepliesPopup()
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.dep_menu.x or posY ~= settings.windows_pos.dep_menu.y then
+				settings.windows_pos.dep_menu = { x = posX, y = posY }; save_settings()
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.Afind and MODULE.Afind.active and MODULE.Afind.in_building end,
+		function(player)
+			settings.windows_pos.afind_building = settings.windows_pos.afind_building
+				or { x = sizeX / 2 - 150, y = 80 }
+			imgui.SetNextWindowPos(
+				imgui.ImVec2(settings.windows_pos.afind_building.x, settings.windows_pos.afind_building.y),
+				imgui.Cond.FirstUseEver)
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##afind_building_menu', _,
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize)
+			change_dpi()
+			safery_disable_cursor(player)
+			local now  = os.time()
+			local secs = now - (MODULE.Afind.building_since or now)
+			if secs < 0 then secs = 0 end
+			local word = declension(secs, "секунду", "секунды", "секунд")
+			imgui.Text(fa.USER .. u8(' Цель: ') .. u8((MODULE.Afind.target_nick or "") .. ' [' .. tostring(MODULE.Afind.target_id or -1) .. ']'))
+			imgui.Text(fa.BUILDING_SHIELD .. u8(' Статус: ') .. u8('находится в здании'))
+			imgui.Text(fa.CLOCK .. u8(' В здании уже: ') .. secs .. ' ' .. u8(word))
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.afind_building.x or posY ~= settings.windows_pos.afind_building.y then
+				settings.windows_pos.afind_building = { x = posX, y = posY }
+				save_settings()
+			end
+			imgui.End()
+		end
+	)
+	local BUILDING_EXIT_THRESHOLD = 5
+	imgui.OnFrame(function() return MODULE.Afind and MODULE.Afind.active end, function(player)
+		safery_disable_cursor(player)
+		if not MODULE.Afind.in_building then return end
+		local now = os.time()
+		if now - (MODULE.Afind.last_building_msg or now) >= BUILDING_EXIT_THRESHOLD then
+			MODULE.Afind.in_building = false
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Игрок ' .. message_color_hex .. (MODULE.Afind.target_nick or "") .. '[' .. tostring(MODULE.Afind.target_id or -1) .. '] {ffffff}покинул здание, геопозиция установлена.', message_color)
+		end
+	end)
+	imgui.OnFrame(
+		function() return MODULE.Post.Window[0] end,
+		function(player)
+			if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+				local dsx, dsy = sizeX, sizeY
+				pcall(function()
+					local d = imgui.GetIO().DisplaySize
+					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+				end)
+				local PAD = 200
+				local st = imgui.GetStyle()
+				local old_round, old_border = nil, nil
+				pcall(function() old_round  = st.WindowRounding  end)
+				pcall(function() old_border = st.WindowBorderSize end)
+				pcall(function() st.WindowRounding  = 0 end)
+				pcall(function() st.WindowBorderSize = 0 end)
+				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+				imgui.Begin('##dim_post', nil,
+					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+				imgui.End()
+				imgui.PopStyleColor()
+				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+			end
+			settings.windows_pos.post_menu = settings.windows_pos.post_menu
+				or { x = sizeX / 2 - 150, y = sizeY / 2 - 120 }
+			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.post_menu.x, settings.windows_pos.post_menu.y), imgui.Cond.FirstUseEver)
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##post_info_menu', MODULE.Post.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar )
+			change_dpi()
+			safery_disable_cursor(player)
+			if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+				MODULE.Post.Window[0] = false
+			end
+			if MODULE.Post.active then
+				imgui.Text(fa.MAP_LOCATION_DOT .. u8(' Пост: ') .. u8(MODULE.Binder.tag.get_post_name()))
+				imgui.Text(fa.CLOCK .. u8(' Время на посту: ') .. u8(MODULE.Binder.tag.get_post_time()))
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Состояние: ') .. u8(MODULE.Binder.tag.get_post_code()))
+				imgui.SameLine()
+				if imgui.SmallButton(fa.GEAR) then
+					imgui.OpenPopup(fa.BUILDING_SHIELD .. u8(' Arizona Helper Unlimited##post_select_code'))
+				end
+				imgui.Separator()
+				if settings.general.auto_doklad_post then
+					local period_sec = (settings.general.post_doklad_period or 5) * 60
+					local time_left = period_sec - (MODULE.Post.auto_doklad and MODULE.Post.auto_doklad.time or 0)
+					if time_left < 0 then time_left = 0 end
+					imgui.Text(fa.CLOCK .. u8(' Авто-доклад через: ') .. string.format("%02d:%02d", math.floor(time_left / 60), time_left % 60))
+				else
+					if imgui.Button(fa.WALKIE_TALKIE .. u8(' Доклад##post'), imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+						if not MODULE.Post.process_doklad then
+							MODULE.Post.process_doklad = true
+							lua_thread.create(function()
+								MODULE.Binder.state.isActive = true
+								sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. '. Пост: ' .. MODULE.Binder.tag.get_post_name() .. ', состояние ' .. MODULE.Binder.tag.get_post_code())
+								wait(1500)
+								sampSendChat('/r Нахожусь на посту уже ' .. MODULE.Binder.tag.get_post_format_time())
+								MODULE.Binder.state.isActive = false
+								MODULE.Post.process_doklad = false
+							end)
+						end
+					end
+				end
+				if imgui.Button(fa.CIRCLE_STOP .. u8(' Конец##post'), imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+					lua_thread.create(function()
+						MODULE.Post.Window[0] = false
+						MODULE.Post.active = false
+						MODULE.Binder.state.isActive = true
+						sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL. Пост: ' .. MODULE.Binder.tag.get_post_name() .. ', состояние ' .. MODULE.Binder.tag.get_post_code() .. '.')
+						wait(1500)
+						sampSendChat('/r Освобождаю пост! Простоял' .. MODULE.Binder.tag.sex() .. ' на посту: ' .. MODULE.Binder.tag.get_post_format_time() .. '.', -1)
+						MODULE.Binder.state.isActive = false
+						MODULE.Post.time = 0
+						MODULE.Post.start_time = 0
+						MODULE.Post.current_time = 0
+						MODULE.Post.code = 'CODE4'
+						MODULE.Post.ComboCode[0] = 5
+					end)
+				end
+			else
+				player.HideCursor = false
+				imgui.PushItemWidth(200 * settings.general.custom_dpi)
+				if imgui.InputTextWithHint(u8'##post_name', u8('Укажите название вашего поста'), MODULE.Post.input, 256) then
+					MODULE.Post.name = u8:decode(ffi.string(MODULE.Post.input))
+				end
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Состояние: ') .. u8(MODULE.Binder.tag.get_post_code()))
+				imgui.SameLine()
+				if imgui.SmallButton(fa.GEAR) then
+					imgui.OpenPopup(fa.BUILDING_SHIELD .. u8(' Arizona Helper Unlimited##post_select_code'))
+				end
+				imgui.Separator()
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##post', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+					MODULE.Post.Window[0] = false
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.WALKIE_TALKIE .. u8' Заступить##post', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+					MODULE.Post.time = 0
+					MODULE.Post.start_time = os.time()
+					MODULE.Post.active = true
+					MODULE.Binder.state.isActive = true
+					sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. '. Заступаю на пост ' .. MODULE.Post.name .. ', состояние ' .. MODULE.Binder.tag.get_post_code() .. '.')
+					MODULE.Binder.state.isActive = false
+				end
+			end
+			if imgui.BeginPopup(fa.BUILDING_SHIELD .. u8(' Arizona Helper Unlimited##post_select_code'), _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize  ) then
+				change_dpi()
+				player.HideCursor = false
+				imgui.PushItemWidth(150 * settings.general.custom_dpi)
+				if imgui.Combo('##post_code', MODULE.Post.ComboCode, MODULE.Patrool.ImItemsCode, #MODULE.Post.codes) then
+					MODULE.Post.code = MODULE.Post.codes[MODULE.Post.ComboCode[0] + 1]
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.post_menu.x or posY ~= settings.windows_pos.post_menu.y then
+				settings.windows_pos.post_menu = {x = posX, y = posY}
+				save_settings()
+			end
+			imgui.End()
+		end
+	)
+end
+if isMode('police') or isMode('fbi') or isMode('prison') then
+	function get_updated_at(data)
+		for index, value in ipairs(data) do
+			if value.name == '##updated_at' then
+				return os.date("%d.%m.%Y %H:%M", value.updated_at)
+			end
+		end
+		return nil
+	end
+	function set_updated_at(data, module, timestamp)
+		for index, value in ipairs(data) do
+			if value.name == '##updated_at' then
+				value.updated_at = timestamp
+				save_module(module)
+				return
+			end
+		end
+		table.insert(data, {name = '##updated_at', updated_at = timestamp})
+		save_module(module)
+	end
+	function renderSmartGUI(title, icon, downloadPath, editPopupTitle, data, saveFunction, usageText, pathDisplay, download_file_name, download_item)
+		if imgui.BeginChild('##smart'..title, imgui.ImVec2(589 * settings.general.custom_dpi, 338 * settings.general.custom_dpi), true, imgui.WindowFlags.NoScrollbar) then
+			if #data ~= 0 then
+				imgui.CenterColorText(imgui.ImVec4(0, 1, 0, 1), u8("Активно - ") .. u8(usageText))
+			else
+				imgui.CenterColorText(imgui.ImVec4(1, 0.231, 0.231, 1), u8("Неактивно - Загрузите ") .. u8(download_item) .. u8(" из облака или заполните вручную"))
+			end
+			imgui.Separator()
+			local updated_at = get_updated_at(data)
+			if updated_at then
+				imgui.CenterText(u8("Последнее обновление " .. editPopupTitle .. ": ") .. get_updated_at(data))
+			end
+			imgui.SetCursorPosY(90 * settings.general.custom_dpi)
+			imgui.SetCursorPosX(220 * settings.general.custom_dpi)
+			if imgui.Button(fa.DOWNLOAD .. (#data ~= 0 and u8' Обновить из облака 'or u8' Загрузить из облака ') .. fa.DOWNLOAD .. '##smart'..title) then
+				_G['download_'..title:lower()] = true
+				download_file = download_file_name
+				downloadFileFromUrlToPath(downloadPath, pathDisplay)
+				imgui.OpenPopup(fa.CIRCLE_INFO .. u8' Оповещение ' .. fa.CIRCLE_INFO .. '##downloadsmart'..title)
+			end
+			imgui.CenterText(u8'Данные из облака устарели или неактуальны?')
+			imgui.CenterText(u8'Сообщите SMART-редакторам на нашем Discord-сервере.')
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+			if imgui.BeginPopupModal(fa.CIRCLE_INFO .. u8' Оповещение ' .. fa.CIRCLE_INFO .. '##downloadsmart'..title, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+				if _G['download_'..title:lower()] then
+					change_dpi()
+					imgui.CenterText(u8'Идёт скачивание ' .. u8(editPopupTitle) .. u8' для сервера ' .. u8(getServerName(getServerNumber())) .. " [" .. getServerNumber() .. ']')
+					imgui.CenterText(u8'После успешной загрузки окно автоматически закроется и вы увидите сообщение в чате')
+					imgui.Separator()
+					imgui.CenterText(u8'Если прошло больше 10 секунд и ничего не происходит, то произошла ошибка загрузки')
+					imgui.CenterText(u8'Что можно сделать в случае ошибки:')
+					imgui.CenterText(u8'1) Заполнить данные вручную, нажав кнопку «Отредактировать»')
+					imgui.CenterText(u8'2) Скачать из облака JSON-файл вручную и поместить его по пути:')
+					if #pathDisplay > 98 then
+						local first_part = pathDisplay:sub(1, 98)
+						local second_part = pathDisplay:sub(99, #pathDisplay)
+						imgui.CenterText(u8(first_part))
+						imgui.CenterText(u8(second_part))
+					else
+						imgui.CenterText(u8(pathDisplay))
+					end
+					imgui.Separator()
+				else
+					MODULE.Main.Window[0] = false
+					imgui.CloseCurrentPopup()
+				end
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##close_smart' .. title, imgui.ImVec2(300 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					imgui.CloseCurrentPopup()
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.GLOBE .. u8' Открыть облако##open_web_smart' .. title, imgui.ImVec2(300 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					openLink("https://github.com/GreenTechYT/arizona-helper-unlimited")
+					openLink(downloadPath)
+					imgui.CloseCurrentPopup()
+					MODULE.Main.Window[0] = false
+				end
+				imgui.EndPopup()
+			end
+			imgui.SetCursorPosY(220 * settings.general.custom_dpi)
+			imgui.SetCursorPosX(200 * settings.general.custom_dpi)
+			if imgui.Button(fa.PEN_TO_SQUARE .. u8' Отредактировать вручную ' .. fa.PEN_TO_SQUARE .. '##smart'..title) then
+				imgui.OpenPopup(icon .. ' ' .. u8(title) .. ' ' .. icon .. '##smart'..title)
+			end
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+			if imgui.BeginPopupModal(icon .. ' ' .. u8(title) .. ' ' .. icon .. '##smart'..title, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+				change_dpi()
+				if imgui.BeginChild('##smart'..title..'edit', imgui.ImVec2(589 * settings.general.custom_dpi, 368 * settings.general.custom_dpi), true) then
+					for chapter_index, chapter in ipairs(data) do
+						if chapter.name ~= '##updated_at' then
+							imgui.Columns(2)
+							imgui.Text("> " .. u8(chapter.name))
+							imgui.SetColumnWidth(-1, 515 * settings.general.custom_dpi)
+							imgui.NextColumn()
+							if imgui.Button(fa.PEN_TO_SQUARE .. '##' .. title .. chapter_index) then
+								imgui.OpenPopup(u8(chapter.name).. '##' .. title .. chapter_index)
+							end
+							imgui.SameLine()
+							if imgui.Button(fa.TRASH_CAN .. '##' .. title .. chapter_index) then
+								imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. title .. chapter_index)
+							end
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. title .. chapter_index, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+								change_dpi()
+								imgui.CenterText(u8'Вы действительно хотите удалить раздел?')
+								if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_delete_item_smart' .. chapter_index, imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+									imgui.CloseCurrentPopup()
+								end
+								imgui.SameLine()
+								if imgui.Button(fa.TRASH_CAN .. u8' Удалить##delete_item_smart' .. chapter_index, imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+									table.remove(data, chapter_index)
+									set_updated_at(data, download_file_name, os.time())
+									saveFunction()
+									imgui.CloseCurrentPopup()
+								end
+								imgui.End()
+							end
+							imgui.SetColumnWidth(-1, 100 * settings.general.custom_dpi)
+							imgui.Columns(1)
+							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+							if imgui.BeginPopupModal(u8(chapter.name).. '##' .. title .. chapter_index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+								change_dpi()
+								if imgui.BeginChild('##smart'..title..'edititem', imgui.ImVec2(589 * settings.general.custom_dpi, 368 * settings.general.custom_dpi), true) then
+									if chapter.item then
+										for index, item in ipairs(chapter.item) do
+											imgui.Columns(2)
+											imgui.Text("> " .. u8(item.text))
+											imgui.SetColumnWidth(-1, 515 * settings.general.custom_dpi)
+											imgui.NextColumn()
+											if imgui.Button(fa.PEN_TO_SQUARE .. '##' .. chapter_index .. '##' .. title .. index) then
+												_G['input_'..title:lower()..'_text'] = imgui.new.char[8192](u8(item.text))
+												_G['input_'..title:lower()..'_value'] = imgui.new.char[256](u8(item[title:find('умного') and 'lvl' or 'amount']))
+												_G['input_'..title:lower()..'_reason'] = imgui.new.char[1024](u8(item.reason))
+												imgui.OpenPopup(u8("Редактирование подпункта##") .. title .. chapter.name .. index .. chapter_index)
+											end
+											imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+											if imgui.BeginPopupModal(u8("Редактирование подпункта##") .. title .. chapter.name .. index .. chapter_index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+												change_dpi()
+												if imgui.BeginChild('##smart'..title..'edititeminput', imgui.ImVec2(489 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), true) then    
+													imgui.CenterText(u8'Название подпункта:')
+													imgui.PushItemWidth(478 * settings.general.custom_dpi)
+													imgui.InputText(u8'##input_'..title:lower()..'_text', _G['input_'..title:lower()..'_text'], 8192)
+													if title == 'Система умного розыска' then
+														imgui.CenterText(u8'Уровень розыска для выдачи (от 1 до 6):')
+													elseif title == 'Система умных штрафов' then
+														imgui.CenterText(u8'Сумма штрафа (цифры без каких либо символов):')
+													elseif title == 'Система умного продления срока' then
+														imgui.CenterText(u8'Уровень срока для выдачи (от 1 до 10):')
+													end
+													imgui.PushItemWidth(478 * settings.general.custom_dpi)
+													imgui.InputText(u8'##input_'..title:lower()..'_value', _G['input_'..title:lower()..'_value'], 256)
+													imgui.CenterText(u8'Причина:')
+													imgui.PushItemWidth(478 * settings.general.custom_dpi)
+													imgui.InputText(u8'##input_'..title:lower()..'_reason', _G['input_'..title:lower()..'_reason'], 1024)
+													imgui.EndChild()
+												end    
+												if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##canceledititem', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+													imgui.CloseCurrentPopup()
+												end
+												imgui.SameLine()
+												if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##saveedititem', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+													local text = u8:decode(ffi.string(_G['input_'..title:lower()..'_text']))
+													local value = u8:decode(ffi.string(_G['input_'..title:lower()..'_value']))
+													local reason = u8:decode(ffi.string(_G['input_'..title:lower()..'_reason']))
+													local isValid = false
+													if title == 'Система умного розыска' then
+														isValid = value ~= '' and not value:find('%D') and tonumber(value) >= 1 and tonumber(value) <= 6 and text ~= '' and reason ~= ''
+													elseif title == 'Система умных штрафов' then
+														isValid = value ~= '' and value:find('%d') and not value:find('%D') and text ~= '' and reason ~= ''
+													elseif title == 'Система умного продления срока' then
+														isValid = value ~= '' and not value:find('%D') and tonumber(value) >= 1 and tonumber(value) <= 10 and text ~= '' and reason ~= ''
+													end
+													if isValid then
+														item.text = text
+														item[title:find('умного') and 'lvl' or 'amount'] = value
+														item.reason = reason
+														saveFunction()
+														set_updated_at(data, download_file_name, os.time())
+														imgui.CloseCurrentPopup()
+													else
+														sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка в указанных данных, исправьте!', message_color)
+													end
+												end
+												imgui.EndPopup()
+											end
+											imgui.SameLine()
+											if imgui.Button(fa.TRASH_CAN .. '##' .. chapter_index .. '##' .. title .. index) then
+												imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. title .. chapter_index .. '##' .. index)
+											end
+											imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+											if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. title .. chapter_index .. '##' .. index, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+												change_dpi()
+												imgui.CenterText(u8'Вы действительно хотите удалить подпункт?')
+												imgui.Separator()
+												if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##canceldeleteitem', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+													imgui.CloseCurrentPopup()
+												end
+												imgui.SameLine()
+												if imgui.Button(fa.TRASH_CAN .. u8' Удалить##yesdeleteitem', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+													table.remove(chapter.item, index)
+													saveFunction()
+													set_updated_at(data, download_file_name, os.time())
+													imgui.CloseCurrentPopup()
+												end
+												imgui.End()
+											end
+											imgui.SetColumnWidth(-1, 100 * settings.general.custom_dpi)
+											imgui.Columns(1)
+											imgui.Separator()
+										end
+									end
+									imgui.EndChild()
+								end
+								if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить новый подпункт##smart_add_subitem' .. chapter_index, imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+									_G['input_'..title:lower()..'_text'] = imgui.new.char[8192](u8(''))
+									_G['input_'..title:lower()..'_value'] = imgui.new.char[256](u8(''))
+									_G['input_'..title:lower()..'_reason'] = imgui.new.char[8192](u8(''))
+									imgui.OpenPopup(fa.CIRCLE_PLUS .. u8(' Добавление нового подпункта ') .. fa.CIRCLE_PLUS .. '##smart_add_subitem' .. chapter_index)
+								end
+								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+								if imgui.BeginPopupModal(fa.CIRCLE_PLUS .. u8(' Добавление нового подпункта ') .. fa.CIRCLE_PLUS .. '##smart_add_subitem' .. chapter_index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+									if imgui.BeginChild('##smart'..title..'edititeminput', imgui.ImVec2(489 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), true) then   
+										change_dpi() 
+										imgui.CenterText(u8'Название подпункта:')
+										imgui.PushItemWidth(478 * settings.general.custom_dpi)
+										imgui.InputText(u8'##input_'..title:lower()..'_text', _G['input_'..title:lower()..'_text'], 8192)
+										if title == 'Система умного розыска' then
+											imgui.CenterText(u8'Уровень розыска для выдачи (от 1 до 6):')
+										elseif title == 'Система умных штрафов' then
+											imgui.CenterText(u8'Сумма штрафа (цифры без каких либо символов):')
+										elseif title == 'Система умного продления срока' then
+											imgui.CenterText(u8'Уровень срока для выдачи (от 1 до 10):')
+										end
+										imgui.PushItemWidth(478 * settings.general.custom_dpi)
+										imgui.InputText(u8'##input_'..title:lower()..'_value', _G['input_'..title:lower()..'_value'], 256)
+										imgui.CenterText(u8'Причина:')
+										imgui.PushItemWidth(478 * settings.general.custom_dpi)
+										imgui.InputText(u8'##input_'..title:lower()..'_reason', _G['input_'..title:lower()..'_reason'], 8192)
+										imgui.EndChild()
+									end    
+									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##' .. chapter_index .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+										imgui.CloseCurrentPopup()
+									end
+									imgui.SameLine()
+									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##' .. chapter_index .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+										local text = u8:decode(ffi.string(_G['input_'..title:lower()..'_text']))
+										local value = u8:decode(ffi.string(_G['input_'..title:lower()..'_value']))
+										local reason = u8:decode(ffi.string(_G['input_'..title:lower()..'_reason']))
+										local isValid = false
+										if title == 'Система умного розыска' then
+											isValid = value ~= '' and not value:find('%D') and tonumber(value) >= 1 and tonumber(value) <= 6 and text ~= '' and reason ~= ''
+										elseif title == 'Система умных штрафов' then
+											isValid = value ~= '' and value:find('%d') and not value:find('%D') and text ~= '' and reason ~= ''
+										elseif title == 'Система умного продления срока' then
+											isValid = value ~= '' and not value:find('%D') and tonumber(value) >= 1 and tonumber(value) <= 10 and text ~= '' and reason ~= ''
+										end
+										if isValid then
+											table.insert(chapter.item, {text = text, [title:find('умного') and 'lvl' or 'amount'] = value, reason = reason})
+											saveFunction()
+											set_updated_at(data, download_file_name, os.time())
+											imgui.CloseCurrentPopup()
+										else
+											sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка в указанных данных, исправьте!', message_color)
+										end
+									end
+									imgui.EndPopup()
+								end
+								imgui.SameLine()
+								if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##close' .. chapter_index .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+									imgui.CloseCurrentPopup()
+								end
+								imgui.EndPopup()
+							end
+							imgui.Separator()
+						end
+					end
+					imgui.EndChild()	
+					if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить раздел##smart_add' .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+						_G['input_'..title:lower()..'_name'] = imgui.new.char[512](u8(''))
+						imgui.OpenPopup(u8'Добавление нового раздела')
+					end
+					imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+					if imgui.BeginPopupModal(u8'Добавление нового раздела', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+						imgui.PushItemWidth(400 * settings.general.custom_dpi)
+						imgui.InputTextWithHint(u8'##input_'..title:lower()..'_name', u8("Введите название нового раздела..."), _G['input_'..title:lower()..'_name'], 512)
+						if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##smart_add' .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+							imgui.CloseCurrentPopup()
+						end
+						imgui.SameLine()
+						if imgui.Button(fa.CIRCLE_PLUS .. u8' Добавить##smart_add' .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+							local temp = u8:decode(ffi.string(_G['input_'..title:lower()..'_name']))
+							table.insert(data, {name = temp, item = {}})
+							saveFunction()
+							set_updated_at(data, download_file_name, os.time())
+							imgui.CloseCurrentPopup()
+						end
+						imgui.EndPopup()
+					end
+					imgui.SameLine()
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##smart_close' .. title, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+						imgui.CloseCurrentPopup()
+					end
+					imgui.EndPopup()
+				end
+			end
+			imgui.CenterText(u8'Если данные для вашего сервера отсутствуют')
+			imgui.CenterText(u8'Для продвинутых пользователей')
+			imgui.EndChild()
+		end
+	end
+end
+if isMode('prison') then
+	imgui.OnFrame(
+		function() return MODULE.PumMenu.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 413 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+			imgui.Begin(fa.STAR .. u8" Умная выдача повышенного срока " .. fa.STAR .. "##pum_menu", MODULE.PumMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+			change_dpi()
+			if modules.smart_rptp.data ~= nil and isParamSampID(MODULE.PumMenu.player_id) then
+				imgui.PushItemWidth(580 * settings.general.custom_dpi)
+				imgui.InputTextWithHint(u8'##input_sum', u8('Поиск статей (подпунктов) в главах (пунктах)'), MODULE.PumMenu.input, 128) 
+				imgui.Separator()
+				local input_sum_decoded = u8:decode(ffi.string(MODULE.PumMenu.input))
+				local search_active = input_sum_decoded ~= ''
+				for _, chapter in ipairs(modules.smart_rptp.data) do
+					local chapter_has_matching_item = false
+					if chapter.item then
+						for _, item in ipairs(chapter.item) do
+							if item.text and item.text:rupper():find(input_sum_decoded:rupper(), 1, true) or input_sum_decoded == '' then
+								chapter_has_matching_item = true
+								break
+							end
+						end
+					end
+					if chapter_has_matching_item then
+						if chapter_header_open(MODULE.PumMenu, chapter.name, chapter.name, search_active) then
+							for index, item in ipairs(chapter.item) do
+								if item.text and item.text:rupper():find(input_sum_decoded:rupper(), 1, true) or input_sum_decoded == '' then
+									local popup_id = fa.TRIANGLE_EXCLAMATION .. u8' Перепроверьте данные перед повышением срока ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. chapter.name .. '_' .. index
+									imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.0, 0.5)
+									imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(1.00, 0.00, 0.00, 0.65))
+									if imgui.Button(u8(split_text_into_lines(item.text, 85))..'##' .. index, imgui.ImVec2(imgui.GetMiddleButtonX(1), (25 * count_lines_in_text(item.text, 85)) * settings.general.custom_dpi)) then
+										imgui.OpenPopup(popup_id)
+									end
+									imgui.PopStyleColor()
+									imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.5, 0.5)
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(popup_id, nil, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										imgui.Text(fa.USER .. u8' Игрок: ' .. u8(sampGetPlayerNickname(MODULE.PumMenu.player_id)) .. '[' .. MODULE.PumMenu.player_id .. ']')
+										imgui.Text(fa.STAR .. u8' Уровень срока: ' .. item.lvl)
+										imgui.Text(fa.COMMENT .. u8' Причина повышения срока: ' .. u8(item.reason))
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##pum', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											imgui.CloseCurrentPopup()
+										end
+										imgui.SameLine()
+										if imgui.Button(fa.STAR .. u8' Повысить срок##pum', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											MODULE.PumMenu.Window[0] = false
+											find_and_use_command('/punish {id} {number} 2 {arg}', MODULE.PumMenu.player_id .. ' ' .. item.lvl .. ' ' .. item.reason)
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
+									end
+								end
+							end
+						end
+					end
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Произошла ошибка умного срока (нету данных либо игрок офнулся)!', message_color)
+				MODULE.PumMenu.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+end
+if isMode('police') or isMode('fbi') then
+	imgui.OnFrame(
+		function() return MODULE.Patrool.Window[0] end,
+		function(player)
+			if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+				local dsx, dsy = sizeX, sizeY
+				pcall(function()
+					local d = imgui.GetIO().DisplaySize
+					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+				end)
+				local PAD = 200
+				local st = imgui.GetStyle()
+				local old_round, old_border = nil, nil
+				pcall(function() old_round  = st.WindowRounding  end)
+				pcall(function() old_border = st.WindowBorderSize end)
+				pcall(function() st.WindowRounding  = 0 end)
+				pcall(function() st.WindowBorderSize = 0 end)
+				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+				imgui.Begin('##dim_patrool', nil,
+					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+				imgui.End()
+				imgui.PopStyleColor()
+				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+			end
+			settings.windows_pos.patrool_menu = settings.windows_pos.patrool_menu
+				or { x = sizeX / 2 - 150, y = sizeY / 2 - 120 }
+			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.patrool_menu.x, settings.windows_pos.patrool_menu.y), imgui.Cond.FirstUseEver)
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##patrool_info_menu', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize )
+			change_dpi()
+			safery_disable_cursor(player)
+			if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+				MODULE.Patrool.Window[0] = false
+			end
+			local is_lssd = (modules.player.data.fraction == "РКШД" or modules.player.data.fraction_tag == "РКШД" or modules.player.data.fraction == "LSSD" or modules.player.data.fraction_tag == "LSSD")
+			if is_lssd then update_lssd_patrol_settings() end
+			local prefix = MODULE.Patrool.lssd_prefix or ''
+			if MODULE.Patrool.active then
+				imgui.Text(fa.CLOCK .. u8(' Время патрулирования: ') .. u8(MODULE.Binder.tag.get_patrool_time()))
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Ваша маркировка: ') .. u8(MODULE.Binder.tag.get_patrool_mark()))
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Ваше состояние: ') .. u8(MODULE.Binder.tag.get_patrool_code()))
+				imgui.SameLine()
+				if imgui.SmallButton(fa.GEAR) then
+					imgui.OpenPopup(fa.BUILDING_SHIELD .. u8(' Arizona Helper Unlimited##patrool_select_code'))
+				end
+				imgui.Separator()
+				local patrol_type_text = MODULE.Patrool.patrol_type == 1 and "Системный" or "Самостоятельный"
+				local patrol_type_icon = MODULE.Patrool.patrol_type == 1 and fa.SATELLITE_DISH or fa.USER_GEAR
+				if imgui.Button(patrol_type_icon .. u8(' Тип патруля: ') .. u8(patrol_type_text) .. "##patrool_type", imgui.ImVec2(300 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					MODULE.Patrool.patrol_type = MODULE.Patrool.patrol_type == 1 and 2 or 1
+					MODULE.Patrool.auto_doklad.time = 0
+					local new_type = MODULE.Patrool.patrol_type == 1 and "Системный" or "Самостоятельный"
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Тип патруля изменён на: ' .. message_color_hex .. new_type, message_color)
+				end
+				if MODULE.Patrool.patrol_type == 2 and settings.mj.auto_doklad_patrool then
+					local period_sec = (settings.mj.patrool_doklad_period or 5) * 60
+					local time_left = period_sec - (MODULE.Patrool.auto_doklad and MODULE.Patrool.auto_doklad.time or 0)
+					if time_left < 0 then time_left = 0 end
+					local mins = math.floor(time_left / 60)
+					local secs = time_left % 60
+					imgui.Text(fa.CLOCK .. u8(' Авто-доклад через: ') .. string.format("%02d:%02d", mins, secs))
+				end
+				if imgui.Button(fa.WALKIE_TALKIE .. u8(' Доклад##patrool_manual'), imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+					if (not MODULE.Patrool.process_doklad) then
+						MODULE.Patrool.process_doklad = true
+						lua_thread.create(function()
+							MODULE.Binder.state.isActive = true
+							sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
+							wait(1500)
+							sampSendChat('/r Продолжаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. " (" .. MODULE.Binder.tag.get_square() .. ').')
+							wait(1500)
+							if MODULE.Binder.tag.get_car_units() ~= 'Нету' then
+								sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ' в составе юнита ' .. MODULE.Binder.tag.get_car_units() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
+							else
+								sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
+							end
+							MODULE.Binder.state.isActive = false
+							MODULE.Patrool.process_doklad = false
+							MODULE.Patrool.auto_doklad.time = 0
+						end)
+					end
+				end
+				if imgui.Button(fa.CIRCLE_STOP .. u8(' Завершить'), imgui.ImVec2(-1, 25 * settings.general.custom_dpi)) then
+					lua_thread.create(function()
+						MODULE.Patrool.Window[0] = false
+						MODULE.Patrool.active = false
+						MODULE.Binder.state.isActive = true
+						sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
+						wait(1500)
+						sampSendChat('/r Завершаю патруль, освобождаю маркировку ' .. MODULE.Binder.tag.get_patrool_mark() .. ', состояние ' .. MODULE.Binder.tag.get_patrool_code())
+						wait(1500)
+						sampSendChat('/r Патрулировал' .. MODULE.Binder.tag.sex() .. ' ' .. MODULE.Binder.tag.get_patrool_format_time())
+						MODULE.Patrool.time = 0
+						MODULE.Patrool.start_time = 0
+						MODULE.Patrool.current_time = 0
+						MODULE.Patrool.code = 'CODE4'
+						MODULE.Patrool.ComboCode[0] = 5
+						wait(1500)
+						sampSendChat('/delvdesc')
+						MODULE.Binder.state.isActive = false
+					end)
+				end
+			else
+				player.HideCursor = false
+				imgui.CenterText(u8('Настройка данных перед началом патруля:'))
+				imgui.Separator()
+				if is_lssd then
+					update_lssd_patrol_settings()
+				end
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Ваша маркировка: '))
+				imgui.SameLine()
+				if is_lssd then
+					if not MODULE.Patrool.mark_input_buf then
+						MODULE.Patrool.mark_input_buf = ffi.new("char[5]")
+						ffi.fill(MODULE.Patrool.mark_input_buf, 5, 0)
+						local init_num = 100
+						if MODULE.Patrool.mark and type(MODULE.Patrool.mark) == "string" then
+							init_num = tonumber(MODULE.Patrool.mark:match('%d+$')) or 100
+						end
+						if init_num < 100 then init_num = 100 elseif init_num > 130 then init_num = 130 end
+						local init_str = tostring(init_num)
+						ffi.copy(MODULE.Patrool.mark_input_buf, init_str, #init_str)
+						MODULE.Patrool.mark = prefix .. init_str
+					end
+					imgui.PushItemWidth(60 * settings.general.custom_dpi)
+					local changed = imgui.InputText('##patrool_mark_num', MODULE.Patrool.mark_input_buf, 5, imgui.InputTextFlags.CharsDecimal + imgui.InputTextFlags.AutoSelectAll)
+					if changed then
+						local str_val = ffi.string(MODULE.Patrool.mark_input_buf)
+						local val = tonumber(str_val) or 100
+						if val < 100 then val = 100 elseif val > 130 then val = 130 end
+						local new_str = tostring(val)
+						ffi.fill(MODULE.Patrool.mark_input_buf, 5, 0)
+						ffi.copy(MODULE.Patrool.mark_input_buf, new_str, #new_str)
+						MODULE.Patrool.mark = prefix .. new_str
+					end
+					imgui.PopItemWidth()
+					imgui.SameLine()
+					imgui.Text(u8('(Auto-mark: ' .. (prefix == "" and "Нету" or prefix) .. ')'))
+				else
+					imgui.PushItemWidth(150 * settings.general.custom_dpi)
+					if imgui.Combo('##patrool_mark', MODULE.Patrool.ComboMark, MODULE.Patrool.ImItemsMark, #MODULE.Patrool.marks) then
+						MODULE.Patrool.mark = MODULE.Patrool.marks[MODULE.Patrool.ComboMark[0] + 1]
+					end
+					imgui.PopItemWidth()
+				end
+				imgui.Separator()
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Ваше состояние: '))
+				imgui.SameLine()
+				imgui.PushItemWidth(150 * settings.general.custom_dpi)
+				if imgui.Combo('##patrool_code', MODULE.Patrool.ComboCode, MODULE.Patrool.ImItemsCode, #MODULE.Patrool.codes) then
+					MODULE.Patrool.code = MODULE.Patrool.codes[MODULE.Patrool.ComboCode[0] + 1]
+				end
+				imgui.Separator()
+				imgui.Text(fa.CIRCLE_INFO .. u8(' Напарники: ') .. u8(MODULE.Binder.tag.get_car_units()))
+				imgui.Separator()
+				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена ', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+					MODULE.Patrool.Window[0] = false
+				end
+				imgui.SameLine()
+				if imgui.Button(fa.WALKIE_TALKIE .. u8' Начать патруль', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * settings.general.custom_dpi)) then
+					MODULE.Patrool.time = 0
+					MODULE.Patrool.start_time = os.time()
+					MODULE.Patrool.active = true
+					lua_thread.create(function()
+						MODULE.Binder.state.isActive = true
+						sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
+						wait(1500)
+						sampSendChat('/r Начинаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. " (" .. MODULE.Binder.tag.get_square() .. ').')
+						wait(1500)
+						if MODULE.Binder.tag.get_car_units() ~= 'Нету' then
+							sampSendChat('/r Занимаю маркировку ' .. MODULE.Patrool.mark .. ', нахожусь в составе юнита ' .. MODULE.Binder.tag.get_car_units() .. ', состояние ' .. MODULE.Patrool.code .. '.')
+						else
+							sampSendChat('/r Занимаю маркировку ' .. MODULE.Patrool.mark .. ', состояние ' .. MODULE.Patrool.code .. '.')
+						end
+						wait(1500)
+						sampSendChat('/vdesc ' .. MODULE.Patrool.mark)
+						MODULE.Binder.state.isActive = false
+					end)
+				end
+			end
+			if imgui.BeginPopup(fa.BUILDING_SHIELD .. u8(' Arizona Helper Unlimited##patrool_select_code'), _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize  ) then
+				change_dpi()
+				player.HideCursor = false
+				imgui.PushItemWidth(150 * settings.general.custom_dpi)
+				if imgui.Combo('##patrool_code', MODULE.Patrool.ComboCode, MODULE.Patrool.ImItemsCode, #MODULE.Patrool.codes) then
+					MODULE.Patrool.code = MODULE.Patrool.codes[MODULE.Patrool.ComboCode[0] + 1]
+					imgui.CloseCurrentPopup()
+				end
+				imgui.EndPopup()
+			end
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.patrool_menu.x or posY ~= settings.windows_pos.patrool_menu.y then
+				settings.windows_pos.patrool_menu = {x = posX, y = posY}
+				save_settings()
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.Wanted.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.wanteds_menu.x, settings.windows_pos.wanteds_menu.y), imgui.Cond.FirstUseEver)
+			imgui.Begin(fa.STAR .. u8" Список преступников (всего " .. #MODULE.Wanted.all .. u8') ' .. fa.STAR, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+			change_dpi()
+			safery_disable_cursor(player)
+			if settings.mj.auto_update_wanteds then
+				local time_left = math.max(0, (settings.mj.wanted_update_period or 10) - (os.time() - (MODULE.Wanted.updwanteds.last_time or os.time())))
+				imgui.Text(u8('Обновление списка преступников будет через ') .. string.format("%02d", time_left) .. u8(' секунд'))
+				imgui.Separator()
+			else
+				if imgui.Button(u8'Обновить список преступников', imgui.ImVec2(340 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					MODULE.Wanted.Window[0] = false
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы можете включить авто-обновление списка /wanteds в /helper - Функции ' .. modules.player.data.fraction_tag .. '!', message_color)
+					sampProcessChatInput('/wanteds')
+				end
+				imgui.Separator()
+			end
+			if #MODULE.Wanted.all == 0 then imgui.Text(u8'Сейчас на сервере нету игроков с розыском!')
+			else
+				imgui.Columns(3)
+				imgui.CenterColumnText(u8("Никнейм"))
+				imgui.SetColumnWidth(-1, 200 * settings.general.custom_dpi)
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8("Розыск"))
+				imgui.SetColumnWidth(-1, 65 * settings.general.custom_dpi)
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8("Расстояние"))
+				imgui.SetColumnWidth(-1, 80 * settings.general.custom_dpi)
+				imgui.Columns(1)
+				for i, v in ipairs(MODULE.Wanted.all) do
+					imgui.Separator()
+					imgui.Columns(3)
+					if sampGetPlayerColor(v.id) == 368966908 then
+						imgui_RGBA = (settings.general.helper_theme ~= 2) and imgui.ImVec4(1, 1, 1, 1) or imgui.ImVec4(0, 0, 0, 1)
+						imgui.CenterColumnColorText(imgui_RGBA, u8(v.nick) .. ' [' .. v.id .. ']')
+					else
+						local rgbNormalized = argbToRgbNormalized(sampGetPlayerColor(v.id))
+						local imgui_RGBA = imgui.ImVec4(rgbNormalized[1], rgbNormalized[2], rgbNormalized[3], 1)
+						imgui.CenterColumnColorText(imgui_RGBA, u8(v.nick) .. ' [' .. v.id .. ']')
+					end
+					if imgui.IsItemClicked() and not (v.dist or ''):find('В интерьере') then
+						sampSendChat('/pursuit ' .. v.id)
+					end
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(v.lvl) .. ' ' .. fa.STAR)
+					imgui.NextColumn()
+					imgui.CenterColumnText(u8(v.dist or '-'))
+					imgui.NextColumn()
+					imgui.Columns(1)
+				end
+			end
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.wanteds_menu.x or posY ~= settings.windows_pos.wanteds_menu.y then
+				settings.windows_pos.wanteds_menu = {x = posX, y = posY}
+				save_settings()
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.SumMenu.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 413 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+			imgui.Begin(fa.STAR .. u8" Умная выдача розыска " .. fa.STAR .. "##sum_menu", MODULE.SumMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+			change_dpi()
+			if modules.smart_uk.data ~= nil and isParamSampID(MODULE.SumMenu.player_id) then
+				imgui.PushItemWidth(580 * settings.general.custom_dpi)
+				imgui.InputTextWithHint(u8'##input_sum', u8('Поиск статей (подпунктов) в главах (пунктах)'), MODULE.SumMenu.input, 128) 
+				imgui.Separator()
+				local input_sum_decoded = u8:decode(ffi.string(MODULE.SumMenu.input))
+				local search_active = input_sum_decoded ~= ''
+				for _, chapter in ipairs(modules.smart_uk.data) do
+					local chapter_has_matching_item = false
+					if chapter.item then
+						for _, item in ipairs(chapter.item) do
+							if item.text and item.text:rupper():find(input_sum_decoded:rupper(), 1, true) or input_sum_decoded == '' then
+								chapter_has_matching_item = true
+								break
+							end
+						end
+					end
+					if chapter_has_matching_item then
+						if chapter_header_open(MODULE.SumMenu, chapter.name, chapter.name, search_active) then
+							for index, item in ipairs(chapter.item) do
+								if item.text and item.text:rupper():find(input_sum_decoded:rupper(), 1, true) or input_sum_decoded == '' then
+									local popup_id = fa.TRIANGLE_EXCLAMATION .. u8' Перепроверьте данные перед выдачей розыска ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. chapter.name .. '_' .. index
+									imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.0, 0.5)
+									imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(1.00, 0.00, 0.00, 0.65))
+									if imgui.Button("> " .. u8(split_text_into_lines(item.text, 85))..'##' .. index, imgui.ImVec2(imgui.GetMiddleButtonX(1), (25 * count_lines_in_text(item.text, 85)) * settings.general.custom_dpi)) then
+										imgui.OpenPopup(popup_id)
+									end
+									imgui.PopStyleColor()
+									imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.5, 0.5)
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(popup_id, nil, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										imgui.Text(fa.USER .. u8' Игрок: ' .. u8(sampGetPlayerNickname(MODULE.SumMenu.player_id)) .. '[' .. MODULE.SumMenu.player_id .. ']')
+										imgui.Text(fa.STAR .. u8' Уровень розыска: ' .. item.lvl)
+										imgui.Text(fa.COMMENT .. u8' Причина выдачи розыска: ' .. u8(item.reason))
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##sum', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											imgui.CloseCurrentPopup()
+										end
+										imgui.SameLine()
+										if imgui.Button(fa.WALKIE_TALKIE .. u8' Запросить розыск##sum', imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											MODULE.SumMenu.Window[0] = false
+											find_and_use_command('Прошу обьявить в розыск %{number%} степени дело N%{id%}%. Причина%: %{arg%}', MODULE.SumMenu.player_id .. ' ' .. item.lvl .. ' ' .. item.reason)
+											imgui.CloseCurrentPopup()
+										end
+										imgui.SameLine()
+										local text_rank = ((modules.player.data.fraction == 'FBI' or modules.player.data.fraction == 'ФCБ') and '[4+]' or '[5+]')
+										if imgui.Button(fa.STAR .. u8' Выдать розыск ' .. text_rank, imgui.ImVec2(150 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											MODULE.SumMenu.Window[0] = false
+											find_and_use_command('/su {id} {number} {arg}', MODULE.SumMenu.player_id .. ' ' .. item.lvl .. ' ' .. item.reason)
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
+									end
+								end
+							end
+						end
+					end
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Произошла ошибка умного розыска (нету данных либо игрок офнулся)!', message_color)
+				MODULE.SumMenu.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.TsmMenu.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 413 * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+			imgui.Begin(fa.TICKET .. u8" Умная выдача штрафов " .. fa.TICKET .. "##tsm_menu", MODULE.TsmMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize)
+			change_dpi()
+			if modules.smart_pdd.data ~= nil and isParamSampID(MODULE.TsmMenu.player_id) then
+				imgui.PushItemWidth(580 * settings.general.custom_dpi)
+				imgui.InputTextWithHint(u8'##input_tsm', u8('Поиск статей (подпунктов) в главах (пунктах)'), MODULE.TsmMenu.input, 128) 
+				imgui.Separator()
+				local input_tsm_decoded = u8:decode(ffi.string(MODULE.TsmMenu.input))
+				local search_active = input_tsm_decoded ~= ''
+				for _, chapter in ipairs(modules.smart_pdd.data) do
+					local chapter_has_matching_item = false
+					if chapter.item then
+						for _, item in ipairs(chapter.item) do
+							if item.text and item.text:rupper():find(input_tsm_decoded:rupper(), 1, true) or input_tsm_decoded == '' then
+								chapter_has_matching_item = true
+								break
+							end
+						end
+					end
+					if chapter_has_matching_item then
+						if chapter_header_open(MODULE.TsmMenu, chapter.name, chapter.name, search_active) then
+							for index, item in ipairs(chapter.item) do
+								if item.text and item.text:rupper():find(input_tsm_decoded:rupper(), 1, true) or input_tsm_decoded == '' then
+									local popup_id = fa.TRIANGLE_EXCLAMATION .. u8' Перепроверьте данные перед выдачей штрафа ' .. fa.TRIANGLE_EXCLAMATION .. '##' .. chapter.name .. '_' .. index
+									imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.0, 0.5)
+									imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(1.00, 0.00, 0.00, 0.65))
+									if imgui.Button(u8(split_text_into_lines(item.text,85))..'##' .. index, imgui.ImVec2( imgui.GetMiddleButtonX(1), (25 * count_lines_in_text(item.text, 85)) * settings.general.custom_dpi)) then
+										imgui.OpenPopup(popup_id)
+									end 
+									imgui.PopStyleColor()
+									imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.5, 0.5)
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.BeginPopupModal(popup_id, nil, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+										imgui.Text(fa.USER .. u8' Игрок: ' .. u8(sampGetPlayerNickname(MODULE.TsmMenu.player_id)) .. '[' .. MODULE.TsmMenu.player_id .. ']')
+										imgui.Text(fa.MONEY_CHECK_DOLLAR .. u8' Сумма штрафа: $' .. item.amount)
+										imgui.Text(fa.COMMENT .. u8' Причина выдачи штрафа: ' .. u8(item.reason))
+										imgui.Separator()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##tsm', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											imgui.CloseCurrentPopup()
+										end
+										imgui.SameLine()
+										if imgui.Button(fa.TICKET .. u8' Выписать штраф##tsm', imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+											MODULE.TsmMenu.Window[0] = false
+											find_and_use_command('ticket {id}', MODULE.TsmMenu.player_id .. ' ' .. item.amount .. ' ' .. item.reason)
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
+									end
+								end
+							end
+						end
+					end
+				end
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Произошла ошибка умных штрафов (нету данных либо игрок офнулся)!', message_color)
+				MODULE.TsmMenu.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+end
+if isMode('hospital') then
+	imgui.OnFrame(
+		function() return MODULE.MedCard.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##medcard", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			change_dpi()
+			imgui.CenterText(u8'Срок действия мед.карты:')
+			if imgui.RadioButtonIntPtr(u8" 7 дней ##0",MODULE.MedCard.days,0) then
+				MODULE.MedCard.days[0] = 0
+			end
+			if imgui.RadioButtonIntPtr(u8" 14 дней ##1",MODULE.MedCard.days,1) then
+				MODULE.MedCard.days[0] = 1
+			end
+			if imgui.RadioButtonIntPtr(u8" 30 дней ##2",MODULE.MedCard.days,2) then
+				MODULE.MedCard.days[0] = 2
+			end
+			if imgui.RadioButtonIntPtr(u8" 60 дней ##3",MODULE.MedCard.days,3) then
+				MODULE.MedCard.days[0] = 3
+			end
+			imgui.Separator()
+			imgui.CenterText(u8'Cтатус здоровья пациента:')
+			if imgui.RadioButtonIntPtr(u8" Не определен ##0", MODULE.MedCard.status,0) then
+				MODULE.MedCard.status[0] = 0
+			end
+			if imgui.RadioButtonIntPtr(u8" Психически не здоров ##1", MODULE.MedCard.status,1) then
+				MODULE.MedCard.status[0] = 1
+			end
+			if imgui.RadioButtonIntPtr(u8" Наблюдаются отклонения ##2", MODULE.MedCard.status,2) then
+				MODULE.MedCard.status[0] = 2
+			end
+			if imgui.RadioButtonIntPtr(u8" Полностью здоров ##3", MODULE.MedCard.status,3) then
+				MODULE.MedCard.status[0] = 3
+			end
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.MedCard.cancel = true
+				MODULE.MedCard.Window[0] = false
+			end
+			imgui.SameLine()
+			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'мед.карту')
+			if imgui.Button(fa.ID_CARD_CLIP .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+				MODULE.MedCard.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.Recept.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##recept", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			change_dpi()
+			imgui.CenterText(u8'Количество рецептов для выдачи:')
+			imgui.PushItemWidth(250 * settings.general.custom_dpi)
+			imgui.SliderInt('', MODULE.Recept.recepts, 1, 5)
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Recept.cancel = true
+				MODULE.Recept.Window[0] = false
+			end
+			imgui.SameLine()
+			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'рецепты')
+			if imgui.Button(fa.CAPSULES .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+				MODULE.Recept.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.Antibiotik.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##ant", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+			change_dpi()
+			imgui.CenterText(u8'Количество антибиотиков для выдачи:')
+			imgui.PushItemWidth(250 * settings.general.custom_dpi)
+			imgui.SliderInt('', MODULE.Antibiotik.ants, 1, 20)
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then
+				MODULE.Antibiotik.cancel = true
+				MODULE.Antibiotik.Window[0] = false
+			end
+			imgui.SameLine()
+			local label = ' Выдать ' .. ((hotkey_ok and settings.general.bind_action) and ('[' .. getNameKeysFrom(settings.general.bind_action) .. ']') or 'антибиотики')
+			if imgui.Button(fa.CAPSULES .. u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then
+				MODULE.Antibiotik.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+	imgui.OnFrame(
+		function() return MODULE.HealChat.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 8.5, sizeY / 1.9), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			imgui.Begin(fa.HOSPITAL.." Arizona Helper Unlimited " .. fa.HOSPITAL .. "##fast_heal", MODULE.HealChat.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoTitleBar +  imgui.WindowFlags.AlwaysAutoResize )
+			change_dpi()
+			if imgui.Button(fa.KIT_MEDICAL..u8' Вылечить '.. u8(sampGetPlayerNickname(MODULE.HealChat.player_id))) then
+				find_and_use_command("/heal {id}", MODULE.HealChat.player_id)
+				MODULE.HealChat.bool = false
+				MODULE.HealChat.player_id = nil
+				MODULE.HealChat.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+end
+if isMode('smi') then
+	imgui.OnFrame(
+		function() return MODULE.SmiEdit.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+			local size_window_y = settings.smi.ads_buttons and 301.5 or 137
+			imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, size_window_y * settings.general.custom_dpi), imgui.Cond.FirstUseEver)
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##MODULE.SmiEdit.Window', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar )
+			change_dpi()
+			imgui.Text(fa.CIRCLE_INFO .. u8" Объявление подал игрок: " .. u8(MODULE.SmiEdit.ad_from) .. '[' .. sampGetPlayerIdByNickname(MODULE.SmiEdit.ad_from) .. ']')
+			imgui.Text(fa.CIRCLE_INFO .. u8" Текст: " .. (u8(MODULE.SmiEdit.ad_message)))
+			imgui.SameLine()
+			if imgui.SmallButton(fa.CIRCLE_ARROW_RIGHT) then
+				imgui.StrCopy(MODULE.SmiEdit.input_edit_text, u8(MODULE.SmiEdit.ad_message))
+			end
+			if imgui.IsItemHovered() then
+				imgui.SetTooltip(u8'Перенести текст в поле для редакта')
+			end
+			imgui.Separator()
+			local window_size = imgui.GetWindowSize()
+			local size_item_width = (settings.smi.ads_history and 105 or 75)
+			imgui.PushItemWidth(window_size.x - size_item_width * settings.general.custom_dpi)
+			imgui.InputTextWithHint(
+				"##smi_edit_ad",
+				u8"Отредактируйте объявление либо введите причину для отклонения",
+				MODULE.SmiEdit.input_edit_text,
+				256,
+				imgui.InputTextFlags.CallbackAlways + imgui.InputTextFlags.CallbackCompletion, 
+				TextEditCallback
+			)
+			imgui.SameLine()
+			if imgui.Button(fa.DELETE_LEFT, imgui.ImVec2(27 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				local text = u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text))
+				if #text > 0 then imgui.StrCopy(MODULE.SmiEdit.input_edit_text, u8(text:sub(1, -2))) end
+			end
+			imgui.SameLine()
+			if imgui.Button(fa.TRASH_CAN, imgui.ImVec2(25 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				imgui.StrCopy(MODULE.SmiEdit.input_edit_text, '')
+			end
+			if settings.smi.ads_history then
+				imgui.SameLine()
+				if imgui.Button(fa.CLOCK_ROTATE_LEFT, imgui.ImVec2(25 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					imgui.OpenPopup(fa.CLOCK_ROTATE_LEFT .. u8' История обьявлений')	
+				end
+				if imgui.IsItemHovered() then
+					imgui.SetTooltip(u8'История обьявлений')
+				end
+				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+				if imgui.BeginPopupModal(fa.CLOCK_ROTATE_LEFT .. u8' История обьявлений', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
+					imgui.SetWindowSizeVec2(imgui.ImVec2(610 * settings.general.custom_dpi, 350 * settings.general.custom_dpi))
+					if imgui.BeginChild('##99999999', imgui.ImVec2(600 * settings.general.custom_dpi, 285 * settings.general.custom_dpi), true) then	
+						change_dpi()
+						if modules.ads_history.data then 
+							if #modules.ads_history.data == 0 then
+								imgui.CenterText(u8('История обьявлений пуста'))
+								imgui.CenterText(u8('Отредактированные обьявления будут отображаться здесь'))
+							else
+								imgui.PushItemWidth(579 * settings.general.custom_dpi)
+								imgui.InputTextWithHint(u8'##input_ads_search', u8'Поиск обьявлений по нужной фразе, начинайте вводить её сюда...', MODULE.SmiEdit.input_search, 128)
+								imgui.Separator()
+								local input_ads_decoded = u8:decode(ffi.string(MODULE.SmiEdit.input_search))
+								local shown = {}
+								for id, ad in ipairs(modules.ads_history.data) do
+									if ad and ad.text and ad.my_text then
+										local text = ad.my_text
+										if not shown[text] then
+											if input_ads_decoded == '' or (text:rupper():find(input_ads_decoded:rupper(), 1, true)) then
+												if imgui.Button(u8(text .. '##' .. id), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+													imgui.StrCopy(MODULE.SmiEdit.input_edit_text, u8(text))
+													imgui.CloseCurrentPopup()
+												end
+												shown[text] = true
+											end
+										end
+									end
+								end
+							end
+						else
+							imgui.CenterText(u8('Ошибка загрузки истории обьявлений, что-то сломалось'))
+							imgui.Separator()
+							imgui.CenterText(u8('Чтобы пофиксить, удалите файлик Ads.json, который находится по пути:'))
+							imgui.TextWrapped(u8(modules.ads_history.path))
+							imgui.Separator()
+							imgui.CenterText(u8('Либо если вы опытный юзер, вручную откройте файл в CP1251 и исправьте ошибку'))
+						end
+						imgui.EndChild()
+					end		
+					if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+						imgui.CloseCurrentPopup()
+					end
+					imgui.EndPopup()
+				end
+			end
+			imgui.Separator()
+			if settings.smi.ads_buttons then
+				local smi_groups = {
+					{
+						id = "##1",
+						width = 105,
+						per_row = 1,
+						items = {
+							"Куплю",
+							"Продам",
+							"Обменяю",
+							"Сдам в аренду",
+							"Арендую",
+						}
+					},
+					{
+						id = "##2",
+						width = 150,
+						per_row = 4,
+						items = {
+							-- Аксессуары, скины
+							"а/с", "о/п", "и/т", "р/с", 
+							-- Транспорт
+							"а/м", "м/ц", "г/ф", "в/т",
+							"с/м", "в/с", "л/д", "н/з",
+							-- Прочее
+							"б/з", "п/м", "л/о", "д/т", 
+							"п/т", "м/ф", "ч/д", "в/о", 
+						}
+					},
+					{
+						id = "##3",
+						width = 70,
+						per_row = 1,
+						items = {
+							"Жильё",
+							"Локации",
+							"Марки",
+							"Бизнесы",
+							"Наборы",
+						}
+					},
+					{
+						id = "##4",
+						width = 90,
+						per_row = 1,
+						items = {
+							"Цена:",
+							"Цена за шт:",
+							"Договорная",
+							"Бюджет:",
+							"Свободный",
+						}
+					},
+					{
+						id = "##5",
+						width = 100,
+						per_row = 3,
+						items = {
+							"1","2","3",
+							"4","5","6",
+							"7","8","9",
+							".","0", ',',
+							"с гравировкой +"
+						}
+					},
+					{
+						id = "##6",
+						width = 50,
+						per_row = 1,
+						items = {"$", '"', "тыс.", "млн", "млрд"}
+					}
+				}
+				for gi, group in ipairs(smi_groups) do
+					if imgui.BeginChild(group.id, imgui.ImVec2(group.width * settings.general.custom_dpi, 155 * settings.general.custom_dpi), true) then
+						imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+						if imgui.BeginPopupModal(fa.CAR .. u8" Марки транспорта " .. fa.CAR, nil, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoMove) then
+							imgui.PushItemWidth(200 * settings.general.custom_dpi)
+							imgui.InputTextWithHint(u8(''), u8('Ищите нужную вам модель...'), MODULE.SmiEdit.input_search, 64)
+							imgui.Separator()
+							local input_decoded = u8:decode(ffi.string(MODULE.SmiEdit.input_search)):rlower()
+							if imgui.BeginChild("veh_list", imgui.ImVec2(200 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), true) then
+								for id, name in pairs(modules.vehicles.byId or {}) do
+									if input_decoded == "" or name:rlower():find(input_decoded) then
+										if imgui.Selectable(u8(name)) then
+											insert_to_cursor('"' .. u8(name) .. '" ', MODULE.SmiEdit.input_edit_text)
+											imgui.CloseCurrentPopup()
+										end
+									end
+								end
+								imgui.EndChild()
+							end
+							if imgui.Button(fa.CIRCLE_XMARK .. u8(" Закрыть"), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+								imgui.CloseCurrentPopup()
+							end
+							imgui.EndPopup()
+						end
+						imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+						if imgui.BeginPopupModal(fa.BUILDING .. u8" Наборы в организации/семьи " .. fa.BUILDING, nil, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoMove) then
+							local orgs = {
+								'Проходит собеседование в организацию "". Ждём в холле',
+								'Идёт набор в футбольный клуб "". Ждём на территории клуба',
+								'Проходит собеседование в корпорацию "". Просьба связаться',
+								'Ищу своих дальних родственников. Просьба связаться',
+								'Развитая семья "" ищет дальних родственников. Просьба связаться',
+								'Семья "" ищет дальних родственников. Просьба связаться',
+							}
+							for id, text in pairs(orgs) do
+								if imgui.Selectable(u8(text)) then
+									imgui.StrCopy(MODULE.SmiEdit.input_edit_text, u8(text))
+									imgui.CloseCurrentPopup()
+								end
+							end
+							imgui.Separator()
+							if imgui.Button(fa.CIRCLE_XMARK .. u8(" Закрыть"), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+								imgui.CloseCurrentPopup()
+							end
+							imgui.EndPopup()
+						end
+						imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+						if imgui.BeginPopupModal(fa.HOUSE .. u8" Жильё " .. fa.HOUSE, nil, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoMove) then
+							local houses = {
+								'дом в',
+								'дом с подвалом в',
+								'дом с гаражом в',
+								'дом с гаражом и подвалом в',
+								'дом на колёсах',
+								'квартиру в'
+							}
+							for id, text in pairs(houses) do
+								if imgui.Selectable(u8(text)) then
+									insert_to_cursor(u8(text) .. ' ', MODULE.SmiEdit.input_edit_text)
+									imgui.CloseCurrentPopup()
+								end
+							end
+							imgui.Separator()
+							if imgui.Button(fa.CIRCLE_XMARK .. u8(" Закрыть"), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+								imgui.CloseCurrentPopup()
+							end
+							imgui.EndPopup()
+						end
+						imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+						if imgui.BeginPopupModal(fa.SHOP .. u8" Бизнесы " .. fa.SHOP, nil, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoMove) then
+							local business = {
+								'АЗС', 'Водная АЗС', 'Бар', 'Отель', 'Закусочная', 'Ларек с уличной едой', 'Магазин 24 на 7', 'Амуниция', 'Автомастерская', 'СТО', 
+								'Магазин тюнинга', 'Аренда транспорта', 'Магазин аксессуаров', 'Магазин одежды', 'Ферма', 'Авторынок', 'Автомойка', 'Салон трейлеров',
+								'Телефонная компания', 'Рекламные баннеры', 'Телефонные будки', 'Школа танцев', 'Спортзал', 'Магазин рыбалки', 'Ломбард', 'Шахта', 
+								'Наземная нефтевышка', 'Водная нефтевышка', 'Элексир Мастер', 'Секонд Хенд', 'Мастерская одежды', 'Магазин видеокарт'
+							}
+							imgui.PushItemWidth(200 * settings.general.custom_dpi)
+							imgui.InputTextWithHint(u8(''), u8('Ищите нужный вам бизнес...'), MODULE.SmiEdit.input_search, 64)
+							imgui.Separator()
+							local input_decoded = u8:decode(ffi.string(MODULE.SmiEdit.input_search)):rlower()
+							if imgui.BeginChild("bizlist", imgui.ImVec2(200 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), true) then
+								for id, name in pairs(business) do
+									if input_decoded == "" or name:rlower():find(input_decoded) then
+										if imgui.Selectable(u8(name)) then
+											insert_to_cursor('"' .. u8(name) .. '" ', MODULE.SmiEdit.input_edit_text)
+											imgui.CloseCurrentPopup()
+										end
+									end
+								end
+								imgui.EndChild()
+							end
+							imgui.Separator()
+							if imgui.Button(fa.CIRCLE_XMARK .. u8(" Закрыть"), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+								imgui.CloseCurrentPopup()
+							end
+							imgui.EndPopup()
+						end
+						imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+						if imgui.BeginPopupModal(fa.MAP_LOCATION_DOT .. u8" Локации " .. fa.MAP_LOCATION_DOT, nil, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoMove) then
+							local locations = {
+								'г. Лос-Сантос.', 'г. Сан-Фиерро.', 'г. Лас-Вентурас.', 'г. Арзамас.', 'г. Эдово.', 
+								'любой точке штата.', 'любой точке округа.', 'опасном районе.',
+								'д. Паломино Крик.', 'д. Ред Каунтри.', 'д. Монтгомери.', 'д. Лас Баранкас.', 'д. Ангел Пейн.', 
+								'д. Эль Кебрадос.', 'д. Лас Пайсадас.', 'д. Тьерра Робада.', 'д. БлуБерри.', 'п. Батырево.',
+								'Полиция ЛС', 'Полиция ЛВ', 'Полиция СФ', 'Полиция ВС', 'Областная полиция', 'Полиция округа', 'Городская полиция',
+								'ФБР', 'ФСБ', "КТЦ", 'Армия Национальной Гвардии', 'Воздушная Национальная Гвардия', 'Армия', 'Тюрьма строгого режима',
+								'TV студия', 'TV студия ЛС', 'TV студия ЛВ', 'TV студия СФ', 'TV студия ВС', 'Новостное агентство',
+								'Больница ЛС', 'Больница ЛВ', 'Больница СФ', 'Больница ВС', 'Больница Джефферсон', 'Больница округа', 'Городская больница',
+								'Правительство', 'Суд', 'Центр лицензирования', 'Пожарный департамент', 'Страховая компания',
+								'Русская мафия', 'Yakuza', 'La Cosa Nostra', 'Warlock MC', 'Tierra Robada Bikers', 'Украинская мафия', 'Кавказская мафия',
+								'Grove Street', 'Los Santos Vagos', 'East Side Ballas', 'Varrios Los Aztecas', 'The Rifa', 'Night Wolves'
+							}
+							imgui.PushItemWidth(200 * settings.general.custom_dpi)
+							imgui.InputTextWithHint(u8(''), u8('Ищите нужную вам локацию...'), MODULE.SmiEdit.input_search, 64)
+							imgui.Separator()
+							local input_decoded = u8:decode(ffi.string(MODULE.SmiEdit.input_search)):rlower()
+							if imgui.BeginChild("locateslist", imgui.ImVec2(200 * settings.general.custom_dpi, 150 * settings.general.custom_dpi), true) then
+								for id, name in pairs(locations) do
+									if input_decoded == "" or name:rlower():find(input_decoded) then
+										if imgui.Selectable(u8(name)) then
+											insert_to_cursor(u8(name) .. ' ', MODULE.SmiEdit.input_edit_text)
+											imgui.CloseCurrentPopup()
+										end
+									end
+								end
+								imgui.EndChild()
+							end
+							imgui.Separator()
+							if imgui.Button(fa.CIRCLE_XMARK .. u8(" Закрыть"), imgui.ImVec2(imgui.GetMiddleButtonX(1), 25 * settings.general.custom_dpi)) then
+								imgui.CloseCurrentPopup()
+							end
+							imgui.EndPopup()
+						end
+						for i, label in ipairs(group.items) do
+							local btns = (label == 'с гравировкой +') and 1 or group.per_row
+							if imgui.Button(u8(label), imgui.ImVec2(imgui.GetMiddleButtonX(btns), 25 * settings.general.custom_dpi)) then
+								if label == "Жильё" then
+									imgui.OpenPopup(fa.HOUSE .. u8" Жильё " .. fa.HOUSE)
+								elseif label == "Марки" then
+									imgui.OpenPopup(fa.CAR .. u8" Марки транспорта " .. fa.CAR)
+								elseif label == "Локации" then
+									imgui.OpenPopup(fa.MAP_LOCATION_DOT .. u8" Локации " .. fa.MAP_LOCATION_DOT)
+								elseif label == "Бизнесы" then
+									imgui.OpenPopup(fa.SHOP .. u8" Бизнесы " .. fa.SHOP)
+								elseif label == "Наборы" then
+									imgui.OpenPopup(fa.BUILDING .. u8" Наборы в организации/семьи " .. fa.BUILDING)
+								else
+									local text_to_insert = ''
+									if group.id:find('1') or group.id:find('2') or (group.id:find('4') and label ~= 'Договорная' and label ~= 'Свободный') then
+										text_to_insert = label .. ' '
+									else
+										text_to_insert = label
+									end
+									insert_to_cursor(u8(text_to_insert), MODULE.SmiEdit.input_edit_text)
+								end
+							end
+							if group.per_row > 1 and (i % group.per_row ~= 0) then imgui.SameLine() end
+						end
+						imgui.EndChild()
+					end
+					if gi < #smi_groups then imgui.SameLine() end
+				end
+				imgui.Separator()
+			end
+			local send_ad_label = IS_MOBILE and " Опубликовать" or " Опубликовать "
+			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8(send_ad_label), imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+				local ad_text = u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text))
+				if ad_text == '' then return end
+				if modules.ads_history.data then
+					if settings.smi.ads_history then
+						local exists = false
+						for _, ad in ipairs(modules.ads_history.data) do
+							if ad and ad.text and ad.text == MODULE.SmiEdit.ad_message then
+								exists = true
+								break
+							end
+						end
+						if not exists then
+							table.insert(modules.ads_history.data, 1, {text = MODULE.SmiEdit.ad_message, my_text = ad_text})
+							save_module('ads_history')
+						end
+					end
+				else	
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сломался файл ' .. modules.ads_history.path, message_color)
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Удалите его, либо если шарите, то найдите ошибку и исправьте (файл в кодировке 1251)', message_color)
+					play_sound()
+				end
+				if MODULE.SmiEdit.vip_pause then
+					lua_thread.create(function()
+						sampAddChatMessage('[Arizona Helper | Ассистент] {ffffff}Серверное КД 10 сек после VIP обьявы, ждите...', message_color)
+						play_sound()
+						MODULE.SmiEdit.Window[0] = false
+						while MODULE.SmiEdit.vip_pause do wait(0) end
+						try_send_ad(ad_text)
+					end)
+				else
+					if try_send_ad(ad_text) then
+						MODULE.SmiEdit.Window[0] = false
+					end
+				end
+			end
+			imgui.SameLine()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Отклонить', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+				if u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text)) == '' then
+					reason_cancel = 'Отказ ПРО'
+				else
+					reason_cancel = u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text))
+				end
+				sampSendDialogResponse(MODULE.SmiEdit.ad_dialog_id, 0, 0, reason_cancel)
+				imgui.StrCopy(MODULE.SmiEdit.input_edit_text, '')
+				MODULE.SmiEdit.Window[0] = false
+				MODULE.SmiEdit.is_active_ad = false
+			end
+			imgui.SameLine()
+			if imgui.Button(fa.FORWARD .. u8' Пропустить', imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * settings.general.custom_dpi)) then
+				MODULE.SmiEdit.skip_dialog = true
+				sampSendChat('/mm')
+				imgui.StrCopy(MODULE.SmiEdit.input_edit_text, '')
+				MODULE.SmiEdit.is_active_ad = false
+				MODULE.SmiEdit.Window[0] = false
+			end
+			imgui.End()
+		end
+	)
+end
+if isMode('gov') then
+	imgui.OnFrame(
+		function() return MODULE.Zeks.Window[0] end,
+		function(player)
+			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.zeks_menu.x, settings.windows_pos.zeks_menu.y), imgui.Cond.FirstUseEver)
+			imgui.Begin(fa.HANDCUFFS .. u8" Список заключенных игроков (всего " .. #MODULE.Zeks.all .. u8') ' .. fa.HANDCUFFS, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+			change_dpi()
+			if tonumber(#MODULE.Zeks.all) == 0 then 
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сейчас на сервере нету заключенных игроков!', message_color)
+				MODULE.Zeks.Window[0] = false
+			end
+			safery_disable_cursor(player)
+			if settings.gov.auto_update_zeks then
+				local period = settings.gov.zeks_update_period
+				local text_time_wait = string.format("%02d", math.max(0, period - (tonumber(MODULE.Zeks.updzeks.time) or 0)))
+				imgui.Text(u8('Автоматическое обновление списка заключенных будет через ') .. text_time_wait .. u8(' секунд'))
+				imgui.Separator()
+			else
+				if imgui.Button(u8'Обновить список заключенных', imgui.ImVec2(450 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					MODULE.Zeks.Window[0] = false
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Вы можете включить авто-обновление списка /' .. get_custom_cmd('zeks') .. ' в /helper - Функции ' .. modules.player.data.fraction_tag .. '!', message_color)
+					sampProcessChatInput('/zeks')
+				end
+				imgui.Separator()
+			end	
+			imgui.Columns(4)
+			imgui.CenterColumnText(u8("Никнейм"))
+			imgui.SetColumnWidth(-1, 200 * settings.general.custom_dpi)
+			imgui.NextColumn()
+			imgui.CenterColumnText(u8("Время"))
+			imgui.SetColumnWidth(-1, 65 * settings.general.custom_dpi)
+			imgui.NextColumn()
+			imgui.CenterColumnText(u8("Нахождение"))
+			imgui.SetColumnWidth(-1, 100 * settings.general.custom_dpi)
+			imgui.NextColumn()
+			imgui.CenterColumnText(u8("Адвокат"))
+			imgui.SetColumnWidth(-1, 100 * settings.general.custom_dpi)
+			imgui.Columns(1)
+			for i, v in ipairs(MODULE.Zeks.all) do
+				imgui.Separator()
+				imgui.Columns(4)
+				if sampGetPlayerColor(v.id) == 368966908 then
+					imgui_RGBA = (settings.general.helper_theme ~= 2) and imgui.ImVec4(1, 1, 1, 1) or imgui.ImVec4(0, 0, 0, 1)
+					imgui.CenterColumnColorText(imgui_RGBA, u8(v.nick) .. ' [' .. v.id .. ']')
+				else
+					local rgbNormalized = argbToRgbNormalized(sampGetPlayerColor(v.id))
+					local imgui_RGBA = imgui.ImVec4(rgbNormalized[1], rgbNormalized[2], rgbNormalized[3], 1)
+					imgui.CenterColumnColorText(imgui_RGBA, u8(v.nick) .. ' [' .. v.id .. ']')
+				end
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8(v.time .. ' мин.'))
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8(v.kpz))
+				imgui.NextColumn()
+				imgui.CenterColumnText(u8(v.adv))
+				imgui.Columns(1)
+			end
+			
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.zeks_menu.x or posY ~= settings.windows_pos.zeks_menu.y then
+				settings.windows_pos.zeks_menu = {x = posX, y = posY}
+				save_settings()
+			end
+			imgui.End()
+		end
+	)
+end
+-----------------------------------------[ FAST MENU GUI ]-------------------------------------------
+imgui.OnFrame(
+	function() return MODULE.FastMenu.Window[0] end,
+	function(player)
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function()
+				local d = imgui.GetIO().DisplaySize
+				if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+			end)
+			local PAD = 200
+			local st = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round  = st.WindowRounding  end)
+			pcall(function() old_border = st.WindowBorderSize end)
+			pcall(function() st.WindowRounding  = 0 end)
+			pcall(function() st.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##dim_fastmenu', nil,
+				imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+				imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End()
+			imgui.PopStyleColor()
+			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+			pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(fa.USER .. ' '.. u8(sampGetPlayerNickname(MODULE.FastMenu.player_id)) ..' [' .. MODULE.FastMenu.player_id .. ']##FastMenu', MODULE.FastMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+			MODULE.FastMenu.Window[0] = false
+		end
+		local check = false
+		for _, command in ipairs(modules.commands.data.commands.my) do
+			if command.enable and command.arg == '{id}' and command.in_fastmenu then
+				if imgui.Button(u8(command.description), imgui.ImVec2(290 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+					sampProcessChatInput("/" .. command.cmd .. " " .. MODULE.FastMenu.player_id)
+					MODULE.FastMenu.Window[0] = false
+				end
+				check = true
+			end
+		end
+		if not check then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройте FastMenu в /helper - Команды - Фаст Меню - FastMenu', message_color)
+			MODULE.FastMenu.Window[0] = false
+		end
+		imgui.End()
+	end
+)
+imgui.OnFrame(
+	function() return MODULE.FastMenuButton.Window[0] end,
+	function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.mobile_fastmenu_button.x, settings.windows_pos.mobile_fastmenu_button.y), imgui.Cond.FirstUseEver)
+		imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. "##fast_menu_button", MODULE.FastMenuButton.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoScrollbar)
+		change_dpi()
+		if imgui.Button(fa.IMAGE_PORTRAIT .. u8' Взаимодействие ') then
+			local players = get_players()
+			if #players == 1 then
+				show_fast_menu(players[1])
+				MODULE.FastMenuButton.Window[0] = false
+			elseif #players > 1 then
+				MODULE.FastMenuPlayers.Window[0] = true
+				MODULE.FastMenuButton.Window[0] = false
+			else
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Рядом нет игроков для взаимодействия.', message_color)
+			end
+		end
+		local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+		if posX ~= settings.windows_pos.mobile_fastmenu_button.x or posY ~= settings.windows_pos.mobile_fastmenu_button.y then
+			settings.windows_pos.mobile_fastmenu_button = {x = posX, y = posY}
+			save_settings()
+		end
+		imgui.End()
+	end
+)
+imgui.OnFrame(
+	function() return MODULE.FastMenuPlayers.Window[0] end,
+	function(player)
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function()
+				local d = imgui.GetIO().DisplaySize
+				if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+			end)
+			local PAD = 200
+			local st = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round  = st.WindowRounding  end)
+			pcall(function() old_border = st.WindowBorderSize end)
+			pcall(function() st.WindowRounding  = 0 end)
+			pcall(function() st.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##dim_fastplayers', nil,
+				imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+				imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End()
+			imgui.PopStyleColor()
+			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+			pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(getHelperIcon() .. u8" Выберите игрока " .. getHelperIcon() .. "##fast_menu_players", MODULE.FastMenuPlayers.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+			MODULE.FastMenuPlayers.Window[0] = false
+		end
+		local players = get_players()
+		if #players == 0 then
+			show_fast_menu(players[1])
+			MODULE.FastMenuPlayers.Window[0] = false
+		elseif #players >= 1 then
+			for _, player in ipairs(players) do
+				local id = tonumber(player)
+				if imgui.Button(u8(sampGetPlayerNickname(id)), imgui.ImVec2(200 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+					if #players ~= 0 then show_fast_menu(id) end
+					MODULE.FastMenuPlayers.Window[0] = false
+				end
+			end
+		end
+		imgui.End()
+	end
+)
+imgui.OnFrame(
+	function() return MODULE.LeaderFastMenu.Window[0] end,
+	function(player)
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function()
+				local d = imgui.GetIO().DisplaySize
+				if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+			end)
+			local PAD = 200
+			local st = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round  = st.WindowRounding  end)
+			pcall(function() old_border = st.WindowBorderSize end)
+			pcall(function() st.WindowRounding  = 0 end)
+			pcall(function() st.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##dim_leaderfast', nil,
+				imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+				imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End()
+			imgui.PopStyleColor()
+			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+			pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(getUserIcon() .. ' ' .. u8(sampGetPlayerNickname(MODULE.LeaderFastMenu.player_id)) .. ' [' .. MODULE.LeaderFastMenu.player_id .. ']##LeaderFastMenu', MODULE.LeaderFastMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoMove + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+			MODULE.LeaderFastMenu.Window[0] = false
+		end
+		local check = false
+		for _, command in ipairs(modules.commands.data.commands_manage.my) do
+			if command.enable and command.arg == '{id}' and command.in_fastmenu then
+				if imgui.Button(u8(command.description), imgui.ImVec2(290 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+					sampProcessChatInput("/" .. command.cmd .. " " .. MODULE.LeaderFastMenu.player_id)
+					MODULE.LeaderFastMenu.Window[0] = false
+				end
+				check = true
+			end
+		end
+		if IS_MOBILE and not check then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройте Leader FastMenu в /helper - Команды - Фаст Меню - Leader FastMenu', message_color)
+			MODULE.FastMenu.Window[0] = false
+		elseif not IS_MOBILE then
+			if imgui.Button(u8"Выдать выговор",imgui.ImVec2(290 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+				sampSetChatInputEnabled(true)
+				sampSetChatInputText('/vig ' .. MODULE.LeaderFastMenu.player_id .. ' ')
+				MODULE.LeaderFastMenu.Window[0] = false
+			end
+			if imgui.Button(u8"Уволить из организации",imgui.ImVec2(290 * settings.general.custom_dpi, 30 * settings.general.custom_dpi)) then
+				sampSetChatInputEnabled(true)
+				sampSetChatInputText('/unv ' .. MODULE.LeaderFastMenu.player_id .. ' ')
+				MODULE.LeaderFastMenu.Window[0] = false
+			end
+		end
+		imgui.End()
+	end
+)
+-----------------------------------------[ PIEMENU GUI ]-------------------------------------------
+function drawPieSub(v)
+    if pie.BeginPieMenu(iconTextFormat(v)) then
+        for _, item in ipairs(v.next) do
+            if item.next == nil then
+                if pie.PieMenuItem(iconTextFormat(item)) then
+                    sampProcessChatInput(item.action)
+                end
+            elseif type(item.next) == 'table' then
+                drawPieSub(item)
+            end
+        end
+        pie.EndPieMenu()
+    end
+end
+
+imgui.OnFrame(
+	function() return MODULE.PieMenu.Window[0] end,
+	function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.pie.x, settings.windows_pos.pie.y), imgui.Cond.FirstUseEver)
+		imgui.Begin('##MODULE.PieMenu.Window', MODULE.PieMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoScrollbar)
+		local m3_down = not IS_MOBILE and isKeyDown(0x04) or false
+		local m3_pressed  = m3_down and not (MODULE.PieMenu._m3_was_down or false)
+		local m3_released = (not m3_down) and (MODULE.PieMenu._m3_was_down == true)
+		MODULE.PieMenu._m3_was_down = m3_down
+		local pie_popup_active = false
+		local pie_open_flag = false
+		if IS_MOBILE then
+			imgui.Button(fa.GEAR .. '##PieMenuButton', imgui.ImVec2(50 * settings.general.custom_dpi, 50 * settings.general.custom_dpi))
+			if imgui.IsItemClicked(0) then pie_open_flag = true end
+		else
+			pie_open_flag = m3_pressed
+		end
+		if pie.BeginPiePopup('PieMenu', 2, pie_open_flag) then
+			pie_popup_active = true
+			if not IS_MOBILE then player.HideCursor = false end
+			if #modules.piemenu.data == 0 then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Настройте или отключите PieMenu в /helper - Команды - Фаст Меню - PieMenu', message_color)
+			end
+			for _, item in ipairs(modules.piemenu.data) do
+				if item.next == nil then
+					if pie.PieMenuItem(iconTextFormat(item)) then
+						sampProcessChatInput(item.action)
+					end
+				else
+					drawPieSub(item)
+				end
+			end
+			pie.EndPiePopup(m3_released)
+		end
+
+		if IS_MOBILE then
+			player.HideCursor = false
+		else
+			player.HideCursor = not pie_popup_active
+		end
+
+		local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+		if posX ~= settings.windows_pos.pie.x or posY ~= settings.windows_pos.pie.y then
+			settings.windows_pos.pie = {x = posX, y = posY}
+			save_settings()
+		end
+		imgui.End()
+	end
+)
+-----------------------------------[ SCOREBOARD ]-----------------------------
+imgui.OnFrame(
+	function() return MODULE.Scoreboard.Window[0] end,
+	function(player)
+		if MODULE.Main.Window[0] then MODULE.Main.Window[0] = false end
+		if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+			local dsx, dsy = sizeX, sizeY
+			pcall(function()
+				local d = imgui.GetIO().DisplaySize
+				if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+			end)
+			local PAD = 200
+			local st = imgui.GetStyle()
+			local old_round, old_border = nil, nil
+			pcall(function() old_round  = st.WindowRounding  end)
+			pcall(function() old_border = st.WindowBorderSize end)
+			pcall(function() st.WindowRounding  = 0 end)
+			pcall(function() st.WindowBorderSize = 0 end)
+			imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+			imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+			imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+			imgui.Begin('##dim_scoreboard', nil,
+				imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
+				imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+			imgui.End()
+			imgui.PopStyleColor()
+			pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+			pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+		end
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.general.custom_dpi, 430 * settings.general.custom_dpi), imgui.Cond.Always)
+		imgui.Begin("##ScoreboardBegin", MODULE.Scoreboard.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar)
+		change_dpi()
+		imgui.Button(sampGetPlayerCount(false) .. u8' Online')
+		imgui.SameLine()
+		if imgui.CenterButton(' ' .. u8(sampGetCurrentServerName()) .. ' ') then
+			imgui.OpenPopup(fa.GLOBE .. u8' Информация о сервере')
+		end
+		if imgui.BeginPopupModal(fa.GLOBE .. u8' Информация о сервере', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar) then
+			change_dpi()
+			imgui.Text(u8'Название: ' .. u8(sampGetCurrentServerName()))
+			imgui.SameLine()
+			imgui.PushItemWidth(10 * settings.general.custom_dpi)
+			if imgui.Button(fa.COPY .. '##copy_name') then setClipboardText(u8(sampGetCurrentServerName())) end
+			local ip, port = sampGetCurrentServerAddress()
+			imgui.Text(u8'Адрес: ' .. ip .. ':' .. port)
+			imgui.SameLine()
+			imgui.PushItemWidth(10 * settings.general.custom_dpi)
+			if imgui.Button(fa.COPY .. '##copy_ip') then setClipboardText(ip .. ':' .. port) end
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(250 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				imgui.CloseCurrentPopup()
+			end
+			imgui.EndPopup()
+		end
+		imgui.SameLine()
+		imgui.SetCursorPosX(imgui.GetWindowWidth() - 146 * settings.general.custom_dpi)
+		imgui.PushItemWidth(114 * settings.general.custom_dpi)
+		imgui.InputTextWithHint(u8'', u8'Поиск ID/Nickname', MODULE.Scoreboard.inputField, 256)
+		imgui.SameLine()
+		imgui.SetCursorPosX(imgui.GetWindowWidth() - 30 * settings.general.custom_dpi)
+		if imgui.Button(fa.CIRCLE_XMARK) then MODULE.Scoreboard.Window[0] = false end
+		imgui.Separator()
+		if imgui.BeginChild('##scoreboard_list', imgui.ImVec2(592 * settings.general.custom_dpi, 396 * settings.general.custom_dpi), false) then
+			if modules.scoreboard.data.show_actions_menu then
+				imgui.Columns(5)
+				imgui.SetColumnWidth(-1, 45 * settings.general.custom_dpi) imgui.CenterColumnText('ID') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 370 * settings.general.custom_dpi) imgui.CenterColumnText('Nickname') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Score') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Ping') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 60 * settings.general.custom_dpi) imgui.CenterColumnText('Action') imgui.NextColumn()
+			else
+				imgui.Columns(4)
+				imgui.SetColumnWidth(-1, 45 * settings.general.custom_dpi) imgui.CenterColumnText('ID') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 430 * settings.general.custom_dpi) imgui.CenterColumnText('Nickname') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 55 * settings.general.custom_dpi) imgui.CenterColumnText('Score') imgui.NextColumn()
+				imgui.SetColumnWidth(-1, 60 * settings.general.custom_dpi) imgui.CenterColumnText('Ping') imgui.NextColumn()
+			end
+			local input_decoded = u8:decode(ffi.string(MODULE.Scoreboard.inputField)):gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1"):rlower()
+			local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			if input_decoded == "" then
+				imgui.Separator()
+				drawScoreboardPlayer(my_id)
+				for id = 0, sampGetMaxPlayerId() do
+					if my_id ~= id and sampIsPlayerConnected(id) then
+						imgui.Separator()
+						drawScoreboardPlayer(id)
+					end
+				end
+			else
+				for idd = 0, sampGetMaxPlayerId() do
+					if sampIsPlayerConnected(idd) or idd == my_id then
+						if tostring(idd):find(input_decoded) or sampGetPlayerNickname(idd):rlower():find(input_decoded) or idd == my_id then
+							imgui.Separator()
+							drawScoreboardPlayer(idd)
+						end
+					end
+				end
+			end
+			imgui.NextColumn()
+			imgui.Columns(1)
+			imgui.Separator()
+		end
+		imgui.EndChild()
+		imgui.End()
+	end
+)
+------------------------------------------------[ ARMORY AUTO-EQUIP ]-------------------------------
+MODULE.Armory = {
+	items = {}, menu = nil, queue = {}, next_at = 0,
+	want_build = false, pending_close = false,
+	expect_armory = false, last_run = 0, suppress_until = 0,
+	await_change = false,
+	in_form = false, in_swat = false,
+}
+local A = MODULE.Armory
+local function cfg() return settings.general.armory or {} end
+local function cd_ok()
+	return os.time() - (A.last_run or 0) >= (cfg().cooldown_sec or 60)
+end
+local function start_run_stamp()
+	A.last_run = os.time()
+	A.suppress_until = os.time() + 30
+end
+local function log(msg) if MODULE.DEBUG then print('[ARMORY] ' .. msg) end end
+local ARM_PATTERNS = {
+	vest={'Бронежилет'}, de={'Eagle'}, stun={'Оглушающий'},
+	taser={'азер'}, baton={'Дубинк'}, rifle={'M4','Автомат'},
+	shotgun={'Дробовик'}, smg={'MP5'}, sniper={'Снайперск','Винтовк'},
+	smoke={'Дымов'}, shield={'Щит'}, spikes={'шип'},
+}
+local LCK = {
+	swat={'SWAT'}, mask={'Маска МО'}, bodycam={'одикамер','Боди'},
+	objects={'Набор объектов','объектов'}, ammo={'боеприпас'}, heals = {'Рабочая аптечка'},
+}
+local function find_id(patterns)
+	for _, it in ipairs(A.items) do
+		for _, p in ipairs(patterns) do
+			if it.title and it.title:find(p, 1, true) then return it.id end
+		end
+	end
+	return nil
+end
+local function push(q, key, tbl)
+	local id = find_id(tbl[key])
+	if id then q[#q+1] = id end
+end
+local function finish_build()
+	local t = {}
+	for _, i in ipairs(A.queue) do t[#t+1] = tostring(i) end
+	log('build ' .. tostring(A.menu) .. ' queue: ' .. table.concat(t, ','))
+end
+function A.on_cef(event, payload)
+	log('on_cef: ' .. tostring(event))
+	if not settings.general.armory_enable then return end
+	if event == 'event.notify.initialize' then
+		local c = cfg()
+		if type(payload) == 'string' then
+			if payload:find('гражданскую', 1, true) then A.in_form = false; A.in_swat = false
+			elseif payload:find('рабочую', 1, true) then A.in_form = true; A.in_swat = false
+			elseif payload:find('S.W.A.T', 1, true) then A.in_form = true; A.in_swat = true
+			elseif payload:find('отобрали служебные', 1, true) then A.in_swat = false
+			end
+		end
+		if A.await_change and type(payload) == 'string' then
+			if payload:find('гражданскую', 1, true) then
+				A.await_change = false
+				lua_thread.create(function() wait(300) A._send_select(0) end)
+			elseif payload:find('рабочую', 1, true) then
+				A.await_change = false
+			end
+		end
+		if c.mask and type(payload) == 'string' and payload:find('S.W.A.T', 1, true) then
+			lua_thread.create(function() wait(400) sampSendChat('/mask') end)
+		end
+		return
+	end
+	if event == 'event.mountain.testDrive.initializeText' then
+		local ok, dec = pcall(decodeJson, payload)
+		local title = ok and type(dec)=='table' and dec[1] and dec[1].title or ''
+		local c = cfg()
+		if title:find('Раздевалка', 1, true) then
+			if not (A.menu=='armory' and #A.queue>0) then
+				A.menu = 'locker'
+				A.want_build = (c.auto_locker or c.auto_armory) and cd_ok()
+			end
+		elseif title:find('Оружейная', 1, true) then
+			A.menu = 'armory'
+			local cont = A.expect_armory; A.expect_armory = false
+			A.want_build = c.auto_armory and (cont or cd_ok())
+		else
+			A.menu = nil; A.want_build = false
+		end
+		A.next_at = os.clock()*1000 + (c.grace_ms or 350)
+		return
+	end
+	if event == 'event.mountain.testDrive.addVehicles' then
+		local ok, dec = pcall(decodeJson, payload)
+		local arr = ok and type(dec)=='table' and dec or nil
+		if arr and type(arr[1])=='table' then arr = arr[1] end
+		A.items = (type(arr)=='table') and arr or {}
+		if A.want_build and A.menu then
+			A.want_build = false
+			if A.menu=='locker' then A:build_locker() else A:build_armory() end
+		end
+		return
+	end
+	if event == 'event.damageInformer.initializeDamageInfo' then
+		local c = cfg()
+		if c.bodycam and type(payload) == 'string'
+		   and (payload:find('"imageId":9801', 1, true) or payload:find('Бодикамера', 1, true)) then
+			lua_thread.create(function() wait(400) sampSendChat('/bodycamera') end)
+		end
+		return
+	end
+	if event == 'cef.modals.showModal' and type(payload)=='string' and payload:find('взять со склада',1,true) then
+		lua_thread.create(function() wait(200); setVirtualKeyDown(0x0D,true); wait(100); setVirtualKeyDown(0x0D,false) end)
+	end
+end
+function A:build_locker()
+	local c, q = cfg(), {}
+	if c.auto_locker and (c.swat or c.mask) and not A.in_form then q[#q+1] = 'CHANGE' end
+	if c.auto_locker and c.swat and not A.in_swat then push(q,'swat',LCK) end
+	if c.mask and c.swat and not A.in_swat then push(q,'mask',LCK) end
+	if c.bodycam then push(q,'bodycam',LCK) end
+	if c.objects then push(q,'objects',LCK) end
+	if c.heals then push(q,'heals',LCK) end
+	if c.auto_armory then push(q,'ammo',LCK); A.expect_armory = true end
+	A.queue = q
+	if #q > 0 then start_run_stamp() end
+	finish_build()
+end
+function A:build_armory()
+	local c, q = cfg(), {}
+	if c.vest then push(q,'vest',ARM_PATTERNS) end
+	if c.pistol=='stun' then push(q,'stun',ARM_PATTERNS) else push(q,'de',ARM_PATTERNS) end
+	for _, k in ipairs({'taser','baton','rifle','shotgun','smg','sniper','smoke','shield','spikes'}) do
+		if c[k] then push(q,k,ARM_PATTERNS) end
+	end
+	A.queue = q
+	A.pending_close = #q > 0
+	if #q > 0 then start_run_stamp() end
+	finish_build()
+end
+lua_thread.create(function()
+	while true do
+		wait(80)
+		if settings.general.armory_enable and #A.queue > 0 and os.clock()*1000 >= A.next_at then
+			local id = table.remove(A.queue, 1)
+			if id == 'CHANGE' then
+				A._send_select(0); A.await_change = true
+				A.next_at = os.clock()*1000 + 2500
+			else
+				A._send_select(id)
+				local step
+				if A.menu == 'locker' then
+					step = math.max(1600, cfg().locker_step_ms or 1600)
+				else
+					step = math.max(1000, cfg().step_ms or 550)
+				end
+				A.next_at = os.clock()*1000 + step
+				if #A.queue == 0 and A.menu == 'armory' and A.pending_close then
+					A.pending_close = false
+					lua_thread.create(function() wait(1200) emulationCEF('mountain.testDrive.close') end)
+				end
+			end
+		end
+	end
+end)
+function A._send_select(id)
+	log('emulationCEF selectVehicle|' .. tostring(id))
+	emulationCEF('mountain.testDrive.selectVehicle|' .. tostring(id))
+end
+-----------------------------------[ FORENSIC ]-------------------------------
+imgui.OnFrame(
+    function() return MODULE.Forensic.Window[0] end,
+    function(player)
+        if imgui.WindowFlags.NoInputs and imgui.Col.WindowBg and type(background_dim_color) == 'function' then
+            local dsx, dsy = sizeX, sizeY
+            pcall(function()
+                local d = imgui.GetIO().DisplaySize
+                if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
+            end)
+            local PAD = 200
+            local st = imgui.GetStyle()
+            local old_round, old_border = nil, nil
+            pcall(function() old_round  = st.WindowRounding  end)
+            pcall(function() old_border = st.WindowBorderSize end)
+            pcall(function() st.WindowRounding  = 0 end)
+            pcall(function() st.WindowBorderSize = 0 end)
+            imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
+            imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
+            imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
+            imgui.Begin('##dim_forensic', nil, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
+            imgui.End()
+            imgui.PopStyleColor()
+            pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
+            pcall(function() if old_border then st.WindowBorderSize = old_border end end)
+        end
+        settings.windows_pos.forensic_menu = settings.windows_pos.forensic_menu or { x = sizeX / 2 - 240, y = sizeY / 2 - 150 }
+        imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.forensic_menu.x, settings.windows_pos.forensic_menu.y), imgui.Cond.FirstUseEver)
+        imgui.Begin(fa.FLASK_VIAL .. u8" Криминалистические экспертизы " .. fa.FLASK_VIAL .. '##forensic_menu', MODULE.Forensic.Window,
+            imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+        change_dpi()
+        player.HideCursor = false
+        if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
+            MODULE.Forensic.Window[0] = false
+        end
+        local TYPES = (modules.forensic and modules.forensic.data and modules.forensic.data.types) or nil
+        if not TYPES or #TYPES == 0 then
+            imgui.TextDisabled(u8'Нет данных экспертиз: модуль forensic не загружен.')
+            imgui.End()
+            return
+        end
+        if MODULE.Forensic.selected[0] < 1 or MODULE.Forensic.selected[0] > #TYPES then
+            MODULE.Forensic.selected[0] = 1
+        end
+        imgui.Text(fa.LIST .. u8' Вид экспертизы:')
+        imgui.Separator()
+        local H = 125 * settings.general.custom_dpi
+        if imgui.BeginChild('##forensic_list', imgui.ImVec2(235 * settings.general.custom_dpi, H), true) then
+            for i, t in ipairs(TYPES) do
+                if imgui.Selectable(u8(t.name), MODULE.Forensic.selected[0] == i) then
+                    MODULE.Forensic.selected[0] = i
+                end
+            end
+        end
+        imgui.EndChild()
+        imgui.SameLine()
+        if imgui.BeginChild('##forensic_desc', imgui.ImVec2(235 * settings.general.custom_dpi, H), true) then
+            imgui.Text(fa.CIRCLE_INFO .. u8' Описание:')
+            imgui.Separator()
+            imgui.PushTextWrapPos(imgui.GetCursorPosX() + 220 * settings.general.custom_dpi)
+            imgui.TextDisabled(u8(TYPES[MODULE.Forensic.selected[0]].desc or ''))
+            imgui.PopTextWrapPos()
+        end
+        imgui.EndChild()
+        imgui.Separator()
+        local sel = TYPES[MODULE.Forensic.selected[0]]
+        imgui.PushTextWrapPos(imgui.GetCursorPosX() + 470 * settings.general.custom_dpi)
+        imgui.TextDisabled(fa.CIRCLE_INFO .. u8' Подсказка: ' .. u8(sel.hint or ''))
+        imgui.PopTextWrapPos()
+        imgui.Separator()
+        if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть', imgui.ImVec2(165 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+            MODULE.Forensic.Window[0] = false
+        end
+        imgui.SameLine()
+        if imgui.Button(fa.FLASK_VIAL .. u8' Провести экспертизу', imgui.ImVec2(305 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+            run_forensic_rp(MODULE.Forensic.selected[0])
+            MODULE.Forensic.Window[0] = false
+        end
+        local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+        if posX ~= settings.windows_pos.forensic_menu.x or posY ~= settings.windows_pos.forensic_menu.y then
+            settings.windows_pos.forensic_menu = { x = posX, y = posY }
+            save_settings()
+        end
+        imgui.End()
+    end
+)
+-----------------------------------[ UPDATE GUI ]-----------------------------
+imgui.OnFrame(
+	function() return MODULE.Update.Window[0] or MODULE.Update.popup_opened end,
+	function(player)
+		if not IS_MOBILE then change_dpi() end
+		if MODULE.Main and MODULE.Main.Window[0] then MODULE.Main.Window[0] = false end
+		local dpi   = settings.general.custom_dpi
+		local WIN_W = 480 * dpi
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+		local auto_ok = pcall(function()
+			imgui.SetNextWindowSizeConstraints(
+				imgui.ImVec2(WIN_W, 0),
+				imgui.ImVec2(WIN_W, sizeY - 20 * dpi)
+			)
+		end)
+		local flags = imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize
+		if auto_ok then
+			flags = flags + imgui.WindowFlags.AlwaysAutoResize
+		else
+			imgui.SetNextWindowSize(imgui.ImVec2(WIN_W, MODULE.Update.downloading and 150 * dpi or 300 * dpi), imgui.Cond.Always)
+		end
+		pcall(function() imgui.SetNextWindowBgAlpha(1.0) end)
+		local title_icon = MODULE.Update.is_emergency and fa.TRIANGLE_EXCLAMATION or fa.CIRCLE_INFO
+		local popup_id = title_icon .. u8" Доступно обновление Arizona Helper " .. title_icon .. "##update_window"
+		if MODULE.Update.Window[0] and not MODULE.Update.popup_opened then
+			imgui.OpenPopup(popup_id)
+			MODULE.Update.popup_opened = true
+		end
+		local opened = imgui.BeginPopupModal(popup_id, nil, flags)
+		if opened then
+			if MODULE.Update.auto_start_download and MODULE.Update.is_need_update and not MODULE.Update.downloading then
+				MODULE.Update.auto_start_download = false
+				MODULE.Update.downloading    = true
+				MODULE.Update.download_start = os.time()
+				download_file = 'helper'
+				downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
+			end
+			if MODULE.Update.downloading then
+				local t = os.clock()
+				imgui.Spacing(); imgui.Spacing()
+				local pulse = 0.6 + 0.4 * ((math.sin(t * 3.0) + 1.0) * 0.5)
+				imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(pulse, pulse, pulse, 1.0))
+				imgui.CenterText(fa.DOWNLOAD .. u8("  Скачивание обновления"))
+				imgui.PopStyleColor()
+				imgui.Spacing()
+				local N    = 18
+				local head = math.floor(t * 8) % N
+				local seg_w = imgui.CalcTextSize('#').x
+				local gap = 4 * dpi
+				pcall(function() gap = imgui.GetStyle().ItemSpacing.x end)
+				local total_w = N * seg_w + (N - 1) * gap
+				local start_x = (imgui.GetWindowWidth() - total_w) * 0.5
+				if start_x < 0 then start_x = 0 end
+				imgui.SetCursorPosX(start_x)
+				for i = 0, N - 1 do
+					if i > 0 then imgui.SameLine() end
+					local d = (i - head) % N
+					local b
+					if     d == 0 then b = 1.0
+					elseif d == 1 then b = 0.72
+					elseif d == 2 then b = 0.48
+					elseif d == 3 then b = 0.28
+					else               b = 0.11 end
+					imgui.TextColored(imgui.ImVec4(b, b, b, 1.0), '#')
+				end
+				imgui.Spacing()
+				imgui.CenterTextDisabled(u8("Не закрывайте игру до завершения загрузки."))
+				if MODULE.Update.download_start and os.time() - MODULE.Update.download_start > 60 then
+					MODULE.Update.downloading    = false
+					MODULE.Update.download_start = nil
+					sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось загрузить обновление (таймаут). Попробуйте снова.', message_color)
+				end
+				imgui.EndPopup()
+				return
+			end
+			local line_h = imgui.CalcTextSize("Ay").y
+			local function calc_wrap_h(text, w)
+				local y = 0
+				local ok1, r1 = pcall(imgui.CalcTextSize, text, false, w)
+				if ok1 and r1 and r1.y and r1.y > 0 then y = r1.y end
+				local ok2, r2 = pcall(imgui.CalcTextSize, text, w)
+				if ok2 and r2 and r2.y and r2.y > y then y = r2.y end
+				if y <= 0 then y = imgui.CalcTextSize(text).y end
+				return y
+			end
+			local sp       = 6 * dpi
+			local wrap_w   = WIN_W - 48 * dpi
+			local wrap_sub = wrap_w - 14 * dpi
+			local content_h = 8 * dpi
+			for line in (MODULE.Update.info or ""):gmatch("[^\r\n]+") do
+				local is_sub = line:find("^%- ")
+				local txt = is_sub and line:sub(3) or line
+				content_h = content_h + calc_wrap_h(txt, is_sub and wrap_sub or wrap_w) + sp
+			end
+			local MAX_LIST = 240 * dpi
+			local child_h = content_h
+			if child_h > MAX_LIST then child_h = MAX_LIST end
+			if child_h < line_h + 8 * dpi then child_h = line_h + 8 * dpi end
+			imgui.CenterText(u8("Версия в облаке: " .. tostring(MODULE.Update.version or "") .. "  (У вас: " .. tostring(thisScript().version) .. ")"))
+			local status_text = u8("Статус: " .. tostring(MODULE.Update.status or ""))
+			local hex = MODULE.Update.status_color or "{FFFFFF}"
+			local r, g, b = hex:match('{?(%x%x)(%x%x)(%x%x)}?')
+			local col = imgui.ImVec4(tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, 1.0)
+			local colored_ok = pcall(function()
+				local tw = imgui.CalcTextSize(status_text).x
+				imgui.SetCursorPosX((imgui.GetWindowWidth() - tw) / 2)
+				imgui.TextColored(col, status_text)
+			end)
+			if not colored_ok then imgui.CenterText(status_text) end
+			if MODULE.Update.is_emergency then
+				imgui.Separator()
+				imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1.0, 0.2, 0.2, 1.0))
+				imgui.TextWrapped(fa.TRIANGLE_EXCLAMATION .. u8(" ВНИМАНИЕ: это аварийное обновление, исправляющее критические ошибки. Его установка настоятельно рекомендуется!"))
+				imgui.PopStyleColor()
+			end
+			imgui.CenterText(u8("Список изменений в новой версии:"))
+			imgui.Separator()
+			if imgui.BeginChild('##update_info', imgui.ImVec2(0, child_h), true) then
+				for line in (MODULE.Update.info or ""):gmatch("[^\r\n]+") do
+					if line:find("^%- ") then
+						imgui.Indent(14 * dpi)
+						imgui.Bullet()
+						imgui.TextWrapped(line:sub(3))
+						imgui.Unindent(14 * dpi)
+					else
+						imgui.Bullet()
+						imgui.TextWrapped(line)
+					end
+				end
+			end
+			imgui.EndChild()
+			imgui.Separator()
+			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8' Установить обновление', imgui.ImVec2(imgui.GetMiddleButtonX(2), 30 * dpi)) then
+				MODULE.Update.downloading = true
+				MODULE.Update.download_start = os.time()
+				download_file = 'helper'
+				downloadFileFromUrlToPath(MODULE.Update.url, thisScript().path)
+			end
+			imgui.SameLine()
+			if imgui.Button(u8' Позже', imgui.ImVec2(imgui.GetMiddleButtonX(2), 30 * dpi)) then
+				imgui.CloseCurrentPopup()
+			end
+			imgui.EndPopup()
+		else
+			MODULE.Update.popup_opened = false
+			MODULE.Update.Window[0] = false
+		end
+	end
+)
+-----------------------------------[ Other GUI ]-----------------------------
+imgui.OnFrame(
+    function() return MODULE.CommandStop.Window[0] end,
+    function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY - 50 * settings.general.custom_dpi), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(getHelperIcon() .. " Arizona Helper Unlimited " .. getHelperIcon() .. "##MODULE.CommandStop.Window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		if IS_MOBILE and MODULE.Binder.state.isActive then
+			if imgui.Button(fa.CIRCLE_STOP..u8' Остановить отыгровку') then
+				MODULE.Binder.state.isStop = true 
+				MODULE.CommandStop.Window[0] = false
+			end
+		else
+			MODULE.CommandStop.Window[0] = false
+		end
+		imgui.End()
+    end
+)
+imgui.OnFrame(
+    function() return MODULE.CommandPause.Window[0] end,
+    function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY - 50 * settings.general.custom_dpi), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
+		imgui.Begin(getHelperIcon() .." Arizona Helper Unlimited " .. getHelperIcon() .. "##MODULE.CommandPause.Window", _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize)
+		change_dpi()
+		if MODULE.Binder.state.isPause then
+			safery_disable_cursor(player)
+			local label = ' Продолжить' .. (hotkey_ok and settings.general.bind_action and ' [' .. getNameKeysFrom(settings.general.bind_action) .. ']' or '')
+			if imgui.Button(fa.CIRCLE_ARROW_RIGHT .. u8(label), imgui.ImVec2(180 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				MODULE.Binder.state.isPause = false
+				MODULE.CommandPause.Window[0] = false
+			end
+			imgui.SameLine()
+			if imgui.Button(fa.CIRCLE_XMARK .. u8' Полный STOP ', imgui.ImVec2(180 * settings.general.custom_dpi, 25 * settings.general.custom_dpi)) then
+				MODULE.Binder.state.isStop = true 
+				MODULE.Binder.state.isPause = false
+				MODULE.CommandPause.Window[0] = false
+			end
+		else
+			MODULE.CommandPause.Window[0] = false
+		end
+		imgui.End()
+    end
+)
+----------------------------------[ GUI ITEMS ]-----------------------------
+function imgui.CenterUnderlineText(text)
+	local width = imgui.GetWindowWidth()
+    local calc = imgui.CalcTextSize(text)
+    imgui.SetCursorPosX(width / 2 - calc.x / 2)
+    local dl = imgui.GetWindowDrawList()
+    local p = imgui.GetCursorScreenPos()
+    imgui.Text(text)
+    local size = imgui.GetItemRectSize()
+    local Y = p.y + size.y
+    dl:AddLine(imgui.ImVec2(p.x, Y), imgui.ImVec2(p.x + size.x, Y), imgui.GetColorU32(imgui.Col.Text), 1)
+end
+function imgui.TextQuestion(text)
+    imgui.SameLine()
+    imgui.TextDisabled('(?)')
+    if imgui.IsItemHovered() then
+        imgui.BeginTooltip()
+        imgui.Text(text)
+        imgui.EndTooltip()
+    end
+end
+function imgui.CenterText(text)
+    local width = imgui.GetWindowWidth()
+    local calc = imgui.CalcTextSize(text)
+    imgui.SetCursorPosX( width / 2 - calc.x / 2 )
+    imgui.Text(text)
+end
+function imgui.CenterTextDisabled(text)
+    local width = imgui.GetWindowWidth()
+    local calc = imgui.CalcTextSize(text)
+    imgui.SetCursorPosX( width / 2 - calc.x / 2 )
+    imgui.TextDisabled(text)
+end
+function imgui.CenterColorText(imgui_RGBA, text)
+    imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+	imgui.TextColored(imgui_RGBA, text)
+end
+function imgui.CenterColumnText(text)
+    imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+    imgui.Text(text)
+end
+function imgui.CenterColumnTextDisabled(text)
+    imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+    imgui.TextDisabled(text)
+end
+function imgui.CenterColumnColorText(imgui_RGBA, text)
+    imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+	imgui.TextColored(imgui_RGBA, text)
+end
+function imgui.CenterButton(text)
+    local width = imgui.GetWindowWidth()
+    local calc = imgui.CalcTextSize(text)
+    imgui.SetCursorPosX( width / 2 - calc.x / 2 )
+	if imgui.Button(text) then
+		return true
+	else
+		return false
+	end
+end
+function imgui.CenterSmallButton(text)
+    local width = imgui.GetWindowWidth()
+    local calc = imgui.CalcTextSize(text)
+    imgui.SetCursorPosX( width / 2 - calc.x / 2 )
+	if imgui.SmallButton(text) then
+		return true
+	else
+		return false
+	end
+end
+function imgui.CenterColumnButton(text)
+	if text:find('(.+)##(.+)') then
+		local text1, text2 = text:match('(.+)##(.+)')
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text1).x / 2)
+	else
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+	end
+    if imgui.Button(text) then
+		return true
+	else
+		return false
+	end
+end
+function imgui.CenterColumnSmallButton(text)
+	if text:find('(.+)##(.+)') then
+		local text1, text2 = text:match('(.+)##(.+)')
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text1).x / 2)
+	else
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+	end
+    if imgui.SmallButton(text) then
+		return true
+	else
+		return false
+	end
+end
+function imgui.CenterColumnRadioButtonIntPtr(text, arg1, arg2)
+	if text:find('(.+)##(.+)') then
+		local text1, text2 = text:match('(.+)##(.+)')
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text1).x / 2)
+	else
+		imgui.SetCursorPosX((imgui.GetColumnOffset() + (imgui.GetColumnWidth() / 2)) - imgui.CalcTextSize(text).x / 2)
+	end
+    if imgui.RadioButtonIntPtr(text, arg1, arg2) then
+		return true
+	else
+		return false
+	end
+end
+function imgui.ItemSelector(name, items, selected, fixedSize, dontDrawBorders)
+    assert(items and #items > 1, 'items must be array of strings')
+    assert(selected[0], 'Wrong argument #3. Selected must be "imgui.new.int"')
+    local DL = imgui.GetWindowDrawList()
+    local style = {
+        rounding = imgui.GetStyle().FrameRounding,
+        padding = imgui.GetStyle().FramePadding,
+        col = {
+            default = imgui.GetStyle().Colors[imgui.Col.Button],
+            hovered = imgui.GetStyle().Colors[imgui.Col.ButtonHovered],
+            active = imgui.GetStyle().Colors[imgui.Col.ButtonActive],
+            text = imgui.GetStyle().Colors[imgui.Col.Text]
+        }
+    }
+    local pos = imgui.GetCursorScreenPos()
+    local start = pos
+    local maxSize = 0
+    for index, item in ipairs(items) do
+        local textSize = imgui.CalcTextSize(item)
+        local sizeX = (fixedSize or textSize.x) + style.padding.x * 2
+        imgui.SetCursorScreenPos(pos)
+        if imgui.InvisibleButton('##imguiSelector_'..item..'_'..tostring(index), imgui.ImVec2(sizeX, textSize.y + style.padding.y * 2)) then
+            local old = selected[0]
+            selected[0] = index
+            return selected[0], old
+        end
+        DL:AddRectFilled(
+            pos,
+            imgui.ImVec2(pos.x + sizeX, pos.y + textSize.y + style.padding.y * 2),
+            imgui.GetColorU32Vec4((selected[0] == index or imgui.IsItemActive()) and style.col.active or (imgui.IsItemHovered() and style.col.hovered or style.col.default)),
+            style.rounding,
+            (index == 1 and 5 or (index == #items and 10 or 0))
+        )
+        if index > 1 and not dontDrawBorders then DL:AddLine(imgui.ImVec2(pos.x, pos.y + style.padding.y), imgui.ImVec2(pos.x, pos.y + textSize.y + style.padding.y), imgui.GetColorU32Vec4(imgui.GetStyle().Colors[imgui.Col.Border]), 1) end
+        DL:AddText(imgui.ImVec2(pos.x + sizeX / 2 - textSize.x / 2, pos.y + style.padding.y), imgui.GetColorU32Vec4(style.col.text), item)
+        pos = imgui.ImVec2(pos.x + sizeX, pos.y)
+    end
+    DL:AddRect(start, imgui.ImVec2(pos.x, pos.y + imgui.CalcTextSize('A').y + style.padding.y * 2), imgui.GetColorU32Vec4(imgui.GetStyle().Colors[imgui.Col.Border]), imgui.GetStyle().FrameRounding, nil, imgui.GetStyle().FrameBorderSize)
+    DL:AddText(imgui.ImVec2(pos.x + style.padding.x, pos.y + (imgui.CalcTextSize(name).y + style.padding.y * 2) / 2 - imgui.CalcTextSize(name).y / 2), imgui.GetColorU32Vec4(style.col.text), name)
+end
+function imgui.GetMiddleButtonX(count)
+    local width = imgui.GetWindowContentRegionWidth() 
+    local space = imgui.GetStyle().ItemSpacing.x
+    return count == 1 and width or width/count - ((space * (count-1)) / count)
+end
+function safery_disable_cursor(gui)
+	if not IS_MOBILE and not sampIsCursorActive() then gui.HideCursor = true else gui.HideCursor = false end
+end
+function apply_dark_theme()
+	imgui.SwitchContext()
+    imgui.GetStyle().WindowPadding = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().FramePadding = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().ItemSpacing = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().ItemInnerSpacing = imgui.ImVec2(2 * settings.general.custom_dpi, 2 * settings.general.custom_dpi)
+    imgui.GetStyle().TouchExtraPadding = imgui.ImVec2(0, 0)
+    imgui.GetStyle().IndentSpacing = 0
+    imgui.GetStyle().ScrollbarSize = (IS_MOBILE and 15 or 10) * settings.general.custom_dpi
+    imgui.GetStyle().GrabMinSize = 10 * settings.general.custom_dpi
+    imgui.GetStyle().WindowBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().ChildBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().PopupBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().FrameBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().TabBorderSize = 1 * settings.general.custom_dpi
+	imgui.GetStyle().WindowRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().ChildRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().FrameRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().PopupRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().ScrollbarRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().GrabRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().TabRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().WindowTitleAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().SelectableTextAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().Colors[imgui.Col.Text]                   = imgui.ImVec4(1.00, 1.00, 1.00, 1.00)
+    imgui.GetStyle().Colors[imgui.Col.TextDisabled]           = imgui.ImVec4(0.50, 0.50, 0.50, 1.00)
+    imgui.GetStyle().Colors[imgui.Col.WindowBg]               = imgui.ImVec4(0.07, 0.07, 0.07, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ChildBg]                = imgui.ImVec4(0.07, 0.07, 0.07, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PopupBg]                = imgui.ImVec4(0.07, 0.07, 0.07, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Border]                 = imgui.ImVec4(0.25, 0.25, 0.26, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.BorderShadow]           = imgui.ImVec4(0.00, 0.00, 0.00, 0.00)
+    imgui.GetStyle().Colors[imgui.Col.FrameBg]                = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.FrameBgHovered]         = imgui.ImVec4(0.25, 0.25, 0.26, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.FrameBgActive]          = imgui.ImVec4(0.25, 0.25, 0.26, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TitleBg]                = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TitleBgActive]          = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TitleBgCollapsed]       = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.MenuBarBg]              = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarBg]            = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarGrab]          = imgui.ImVec4(0.00, 0.00, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarGrabHovered]   = imgui.ImVec4(0.41, 0.41, 0.41, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarGrabActive]    = imgui.ImVec4(0.51, 0.51, 0.51, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.CheckMark]              = imgui.ImVec4(1.00, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SliderGrab]             = imgui.ImVec4(0.21, 0.20, 0.20, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SliderGrabActive]       = imgui.ImVec4(0.21, 0.20, 0.20, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Button]                 = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ButtonHovered]          = imgui.ImVec4(0.21, 0.20, 0.20, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ButtonActive]           = imgui.ImVec4(0.41, 0.41, 0.41, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Header]                 = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.HeaderHovered]          = imgui.ImVec4(0.20, 0.20, 0.20, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.HeaderActive]           = imgui.ImVec4(0.47, 0.47, 0.47, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Separator]              = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SeparatorHovered]       = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SeparatorActive]        = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ResizeGrip]             = imgui.ImVec4(1.00, 1.00, 1.00, 0.25)
+    imgui.GetStyle().Colors[imgui.Col.ResizeGripHovered]      = imgui.ImVec4(1.00, 1.00, 1.00, 0.67)
+    imgui.GetStyle().Colors[imgui.Col.ResizeGripActive]       = imgui.ImVec4(1.00, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Tab]                    = imgui.ImVec4(0.12, 0.12, 0.12, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabHovered]             = imgui.ImVec4(0.28, 0.28, 0.28, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabActive]              = imgui.ImVec4(0.30, 0.30, 0.30, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabUnfocused]           = imgui.ImVec4(0.07, 0.10, 0.15, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabUnfocusedActive]     = imgui.ImVec4(0.14, 0.26, 0.42, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotLines]              = imgui.ImVec4(0.61, 0.61, 0.61, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotLinesHovered]       = imgui.ImVec4(1.00, 0.43, 0.35, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotHistogram]          = imgui.ImVec4(0.90, 0.70, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotHistogramHovered]   = imgui.ImVec4(1.00, 0.60, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TextSelectedBg]         = imgui.ImVec4(1.00, 0.00, 0.00, 0.35)
+    imgui.GetStyle().Colors[imgui.Col.DragDropTarget]         = imgui.ImVec4(1.00, 1.00, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.NavHighlight]           = imgui.ImVec4(0.26, 0.59, 0.98, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.NavWindowingHighlight]  = imgui.ImVec4(1.00, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.NavWindowingDimBg]      = imgui.ImVec4(0.80, 0.80, 0.80, 0.20)
+    imgui.GetStyle().Colors[imgui.Col.ModalWindowDimBg]       = imgui.ImVec4(0.12, 0.12, 0.12, 0.9)
+end
+function apply_white_theme()
+	imgui.SwitchContext()
+    imgui.GetStyle().WindowPadding = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().FramePadding = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().ItemSpacing = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().ItemInnerSpacing = imgui.ImVec2(2 * settings.general.custom_dpi, 2 * settings.general.custom_dpi)
+    imgui.GetStyle().TouchExtraPadding = imgui.ImVec2(0, 0)
+    imgui.GetStyle().IndentSpacing = 0
+    imgui.GetStyle().ScrollbarSize = (IS_MOBILE and 15 or 10) * settings.general.custom_dpi
+    imgui.GetStyle().GrabMinSize = 10 * settings.general.custom_dpi
+    imgui.GetStyle().WindowBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().ChildBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().PopupBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().FrameBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().TabBorderSize = 1 * settings.general.custom_dpi
+	imgui.GetStyle().WindowRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().ChildRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().FrameRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().PopupRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().ScrollbarRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().GrabRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().TabRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().WindowTitleAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().SelectableTextAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().Colors[imgui.Col.Text] = imgui.ImVec4(0.00, 0.00, 0.00, 1.00)
+    imgui.GetStyle().Colors[imgui.Col.TextDisabled] = imgui.ImVec4(0.50, 0.50, 0.50, 1.00)
+    imgui.GetStyle().Colors[imgui.Col.WindowBg] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ChildBg] = imgui.ImVec4(0.00, 0.00, 0.00, 0.00)
+    imgui.GetStyle().Colors[imgui.Col.PopupBg] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Border] = imgui.ImVec4(0.43, 0.43, 0.50, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.BorderShadow] = imgui.ImVec4(0.00, 0.00, 0.00, 0.00)
+    imgui.GetStyle().Colors[imgui.Col.FrameBg] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.FrameBgHovered] = imgui.ImVec4(0.88, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.FrameBgActive] = imgui.ImVec4(0.80, 0.89, 0.97, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TitleBg] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TitleBgActive] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100) 
+    imgui.GetStyle().Colors[imgui.Col.TitleBgCollapsed] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.MenuBarBg] = imgui.ImVec4(0.94, 0.94, 0.94, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarBg] = imgui.ImVec4(0.02, 0.02, 0.02, 0.00)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarGrab] = imgui.ImVec4(0.31, 0.31, 0.31, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarGrabHovered] = imgui.ImVec4(0.41, 0.41, 0.41, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ScrollbarGrabActive] = imgui.ImVec4(0.51, 0.51, 0.51, settings.general.transparent / 1000)
+    imgui.GetStyle().Colors[imgui.Col.CheckMark] = imgui.ImVec4(0.20, 0.20, 0.20, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SliderGrab] = imgui.ImVec4(0.00, 0.48, 0.85, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SliderGrabActive] = imgui.ImVec4(0.80, 0.80, 0.80, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Button] = imgui.ImVec4(0.88, 0.88, 0.88, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ButtonHovered] = imgui.ImVec4(0.88, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ButtonActive] = imgui.ImVec4(0.80, 0.89, 0.97, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Header] = imgui.ImVec4(0.88, 0.88, 0.88, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.HeaderHovered] = imgui.ImVec4(0.88, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.HeaderActive] = imgui.ImVec4(0.80, 0.89, 0.97, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Separator] = imgui.ImVec4(0.43, 0.43, 0.50, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SeparatorHovered] = imgui.ImVec4(0.10, 0.40, 0.75, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.SeparatorActive] = imgui.ImVec4(0.10, 0.40, 0.75, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.ResizeGrip] = imgui.ImVec4(0.00, 0.00, 0.00, 0.25)
+    imgui.GetStyle().Colors[imgui.Col.ResizeGripHovered] = imgui.ImVec4(0.00, 0.00, 0.00, 0.67)
+    imgui.GetStyle().Colors[imgui.Col.ResizeGripActive] = imgui.ImVec4(0.00, 0.00, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.Tab] = imgui.ImVec4(0.88, 0.88, 0.88, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabHovered] = imgui.ImVec4(0.88, 1.00, 1.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabActive] = imgui.ImVec4(0.80, 0.89, 0.97, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabUnfocused] = imgui.ImVec4(0.07, 0.10, 0.15, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TabUnfocusedActive] = imgui.ImVec4(0.14, 0.26, 0.42, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotLines] = imgui.ImVec4(0.61, 0.61, 0.61, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotLinesHovered] = imgui.ImVec4(1.00, 0.43, 0.35, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotHistogram] = imgui.ImVec4(0.90, 0.70, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.PlotHistogramHovered] = imgui.ImVec4(1.00, 0.60, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.TextSelectedBg] = imgui.ImVec4(0.00, 0.47, 0.84, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.DragDropTarget] = imgui.ImVec4(1.00, 1.00, 0.00, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.NavHighlight] = imgui.ImVec4(0.26, 0.59, 0.98, settings.general.transparent / 100)
+    imgui.GetStyle().Colors[imgui.Col.NavWindowingHighlight] = imgui.ImVec4(1.00, 1.00, 1.00, 0.70)
+    imgui.GetStyle().Colors[imgui.Col.NavWindowingDimBg] = imgui.ImVec4(0.80, 0.80, 0.80, 0.20)
+    imgui.GetStyle().Colors[imgui.Col.ModalWindowDimBg] = imgui.ImVec4(0.80, 0.80, 0.80, 0.8)
+end
+function apply_moonmonet_theme()
+	local generated_color = moon_monet.buildColors(settings.general.moonmonet_theme_color, 1.0, true)
+	imgui.SwitchContext()
+	imgui.GetStyle().WindowPadding = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().FramePadding = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().ItemSpacing = imgui.ImVec2(5 * settings.general.custom_dpi, 5 * settings.general.custom_dpi)
+    imgui.GetStyle().ItemInnerSpacing = imgui.ImVec2(2 * settings.general.custom_dpi, 2 * settings.general.custom_dpi)
+    imgui.GetStyle().TouchExtraPadding = imgui.ImVec2(0, 0)
+    imgui.GetStyle().IndentSpacing = 0
+    imgui.GetStyle().ScrollbarSize = (IS_MOBILE and 15 or 10) * settings.general.custom_dpi
+    imgui.GetStyle().GrabMinSize = 10 * settings.general.custom_dpi
+    imgui.GetStyle().WindowBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().ChildBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().PopupBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().FrameBorderSize = 1 * settings.general.custom_dpi
+    imgui.GetStyle().TabBorderSize = 1 * settings.general.custom_dpi
+	imgui.GetStyle().WindowRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().ChildRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().FrameRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().PopupRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().ScrollbarRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().GrabRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().TabRounding = 8 * settings.general.custom_dpi
+    imgui.GetStyle().WindowTitleAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().ButtonTextAlign = imgui.ImVec2(0.5, 0.5)
+    imgui.GetStyle().SelectableTextAlign = imgui.ImVec2(0.5, 0.5)
+	imgui.GetStyle().Colors[imgui.Col.Text] = ColorAccentsAdapter(generated_color.accent2.color_50):as_vec4_orig()
+	imgui.GetStyle().Colors[imgui.Col.TextDisabled] = ColorAccentsAdapter(generated_color.neutral1.color_600):as_vec4_orig()
+	imgui.GetStyle().Colors[imgui.Col.WindowBg] = ColorAccentsAdapter(generated_color.accent2.color_900):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ChildBg] = ColorAccentsAdapter(generated_color.accent2.color_800):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.PopupBg] = ColorAccentsAdapter(generated_color.accent2.color_700):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.Border] = ColorAccentsAdapter(generated_color.accent1.color_200):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.Separator] = ColorAccentsAdapter(generated_color.accent1.color_200):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.BorderShadow] = imgui.ImVec4(0.00, 0.00, 0.00, 0.00)
+	imgui.GetStyle().Colors[imgui.Col.FrameBg] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0x60):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.FrameBgHovered] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0x70):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.FrameBgActive] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0x50):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.TitleBg] = ColorAccentsAdapter(generated_color.accent2.color_700):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.TitleBgCollapsed] = ColorAccentsAdapter(generated_color.accent2.color_700):apply_alpha(0x7f):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.TitleBgActive] = ColorAccentsAdapter(generated_color.accent2.color_700):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.MenuBarBg] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0x91):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ScrollbarBg] = imgui.ImVec4(0,0,0,0)
+	imgui.GetStyle().Colors[imgui.Col.ScrollbarGrab] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0x85):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ScrollbarGrabHovered] = ColorAccentsAdapter(generated_color.accent1.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ScrollbarGrabActive] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.CheckMark] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.SliderGrab] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.SliderGrabActive] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0x80):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.Button] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ButtonHovered] = ColorAccentsAdapter(generated_color.accent1.color_200):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ButtonActive] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.Tab] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.TabActive] = ColorAccentsAdapter(generated_color.accent1.color_200):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.TabHovered] = ColorAccentsAdapter(generated_color.accent1.color_200):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.Header] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.HeaderHovered] = ColorAccentsAdapter(generated_color.accent1.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.HeaderActive] = ColorAccentsAdapter(generated_color.accent1.color_600):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ResizeGrip] = ColorAccentsAdapter(generated_color.accent2.color_700):apply_alpha(0xcc):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ResizeGripHovered] = ColorAccentsAdapter(generated_color.accent2.color_700):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ResizeGripActive] = ColorAccentsAdapter(generated_color.accent2.color_700):apply_alpha(0xb3):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.PlotLines] = ColorAccentsAdapter(generated_color.accent2.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.PlotLinesHovered] = ColorAccentsAdapter(generated_color.accent1.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.PlotHistogram] = ColorAccentsAdapter(generated_color.accent2.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.PlotHistogramHovered] = ColorAccentsAdapter(generated_color.accent1.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.TextSelectedBg] = ColorAccentsAdapter(generated_color.accent1.color_600):as_vec4()
+	imgui.GetStyle().Colors[imgui.Col.ModalWindowDimBg] = ColorAccentsAdapter(generated_color.accent1.color_200):apply_alpha(0x99):as_vec4_orig()
+end
+function argbToRgbNormalized(argb)
+    local a = math.floor(argb / 0x1000000) % 0x100
+    local r = math.floor(argb / 0x10000) % 0x100
+    local g = math.floor(argb / 0x100) % 0x100
+    local b = argb % 0x100
+    local normalizedR = r / 255.0
+    local normalizedG = g / 255.0
+    local normalizedB = b / 255.0
+    return {normalizedR, normalizedG, normalizedB}
+end
+function argbToHexWithoutAlpha(alpha, red, green, blue)
+    return string.format("%02X%02X%02X", red, green, blue)
+end
+function rgba_to_argb(rgba_color)
+    local r = bit32.band(bit32.rshift(rgba_color, 24), 0xFF)
+    local g = bit32.band(bit32.rshift(rgba_color, 16), 0xFF)
+    local b = bit32.band(bit32.rshift(rgba_color, 8), 0xFF)
+    local a = bit32.band(rgba_color, 0xFF)
+    local argb_color = bit32.bor(bit32.lshift(a, 24), bit32.lshift(r, 16), bit32.lshift(g, 8), b)
+    return argb_color
+end
+function join_argb(a, r, g, b)
+    local argb = b 
+    argb = bit.bor(argb, bit.lshift(g, 8))
+    argb = bit.bor(argb, bit.lshift(r, 16))    
+    argb = bit.bor(argb, bit.lshift(a, 24))
+    return argb
+end
+function imguiToRgb(color)
+	return {math.floor(color[0] * 255 + 0.5), math.floor(color[1] * 255 + 0.5), math.floor(color[2] * 255 + 0.5)}
+end
+function explode_argb(argb)
+    local a = bit.band(bit.rshift(argb, 24), 0xFF)
+    local r = bit.band(bit.rshift(argb, 16), 0xFF)
+    local g = bit.band(bit.rshift(argb, 8), 0xFF)
+    local b = bit.band(argb, 0xFF)
+    return a, r, g, b
+end
+function rgba_to_hex(rgba)
+    local r = bit.rshift(rgba, 24) % 256
+    local g = bit.rshift(rgba, 16) % 256
+    local b = bit.rshift(rgba, 8) % 256
+    local a = rgba % 256
+    return string.format("%02X%02X%02X", r, g, b)
+end
+function ARGBtoRGB(color) 
+	return bit.band(color, 0xFFFFFF) 
+end
+function ColorAccentsAdapter(color)
+    local a, r, g, b = explode_argb(color)
+    local ret = {a = a, r = r, g = g, b = b}
+    function ret:apply_alpha(alpha)
+        self.a = alpha
+        return self
+    end
+    function ret:as_u32()
+        return join_argb(self.a, self.b, self.g, self.r)
+    end
+    function ret:as_vec4()
+		local multiplier = (settings.general.transparent or 100) / 100
+		return imgui.ImVec4(self.r / 255, self.g / 255, self.b / 255, (self.a / 255) * multiplier)
+    end
+	function ret:as_vec4_orig()
+		return imgui.ImVec4(self.r / 255, self.g / 255, self.b / 255, self.a / 255)
+    end
+    function ret:as_argb()
+        return join_argb(self.a, self.r, self.g, self.b)
+    end
+    function ret:as_rgba()
+        return join_argb(self.r, self.g, self.b, self.a)
+    end
+    function ret:as_chat()
+        return string.format("%06X", ARGBtoRGB(join_argb(self.a, self.r, self.g, self.b)))
+    end 
+    return ret
+end
+function change_dpi()
+	imgui.PushFont(MODULE.FONT) 
+end
+function getHelperIcon()
+	local HELPER_ICONS = {
+		police   = fa.BUILDING_SHIELD,
+		fbi      = fa.BUILDING_SHIELD,
+		army     = fa.BUILDING_SHIELD,
+		prison   = fa.BUILDING_SHIELD,
+		hospital = fa.HOSPITAL,
+		smi      = fa.BUILDING_NGO,
+		gov      = fa.BUILDING_COLUMNS,
+		fd       = fa.HOTEL,
+		mafia    = fa.TORII_GATE,
+		ghetto   = fa.BUILDING_WHEAT,
+		none     = fa.BUILDING_CIRCLE_XMARK
+	}
+	return HELPER_ICONS[settings.general.fraction_mode] or fa.BUILDING
+end
+function getUserIcon()
+	local USER_ICONS = {
+		police   = fa.USER_NURSE,
+		fbi      = fa.USER_NURSE,
+		army     = fa.PERSON_MILITARY_RIFLE,
+		prison   = fa.PERSON_MILITARY_RIFLE,
+		hospital = fa.USER_DOCTOR,
+		fd       = fa.USER_ASTRONAUT,
+		lc       = fa.USER_TIE,
+		ins      = fa.USER_TIE,
+		mafia    = fa.USER_NINJA,
+		ghetto   = fa.USER_NINJA
+	}
+	return USER_ICONS[settings.general.fraction_mode] or fa.USER
+end
+function insert_to_cursor(insert_text, buffer)
+    local current = ffi.string(buffer)
+    local start
+    local finish
+    if MODULE.INPUT.USER_MOVED_CURSOR then
+        start = MODULE.INPUT.SELECTION_START
+        finish = MODULE.INPUT.SELECTION_END
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Курсор для вставки установлен в конец строчки!', message_color)
+    else
+        start = #current
+        finish = #current
+    end
+    local before = current:sub(1, start)
+    local after = current:sub(finish + 1)
+    local new_text = before .. insert_text .. after
+    imgui.StrCopy(buffer, new_text)
+    local new_cursor = start + #insert_text
+    MODULE.INPUT.CURSOR_POS = new_cursor
+    MODULE.INPUT.SELECTION_START = new_cursor
+    MODULE.INPUT.SELECTION_END = new_cursor
+    MODULE.INPUT.USER_MOVED_CURSOR = false
+end
+--------------------------------------------[ Networking ]----------------------------------------
+function asyncHttpRequest(method, url, args, resolve, reject)
+    local thread_code = [[
+        return function (method, url, args, is_mobile)
+            local requests = require 'requests'
+			if is_mobile then
+				local effil = require 'effil'
+				if type(args) == "userdata" then args = effil.dump(args) end
+			end
+            local result, response = pcall(requests.request, method, url, args)
+            if result then
+                response.json, response.xml = nil, nil
+                return true, response
+            else
+                return false, response
+            end
+        end
+    ]]
+    local thread_func = assert(loadstring(thread_code))()
+    local request_thread = effil.thread(thread_func)(method, url, args, IS_MOBILE)
+    resolve = resolve or function(...) end
+	reject = reject or function(...) end
+    lua_thread.create(function()
+        local runner = request_thread
+        while true do
+            local status, err = runner:status()
+            if not err then
+                if status == 'completed' then
+                    local result, response = runner:get()
+                    if result then
+                        resolve(response)
+                    else
+                        reject(response)
+                    end
+                    return
+                elseif status == 'canceled' then
+                    return reject(status)
+                end
+            else
+                return reject(err)
+            end
+            wait(0)
+        end
+    end)
+end
+------------------------------------------[ PC KEY ACTIONS ]--------------------------------------
+if not IS_MOBILE then
+	function onWindowMessage(msg, wparam, lparam)
+		local function consume_safe()
+			if type(consumeWindowMessage) == 'function' then
+				pcall(consumeWindowMessage, true, false)
+			end
+		end
+		if msg == 0x100 and settings.general.scoreboard then
+			if wparam == VK_TAB and not isKeyDown(VK_TAB) then
+				MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+				consume_safe()
+			end
+		end
+		if msg == 0x101 then
+			if (wparam == VK_ESCAPE and MODULE.Main.Window[0]) then
+				consume_safe()
+				MODULE.Main.Window[0] = false
+			end
+			if (wparam == VK_ESCAPE and MODULE.Scoreboard.Window[0]) then
+				consume_safe()
+				MODULE.Scoreboard.Window[0] = false
+			end
+			if (wparam == 13 and MODULE.SmiEdit.Window[0]) then
+				consume_safe()
+				if MODULE.SmiEdit.input_edit_text then
+					local ok, text = pcall(function()
+						return u8:decode(ffi.string(MODULE.SmiEdit.input_edit_text))
+					end)
+					if ok and text and try_send_ad(text) then MODULE.SmiEdit.Window[0] = false end
+				end
+			end
+		end
+	end
+end
+--------------------------------------------[ Terminate ]------------------------------------------
+function onScriptTerminate(script, game_quit)
+    if script == thisScript() and not game_quit and not reload_script then
+		if MODULE.InfraredVision then setInfraredVision(false) end
+		if MODULE.NightVision then setNightVision(false) end
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Произошла неизвестная ошибка, хелпер приостановил свою работу!', message_color)
+		if not IS_MOBILE then 
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. 'CTRL {ffffff}+ ' .. message_color_hex .. 'R {ffffff}чтобы перезапустить хелпер.', message_color)
+		end
+    end
+end
