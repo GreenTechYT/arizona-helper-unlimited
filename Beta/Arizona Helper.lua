@@ -6629,25 +6629,64 @@ function count_lines_in_text(text, max_length)
 	return tonumber(#lines)
 end
 local function is_html_garbage(path)
-	local f = io.open(path, "rb")
-	if not f then return false end
-	local head = f:read(256) or ""
-	f:close()
-	local s = head:match("^%s*(.*)$") or head
-	return s:sub(1, 1) == "<"
+    local f = io.open(path, 'rb')
+    if not f then return false end
+    local head = f:read(512) or ''
+    f:close()
+    local s = head:match('^%s*(.*)$') or head
+    return s:sub(1, 1) == '<' or s:find('<!DOCTYPE') or s:find('<html', 1, true) or s:find('<HTML', 1, true)
+end
+local function compare_versions(v1, v2)
+    local function parse(v) 
+        local t = {} 
+        for p in v:gmatch('(%d+)') do 
+            table.insert(t, tonumber(p)) 
+        end 
+        return t 
+    end
+    local p1, p2 = parse(v1), parse(v2)
+    for i = 1, math.max(#p1, #p2) do
+        local a, b = p1[i] or 0, p2[i] or 0
+        if a < b then return -1 end
+        if a > b then return 1 end
+    end
+    return 0
+end
+local function reset_update_state()
+	MODULE.Update.downloading = false
+	MODULE.Update.download_start = nil
+	MODULE.Update.download_file = ''
+	MODULE.Update.auto_start_download = false
+end
+function MODULE.Update.start_install()
+	if MODULE.Update.downloading then return end
+	MODULE.Update.print_update_messages(true)
+	MODULE.Update.start_download()
 end
 local DOWNLOAD_HANDLERS = {
-	helper = function()
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка новой версии хелпера успешно завершена! Перезагрузка..', message_color)
+	helper = function(new_path)
+		local old_path = worked_dir .. '/Arizona Helper.lua'
+		local bak_path = old_path .. '.bak'
+		local chunk, err = loadfile(new_path)
+		if not chunk then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обновление отменено: файл повреждён (' .. tostring(err) .. ').', message_color)
+			os.remove(new_path)
+			reset_update_state()
+			return
+		end
+		if doesFileExist(bak_path) then os.remove(bak_path) end
+		if doesFileExist(old_path) then os.rename(old_path, bak_path) end
+		if not os.rename(new_path, old_path) then
+			if doesFileExist(bak_path) then os.rename(bak_path, old_path) end
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка установки обновления: не удалось заменить файл.', message_color)
+			reset_update_state()
+			return
+		end
+		if doesFileExist(bak_path) then os.remove(bak_path) end
+		reset_update_state()
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обновление успешно установлено! Перезагрузка...', message_color)
 		reload_script = true
 		thisScript():reload()
-	end,
-	smart_uk = function()
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи розыска для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() .. '] {ffffff}завершена успешно!', message_color)
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Теперь вы можете использовать команду ' .. message_color_hex .. '/' .. get_custom_cmd('sum') .. ' [ID игрока]', message_color)
-		MODULE.Main.Window[0] = false
-		play_sound()
-		load_module('smart_uk')
 	end,
 	smart_pdd = function()
 		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка системы умной выдачи штрафов для сервера ' .. message_color_hex .. getServerName(getServerNumber()) .. ' [' .. getServerNumber() .. '] {ffffff}завершена успешно!', message_color)
@@ -6677,19 +6716,30 @@ local DOWNLOAD_HANDLERS = {
 		end
 	end,
 }
+local download_lock = false
 function downloadFileFromUrlToPath(url, path, file_key)
+	if download_lock then
+		print('Загрузка заблокирована: уже идёт другая загрузка')
+		return
+	end
+	download_lock = true
 	local function on_finish_download(success)
+		download_lock = false
 		local key = file_key or download_file
-		if key and MODULE.SmartEdit and MODULE.SmartEdit.download_active then MODULE.SmartEdit.download_active[key] = nil end
+		if key == 'helper' and not MODULE.Update.downloading then return end
+		if key and MODULE.SmartEdit and MODULE.SmartEdit.download_active then 
+			MODULE.SmartEdit.download_active[key] = nil 
+		end
 		download_file = ''
 		if not success then
-			if key == 'helper' and MODULE.Update then
-				MODULE.Update.downloading = false
-				MODULE.Update.download_start = nil
-			end
+			if key == 'helper' then reset_update_state() end
 			return
 		end
-		if not doesFileExist(path) then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: файл не был создан при загрузке.', message_color) return end
+		if not doesFileExist(path) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: файл не был создан при загрузке.', message_color)
+			if key == 'helper' then reset_update_state() end
+			return
+		end
 		local f = io.open(path, 'rb')
 		if f then
 			local size = f:seek('end')
@@ -6697,21 +6747,34 @@ function downloadFileFromUrlToPath(url, path, file_key)
 			if size == 0 then
 				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: загруженный файл пустой.', message_color)
 				os.remove(path)
+				if key == 'helper' then reset_update_state() end
 				return
 			end
 		end
-		if is_html_garbage(path) then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: сервер вернул HTML вместо данных. Проверьте URL или попробуйте позже.', message_color) os.remove(path) return end
+		if is_html_garbage(path) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: сервер вернул HTML вместо данных. Проверьте URL или попробуйте позже.', message_color)
+			os.remove(path)
+			if key == 'helper' then reset_update_state() end
+			return
+		end
 		if path:match('%.json$') then
 			local ok, json_data = pcall(function()
-				local f = io.open(path, 'r')
-				if not f then error('cannot open') end
-				local content = f:read('*a')
-				f:close()
+				local jf = io.open(path, 'r')
+				if not jf then error('cannot open') end
+				local content = jf:read('*a')
+				jf:close()
 				return decodeJson(content)
 			end)
-			if not ok or not json_data then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: загруженный файл содержит невалидный JSON.', message_color) os.remove(path) return end
+			if not ok or not json_data then
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: загруженный файл содержит невалидный JSON.', message_color)
+				os.remove(path)
+				return
+			end
 		end
-		if key then local handler = DOWNLOAD_HANDLERS[key] if handler then handler() end end
+		if key then
+			local handler = DOWNLOAD_HANDLERS[key]
+			if handler then handler(path) end
+		end
 	end
 	if IS_MOBILE then
 		local function downloadToFile(u, p)
@@ -6720,8 +6783,8 @@ function downloadFileFromUrlToPath(url, path, file_key)
 			local f, ferr = io.open(p, "wb")
 			if not f then return false, "Не удалось создать файл: " .. tostring(ferr) end
 			local ok, code = http.request{ method = "GET", url = u, sink = ltn12.sink.file(f) }
-			if not ok then f:close(); return false, "Ошибка запроса: " .. tostring(code) end
-			f:close()
+			if not ok then pcall(function() f:close() end); return false, "Ошибка запроса: " .. tostring(code) end
+			pcall(function() f:close() end)
 			if tonumber(code) ~= 200 then return false, "HTTP код: " .. tostring(code) end
 			return true
 		end
@@ -6780,13 +6843,6 @@ function MODULE.Update.show_notice()
 	MODULE.Update.Window[0] = true
 	play_sound()
 end
-function MODULE.Update.start_install()
-	if MODULE.Update.downloading or MODULE.Update.auto_start_download then return end
-	MODULE.Update.print_update_messages(true)
-	MODULE.Update.auto_start_download = true
-	MODULE.Update.popup_opened = false
-	MODULE.Update.start_download()
-end
 function MODULE.Update.print_update_messages(auto_install)
 	sampAddChatMessage(' ', message_color)
 	if auto_install then
@@ -6806,73 +6862,26 @@ function MODULE.Update.print_update_messages(auto_install)
 end
 function MODULE.Update.start_download()
 	if MODULE.Update.downloading then return end
-	MODULE.Update.downloading = true
-	MODULE.Update.download_start = os.time()
-	MODULE.Update.download_file = 'helper'
 	local url = MODULE.Update.url
 	if not url or url == '' then
 		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: URL обновления пустой.', message_color)
-		MODULE.Update.downloading = false
-		MODULE.Update.download_start = nil
 		return
 	end
-	local path = worked_dir .. '/Arizona Helper.lua.new'
+	MODULE.Update.downloading = true
+	MODULE.Update.download_start = os.time()
+	MODULE.Update.download_file = 'helper'
 	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Скачивание обновления...', message_color)
-	local ok, err = pcall(downloadUrlToFile, url, path, function(id, status)
-		if status == 6 then
-			MODULE.Update.on_finish_download(path)
-		elseif status == 4 then
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка скачивания обновления.', message_color)
-			MODULE.Update.downloading = false
-			MODULE.Update.download_start = nil
-			MODULE.Update.download_file = ''
+	downloadFileFromUrlToPath(url, worked_dir .. '/Arizona Helper.lua.new', 'helper')
+	lua_thread.create(function()
+		while MODULE.Update.downloading do
+			wait(1000)
+			if MODULE.Update.download_start and os.time() - MODULE.Update.download_start > 60 then
+				reset_update_state()
+				sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Не удалось загрузить обновление (таймаут). Попробуйте снова.', message_color)
+				break
+			end
 		end
 	end)
-	
-	if not ok then
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка инициализации скачивания: ' .. tostring(err), message_color)
-		MODULE.Update.downloading = false
-		MODULE.Update.download_start = nil
-		MODULE.Update.download_file = ''
-	end
-end
-function MODULE.Update.on_finish_download(new_path)
-	local old_path = worked_dir .. '/Arizona Helper.lua'
-	local bak_path = worked_dir .. '/Arizona Helper.lua.bak'
-	if not doesFileExist(new_path) then
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка: скачанный файл не найден.', message_color)
-		MODULE.Update.downloading = false
-		MODULE.Update.download_start = nil
-		MODULE.Update.download_file = ''
-		return
-	end
-	local chunk, err = loadfile(new_path)
-	if not chunk then
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обновление отменено: файл повреждён (' .. tostring(err) .. ').', message_color)
-		os.remove(new_path)
-		MODULE.Update.downloading = false
-		MODULE.Update.download_start = nil
-		MODULE.Update.download_file = ''
-		return
-	end
-	if doesFileExist(bak_path) then os.remove(bak_path) end
-	if doesFileExist(old_path) then os.rename(old_path, bak_path) end
-	local rok = os.rename(new_path, old_path)
-	if not rok then
-		if doesFileExist(bak_path) then os.rename(bak_path, old_path) end
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка установки обновления: не удалось заменить файл.', message_color)
-	else
-		if doesFileExist(bak_path) then os.remove(bak_path) end
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обновление успешно установлено! Перезагрузка...', message_color)
-		MODULE.Update.downloading = false
-		MODULE.Update.download_start = nil
-		MODULE.Update.download_file = ''
-		thisScript():reload()
-		return
-	end
-	MODULE.Update.downloading = false
-	MODULE.Update.download_start = nil
-	MODULE.Update.download_file = ''
 end
 function cmp_news_ver(a, b)
 	local function pars(v)
@@ -6991,16 +7000,6 @@ function check_update(manual)
 	end
 	print('Проверка на наличие обновлений...')
 	if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Проверка обновлений...', message_color) end
-	local function compare_versions(v1, v2)
-		local function parse(v) local t = {} for p in v:gmatch('(%d+)') do table.insert(t, tonumber(p)) end return t end
-		local p1, p2 = parse(v1), parse(v2)
-		for i = 1, math.max(#p1, #p2) do
-			local a, b = p1[i] or 0, p2[i] or 0
-			if a < b then return -1 end
-			if a > b then return 1 end
-		end
-		return 0
-	end
 	asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(response)
 		local ok, u = pcall(function() return decodeJson(response.text) end)
 		if not ok or type(u) ~= 'table' then
@@ -7012,6 +7011,10 @@ function check_update(manual)
 		local stableVer = tostring(u.stable_version or u.version or "")
 		local betaVer   = tostring(u.beta_version or "")
 		local myVer     = thisScript().version
+		if stableVer == "" and betaVer == "" then
+			if manual then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Сервер не вернул информацию о версиях.', message_color) end
+			isUpdateChecked = true; return
+		end
 		local beta_closed = (u.beta_closed == true) or (betaVer ~= "" and stableVer ~= "" and compare_versions(stableVer, betaVer) >= 0)
 		MODULE.Update.beta_closed    = beta_closed
 		MODULE.Update.stable_version = stableVer
