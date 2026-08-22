@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.5.9.4")
+script_version("1.5.9.5")
 -----------------------------------------------[ INIT ]---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
@@ -851,7 +851,10 @@ function isMode(mode)
 	return settings.general.fraction_mode == mode
 end
 load_settings()
-if migrate_settings(settings) then print('Миграция настроек: ключи перенесены в секции ui/binds.') end
+if migrate_settings(settings) then
+    print('Миграция настроек выполнена.')
+    save_settings()
+end
 merge_defaults(default_settings, settings)
 save_settings()
 -----------------------------------------------[ CHAT ]---------------------------------------------
@@ -1002,7 +1005,7 @@ local modules = {
 		}
 	},
 	members = {
-		name = 'Настройки списка /members',
+		name = 'Настройки /members',
 		path = config_dir .. "/Members.json",
 		data = {
 			custom_members = true,
@@ -1283,34 +1286,34 @@ local modules = {
 		name = 'Кастомные команды',
 		path = config_dir .. "/Custom Commands.json",
 		data = {
-			{ key = 'edgo',     cmd = 'edgo',     description = 'Система пробива личности по ЭБГО', arg = '', text = '', enable = true, editable = true },
-			{ key = 'pnv',      cmd = 'pnv',      description = 'Надеть/снять очки ночного видения', arg = '', text = '/me достаёт из кармана прибор ночного видения и надевает его&/me снимает прибор ночного видения и убирает его в карман', enable = true, editable = true },
-			{ key = 'irv',      cmd = 'irv',      description = 'Надеть/снять инфракрасные очки', arg = '', text = '/me достаёт из кармана инфракрасный визор и надевает его&/me снимает инфракрасный визор и убирает его в карман', enable = true, editable = true },
-			{ key = 'cruise',   cmd = 'cruise',   description = 'Адаптивный круиз-контроль', arg = '', text = '', enable = true, editable = true },
-			{ key = 'frp',      cmd = 'frp',      description = 'Выдать /fractionrp в радиусе', arg = '', text = '', enable = true, editable = true },
-			{ key = 'dep',      cmd = 'dep',      description = 'Рация департамента', arg = '', text = '', enable = true, editable = true },
-			{ key = 'sob',      cmd = 'sob',      description = 'Проведение собеседования', arg = '{id}', text = '', enable = true, editable = true },
-			{ key = 'post',     cmd = 'post',     description = 'Меню системы постов', arg = '', text = '', enable = true, editable = true },
-			{ key = 'zeks',     cmd = 'zeks',     description = 'Меню списка заключенных', arg = '', text = '', enable = true, editable = true },
-			{ key = 'pum',      cmd = 'pum',      description = 'Меню умного повышения срока', arg = '{id}', text = '', enable = true, editable = true },
-			{ key = 'wanteds',  cmd = 'wanteds',  description = 'Меню общего списка /wanted', arg = '', text = '', enable = true, editable = true },
-			{ key = 'patrool',  cmd = 'patrool',  description = 'Меню патрулирования', arg = '', text = '', enable = true, editable = true },
-			{ key = 'sum',      cmd = 'sum',      description = 'Меню умной выдачи розыска', arg = '{id}', text = '', enable = true, editable = true },
-			{ key = 'tsm',      cmd = 'tsm',      description = 'Меню умной выдачи штрафов', arg = '{id}', text = '', enable = true, editable = true },
-			{ key = 'afind',    cmd = 'afind',    description = 'Авто-поиск игрока по GPS', arg = '{id}', text = '/me достал{sex} свой КПК и зайдя в базу данных {fraction_tag} открыл{sex} дело гражданина N{id}&/me нажал{sex} на кнопку GPS отслеживания местоположения гражданина&', waiting = '2', enable = true, editable = true },
-			{ key = 'forensic', cmd = 'forensic', description = 'Меню криминалистических экспертиз', arg = '', text = '', enable = true, editable = true },
+			{ key = 'edgo',     cmd = 'edgo',     description = 'Система пробива личности по ЭБГО', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'pnv',      cmd = 'pnv',      description = 'Надеть/снять очки ночного видения', arg = '', text = '/me достаёт из кармана прибор ночного видения и надевает его&/me снимает прибор ночного видения и убирает его в карман', enable = true, editable = true, bind = "{}"},
+			{ key = 'irv',      cmd = 'irv',      description = 'Надеть/снять инфракрасные очки', arg = '', text = '/me достаёт из кармана инфракрасный визор и надевает его&/me снимает инфракрасный визор и убирает его в карман', enable = true, editable = true, bind = "{}"},
+			{ key = 'cruise',   cmd = 'cruise',   description = 'Адаптивный круиз-контроль', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'frp',      cmd = 'frp',      description = 'Выдать /fractionrp в радиусе', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'dep',      cmd = 'dep',      description = 'Рация департамента', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'sob',      cmd = 'sob',      description = 'Проведение собеседования', arg = '{id}', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'post',     cmd = 'post',     description = 'Меню системы постов', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'zeks',     cmd = 'zeks',     description = 'Меню списка заключенных', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'pum',      cmd = 'pum',      description = 'Меню умного повышения срока', arg = '{id}', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'wanteds',  cmd = 'wanteds',  description = 'Меню общего списка /wanted', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'patrool',  cmd = 'patrool',  description = 'Меню патрулирования', arg = '', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'sum',      cmd = 'sum',      description = 'Меню умной выдачи розыска', arg = '{id}', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'tsm',      cmd = 'tsm',      description = 'Меню умной выдачи штрафов', arg = '{id}', text = '', enable = true, editable = true, bind = "{}"},
+			{ key = 'afind',    cmd = 'afind',    description = 'Авто-поиск игрока по GPS', arg = '{id}', text = '/me достал{sex} свой КПК и зайдя в базу данных {fraction_tag} открыл{sex} дело гражданина N{id}&/me нажал{sex} на кнопку GPS отслеживания местоположения гражданина&', waiting = '2', enable = true, editable = true, bind = "{}"},
+			{ key = 'forensic', cmd = 'forensic', description = 'Меню криминалистических экспертиз', arg = '', text = '', enable = true, editable = true, bind = "{}"},
 			--
-			{ key = 'helper',   cmd = 'helper',   description = 'Открыть меню хелпера', arg = '', text = '', enable = true, editable = false },
-			{ key = 'binder',   cmd = 'binder',   description = 'Открыть биндер команд', arg = '', text = '', enable = true, editable = false },
-			{ key = 'hm',       cmd = 'hm',       description = 'Быстрые RP команды (/hm ID)', arg = '', text = '', enable = true, editable = false },
-			{ key = 'stop',     cmd = 'stop',     description = 'Остановить отыгровку любой RP команды', arg = '', text = '', enable = true, editable = false },
-			{ key = 'fixsize',  cmd = 'fixsize',  description = 'Сбросить размер интерфейса хелпера', arg = '', text = '', enable = true, editable = false },
-			{ key = 'debug',    cmd = 'debug',    description = 'Отслеживание серверных данных', arg = '', text = '', enable = true, editable = false },
-			{ key = 'members',  cmd = 'members',  description = 'Кастомный /members', arg = '', text = '', enable = true, editable = false },
-			{ key = 'wanted',   cmd = 'wanted',   description = 'Алиас для /wanteds', arg = '{arg}', text = '', enable = true, editable = false },
-			{ key = 'lm',       cmd = 'lm',       description = 'Лидерское фастменю (9/10 ранг)', arg = '', text = '', enable = true, editable = false },
-			{ key = 'spcar',    cmd = 'spcar',    description = 'Заспавнить транспорт организации', arg = '', text = '', enable = true, editable = false },
-			{ key = 'fcleaner', cmd = 'fcleaner', description = 'Уволить неактивных членов организации', arg = '{number}', text = '', enable = true, editable = false },
+			{ key = 'helper',   cmd = 'helper',   description = 'Открыть меню хелпера', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'binder',   cmd = 'binder',   description = 'Открыть биндер команд', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'hm',       cmd = 'hm',       description = 'Быстрые RP команды (/hm ID)', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'stop',     cmd = 'stop',     description = 'Остановить отыгровку любой RP команды', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'fixsize',  cmd = 'fixsize',  description = 'Сбросить размер интерфейса хелпера', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'debug',    cmd = 'debug',    description = 'Отслеживание серверных данных', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'members',  cmd = 'members',  description = 'Кастомный /members', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'wanted',   cmd = 'wanted',   description = 'Алиас для /wanteds', arg = '{arg}', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'lm',       cmd = 'lm',       description = 'Лидерское фастменю (9/10 ранг)', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'spcar',    cmd = 'spcar',    description = 'Заспавнить транспорт организации', arg = '', text = '', enable = true, editable = false, bind = "{}"},
+			{ key = 'fcleaner', cmd = 'fcleaner', description = 'Уволить неактивных членов организации', arg = '{number}', text = '', enable = true, editable = false, bind = "{}"},
 		}
 	},
 	piemenu = {
@@ -1319,7 +1322,7 @@ local modules = {
 		data = {}
 	},
 	scoreboard = {
-		name = 'Mimgui ScoreBoard',
+		name = 'Кастомный TAB',
 		path = config_dir .. "/Scoreboard.json",
 		data = {
 			show_actions_menu = true,
@@ -1515,6 +1518,40 @@ for key, m in pairs(modules) do
 	if type(m) == 'table' and type(m.path) == 'string' then
 		m.base_file = m.path:match('([^/\\]+)$') or m.path
 	end
+end
+local function migrate_custom_commands()
+	local m = modules.custom_commands
+	if not m or type(m.data) ~= 'table' then return false end
+	local changed = false
+	for _, item in ipairs(m.data) do
+		if type(item) == 'table' and item.bind == nil then
+			item.bind = '{}'
+			changed = true
+		end
+	end
+	if not changed and doesFileExist(m.path) then
+		local f = io.open(m.path, 'r')
+		if f then
+			local ok, raw = pcall(function() return f:read('*a') end)
+			f:close()
+			if ok and raw then
+				local ok2, file_data = pcall(decodeJson, raw)
+				if ok2 and type(file_data) == 'table' then
+					for _, entry in ipairs(file_data) do
+						if type(entry) == 'table' and entry.bind == nil then
+							changed = true
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+	if changed then
+		save_module('custom_commands')
+		print('Миграция кастомных команд: поле bind добавлено в файл.')
+	end
+	return changed
 end
 -----------------------------------------[ ACCOUNTS SYSTEM ]-------------------------------------
 local ACCOUNTS_BASE = config_dir
@@ -1780,6 +1817,7 @@ function load_modules()
 	load_module('vehicles')
 	load_module('commands')
 	load_module('custom_commands')
+	migrate_custom_commands()
 	load_module('departament')
 	load_module('members')
 	load_module('scoreboard')
@@ -1865,9 +1903,14 @@ if cur_acc then
 end
 if is_setup then load_modules() end
 -------------------------------------------[ CUSTOM COMMANDS ]--------------------------------------
+local custom_cmd_cache = {}
 function get_custom_cmd_data(key)
+    if custom_cmd_cache[key] then return custom_cmd_cache[key] end
     for _, item in ipairs(modules.custom_commands.data) do
-        if item.key == key then return item end
+        if item.key == key then
+            custom_cmd_cache[key] = item
+            return item
+        end
     end
     return nil
 end
@@ -1877,7 +1920,7 @@ function get_custom_cmd(key)
 end
 function is_custom_cmd_enabled(key)
     local data = get_custom_cmd_data(key)
-    return data and data.enable or true
+    return data and data.enable or false
 end
 function get_custom_cmd_text(key, index)
     local data = get_custom_cmd_data(key)
@@ -1893,9 +1936,10 @@ function register_custom_command(key)
 	if not item or not item.enable then return end
 	local name = get_custom_cmd(key)
 	local handler = CUSTOM_CMD_HANDLERS[key]
+	if custom_cmd_cache then custom_cmd_cache = {} end
 	sampRegisterChatCommand(name, function(args)
 		if handler then handler(args) end
-		if item.text and item.text ~= '' and (item.arg or '') == '' then
+		if item.text and item.text ~= '' then
 			run_command_lines(name, item.arg or '', item.text, tonumber(item.waiting) or 2, args)
 		end
 	end)
@@ -2915,7 +2959,7 @@ MODULE.Binder.tags = {
 			return city[getCityPlayerIsIn(PLAYER_PED)]
 		end
 	},
-	-- ТРАНСПОРТ
+	-- Транспорт
 	{
 		key = "get_nearest_car",
 		description = "Ближайший т/с",
@@ -3084,7 +3128,7 @@ MODULE.Binder.tags = {
 		mode = "police",
 		func = function() return format_duration_words(MODULE.Patrool.time) end
 	},
-	-- БОЛЬНИЦА
+	-- Больница
 	{
 		key = "get_price_heal",
 		description = "Цена лечения игрока",
@@ -3492,89 +3536,160 @@ else
 	MODULE.Main.mmcolor[0], MODULE.Main.mmcolor[1], MODULE.Main.mmcolor[2] = color_to_float3(settings.ui.moonmonet_color)
 	save_settings()
 end
--------------------------------------------[ Mimgui Hotkey ]----------------------------------------
+---------------------------------------------------[ Mimgui Hotkey ]---------------------------------------------------
 local hotkeys = {}
 if hotkey_ok and not isMode('') then
-	hotkey.Text.NoKey = u8'< click and select keys >'
-	hotkey.Text.WaitForKey = u8'< wait keys >'
+	hotkey.Text.NoKey = u8'< нажмите клавиши >'
+	hotkey.Text.WaitForKey = u8'< ожидаю нажатие >'
 	function getNameKeysFrom(keys)
 		local result, keys = pcall(decodeJson, keys)
 		if not result or type(keys) ~= 'table' then return '' end
 		local keysStr = {}
 		for _, keyId in ipairs(keys) do
-			local keyName = vkeys_ok and vkeys.id_to_name(keyId) or ''
-			table.insert(keysStr, keyName)
+			local keyName = (vkeys_ok and keyId and vkeys.id_to_name(keyId)) or ''
+			if keyName ~= '' then table.insert(keysStr, keyName) end
 		end
 		return table.concat(keysStr, ' + ') or ''
 	end
-	function loadHotkeys()
-		MainMenuHotKey = hotkey.RegisterHotKey('Open MainMenu', false, decodeJson(settings.binds.mainmenu), function()
-			MODULE.Main.Window[0] = not MODULE.Main.Window[0]
-		end)
-		CommandStopHotKey = hotkey.RegisterHotKey('Stop Command', false, decodeJson(settings.binds.command_stop), function() 
-			sampProcessChatInput('/stop')
-		end)
-		FastMenuHotKey = hotkey.RegisterHotKey('Open FastMenu', false, decodeJson(settings.binds.fastmenu), function() 
-			local valid, ped = getCharPlayerIsTargeting(PLAYER_HANDLE)
-			if valid and doesCharExist(ped) then
-				local result, id = sampGetPlayerIdByCharHandle(ped)
-				if result and id ~= -1 and not MODULE.LeaderFastMenu.Window[0] then
-					show_fast_menu(id)
+	local function get_rp_info(cmd_name)
+		local lists = {
+			modules.commands.data.commands.my,
+			modules.commands.data.commands_manage.my,
+			modules.custom_commands.data
+		}
+		for _, list in ipairs(lists) do
+			for _, cmd in ipairs(list) do
+				if cmd.cmd == cmd_name then
+					return true, cmd.text or "", tonumber(cmd.waiting) or 2, cmd.arg or ""
 				end
 			end
+		end
+		return false, "", 2, ""
+	end
+	function registerCommandHotkey(command)
+		local hotkeyName = command.cmd .. "HotKey"
+		local keys = decodeJson(command.bind or "[]")
+		if type(keys) ~= 'table' then keys = {} end
+		if hotkeys[hotkeyName] then
+			pcall(function() hotkeys[hotkeyName]:UnRegister() end)
+			hotkeys[hotkeyName] = nil
+		end
+		pcall(function() hotkey.RemoveHotKey(hotkeyName) end)
+		local is_rp, cmd_text, cmd_waiting, cmd_arg = get_rp_info(command.cmd)
+		local ok, hk = pcall(hotkey.RegisterHotKey, hotkeyName, false, keys, function()
+			if sampIsCursorActive() then return end
+			if is_rp and cmd_text ~= "" then
+				run_command_lines(command.cmd, cmd_arg, cmd_text, cmd_waiting, "")
+			else
+				sampProcessChatInput('/' .. command.cmd)
+			end
 		end)
-		LeaderFastMenuHotKey = hotkey.RegisterHotKey('Open LeaderFastMenu', false, decodeJson(settings.binds.leader_fastmenu), function() 
-			if modules.player.data.fraction_rank_number >= 9 then 
+		if ok then
+			hotkeys[hotkeyName] = hk
+			return hk
+		end
+		return nil
+	end
+	function createHotkeyForCommand(command)
+		if not hotkey_ok then return end
+		if command.cmd == nil or command.cmd == '' then return end
+		if command.arg ~= "" then return end
+		if command.enable == false then
+			removeHotkeyForCommand(command.cmd)
+			return
+		end
+		if command.bind == nil or command.bind == '{}' or command.bind == '[]' then return end
+		local keys = decodeJson(command.bind)
+		if type(keys) ~= 'table' or #keys == 0 then return end
+		if registerCommandHotkey(command) then
+			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Создан хоткей для команды ' .. message_color_hex .. '/' .. command.cmd .. ' {ffffff}на клавишу ' .. message_color_hex .. getNameKeysFrom(command.bind), message_color)
+		end
+	end
+	function removeHotkeyForCommand(cmd)
+		if not hotkey_ok then return end
+		local hotkeyName = cmd .. "HotKey"
+		if hotkeys[hotkeyName] then
+			pcall(function() hotkeys[hotkeyName]:UnRegister() end)
+			hotkeys[hotkeyName] = nil
+		end
+		pcall(function() hotkey.RemoveHotKey(hotkeyName) end)
+	end
+	function loadHotkeys()
+		local keys = decodeJson(settings.binds.mainmenu)
+		if type(keys) == 'table' and #keys > 0 then
+			local ok, hk = pcall(hotkey.RegisterHotKey, 'Open MainMenu', false, keys, function()
+				MODULE.Main.Window[0] = not MODULE.Main.Window[0]
+			end)
+			if ok then MainMenuHotKey = hk end
+		end
+		keys = decodeJson(settings.binds.command_stop)
+		if type(keys) == 'table' and #keys > 0 then
+			local ok, hk = pcall(hotkey.RegisterHotKey, 'Stop Command', false, keys, function()
+				sampProcessChatInput('/stop')
+			end)
+			if ok then CommandStopHotKey = hk end
+		end
+		keys = decodeJson(settings.binds.fastmenu)
+		if type(keys) == 'table' and #keys > 0 then
+			local ok, hk = pcall(hotkey.RegisterHotKey, 'Open FastMenu', false, keys, function()
 				local valid, ped = getCharPlayerIsTargeting(PLAYER_HANDLE)
 				if valid and doesCharExist(ped) then
 					local result, id = sampGetPlayerIdByCharHandle(ped)
-					if result and id ~= -1 and not MODULE.FastMenu.Window[0] then
-						show_leader_fast_menu(id)
+					if result and id ~= -1 and not MODULE.LeaderFastMenu.Window[0] then
+						show_fast_menu(id)
 					end
 				end
-			end
-		end)
-		ActionHotKey = hotkey.RegisterHotKey('Action Key', false, decodeJson(settings.binds.action), function()
-			if MODULE.Binder.state.isPause and MODULE.CommandPause.Window[0] then
-				MODULE.Binder.state.isPause = false
-				MODULE.CommandPause.Window[0] = false
-			elseif modules.player.data.fraction_rank_number >= 9 and MODULE.GiveRank.Window[0] then
-				MODULE.GiveRank.Window[0] = false
-			elseif MODULE.MedCard.Window[0] then
-				MODULE.MedCard.Window[0] = false
-			elseif MODULE.Recept.Window[0] then
-				MODULE.Recept.Window[0] = false
-			elseif MODULE.Antibiotik.Window[0] then
-				MODULE.Antibiotik.Window[0] = false
-			elseif MODULE.HealChat.bool and MODULE.HealChat.player_id and not sampIsCursorActive() then
-				find_and_use_command("/heal {id}", MODULE.HealChat.player_id)
-				MODULE.HealChat.bool = false
-				MODULE.HealChat.player_id = nil
-			end
-		end)
-		for _, command in ipairs(modules.commands.data.commands.my) do
-			createHotkeyForCommand(command)
-		end
-		for _, command in ipairs(modules.commands.data.commands_manage.my) do
-			createHotkeyForCommand(command)
-		end
-	end
-	function createHotkeyForCommand(command)
-		local hotkeyName = command.cmd .. "HotKey"
-		if hotkeys[hotkeyName] then
-			hotkey.RemoveHotKey(hotkeyName)
-		end
-		if command.arg == "" and command.bind ~= nil and command.bind ~= '{}' and command.bind ~= '[]' then
-			hotkeys[hotkeyName] = hotkey.RegisterHotKey(hotkeyName, false, decodeJson(command.bind), function()
-				if not sampIsCursorActive() then sampProcessChatInput('/' .. command.cmd) end
 			end)
-			print('Создан хоткей для команды /' .. command.cmd .. ' на клавишу ' .. getNameKeysFrom(command.bind))
-			sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Создан хоткей для команды ' .. message_color_hex .. '/' .. command.cmd .. ' {ffffff}на клавишу '  .. message_color_hex .. getNameKeysFrom(command.bind), message_color)
+			if ok then FastMenuHotKey = hk end
 		end
+		keys = decodeJson(settings.binds.leader_fastmenu)
+		if type(keys) == 'table' and #keys > 0 then
+			local ok, hk = pcall(hotkey.RegisterHotKey, 'Open LeaderFastMenu', false, keys, function()
+				if modules.player.data.fraction_rank_number >= 9 then
+					local valid, ped = getCharPlayerIsTargeting(PLAYER_HANDLE)
+					if valid and doesCharExist(ped) then
+						local result, id = sampGetPlayerIdByCharHandle(ped)
+						if result and id ~= -1 and not MODULE.FastMenu.Window[0] then
+							show_leader_fast_menu(id)
+						end
+					end
+				end
+			end)
+			if ok then LeaderFastMenuHotKey = hk end
+		end
+		keys = decodeJson(settings.binds.action)
+		if type(keys) == 'table' and #keys > 0 then
+			local ok, hk = pcall(hotkey.RegisterHotKey, 'Action Key', false, keys, function()
+				if MODULE.Binder and MODULE.Binder.state and MODULE.Binder.state.isPause and MODULE.CommandPause and MODULE.CommandPause.Window[0] then
+					MODULE.Binder.state.isPause = false
+					MODULE.CommandPause.Window[0] = false
+				elseif MODULE.GiveRank and MODULE.GiveRank.Window and MODULE.GiveRank.Window[0] and modules.player.data.fraction_rank_number >= 9 then
+					MODULE.GiveRank.Window[0] = false
+				elseif MODULE.MedCard and MODULE.MedCard.Window and MODULE.MedCard.Window[0] then
+					MODULE.MedCard.Window[0] = false
+				elseif MODULE.Recept and MODULE.Recept.Window and MODULE.Recept.Window[0] then
+					MODULE.Recept.Window[0] = false
+				elseif MODULE.Antibiotik and MODULE.Antibiotik.Window and MODULE.Antibiotik.Window[0] then
+					MODULE.Antibiotik.Window[0] = false
+				elseif MODULE.HealChat and MODULE.HealChat.bool and MODULE.HealChat.player_id and not sampIsCursorActive() then
+					find_and_use_command("/heal {id}", MODULE.HealChat.player_id)
+					MODULE.HealChat.bool = false
+					MODULE.HealChat.player_id = nil
+				end
+			end)
+			if ok then ActionHotKey = hk end
+		end
+		for _, command in ipairs(modules.commands.data.commands.my) do createHotkeyForCommand(command) end
+		for _, command in ipairs(modules.commands.data.commands_manage.my) do createHotkeyForCommand(command) end
+		for _, item in ipairs(modules.custom_commands.data) do createHotkeyForCommand(item) end
 	end
 	addEventHandler('onWindowMessage', function(msg, key, lparam)
-		if msg == 641 or msg == 642 or lparam == -1073741809 then hotkey.ActiveKeys = {} end
-		if msg == 0x0005 then hotkey.ActiveKeys = {} end
+		if msg == 641 or msg == 642 or lparam == -1073741809 then
+			if hotkey.ActiveKeys then hotkey.ActiveKeys = {} end
+		end
+		if msg == 0x0005 then
+			if hotkey.ActiveKeys then hotkey.ActiveKeys = {} end
+		end
 	end)
 end
 ----------------------------------------------[ RP WEAPON  ]------------------------------------------
@@ -4646,7 +4761,6 @@ function main()
 	initialize_commands()
 	initialize_vehicles()
 	initialize_weapon()
-	if hotkey_ok then loadHotkeys() end
 	if IS_MOBILE then render_buttons() end
 	if jit.arch == 'arm' and memory_ok then
 		memory.setint8(MONET_GTASA_BASE + 0x5E49EE, 0x00, true)
@@ -4721,11 +4835,8 @@ function main()
 					end
 				end
 			end	
-			if settings.mj.show_grp_info then getGrpInfo() end
 		end
-		if isMode('hospital') then if settings.mh.show_grp_info then getGrpInfo() end end
-		if isMode('smi') then if settings.smi.show_grp_info then getGrpInfo() end end
-
+		
 		--if isMode('fd') then
 			--if MODULE.Fires.isDialog and MODULE.Fires.dialogId ~= -1 then
 			--local result, button, list, input = sampHasDialogRespond(999)
@@ -4865,22 +4976,16 @@ function welcome_message()
 		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для завершения загрузки хелпера войдите на сервер.', message_color)
 		repeat wait(0) until sampIsLocalPlayerSpawned()
 	end
-
 	sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Загрузка хелпера успешно завершена!', message_color)
 	show_notify('info', 'Arizona Helper', "Загрузка хелпера успешно завершена!", 3000)
 	print('Полная загрузка хелпера успешно завершена!')
-
-	if hotkey_ok and settings.binds.mainmenu then	
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для открытия меню хелпера нажмите ' .. message_color_hex .. getNameKeysFrom(settings.binds.mainmenu) .. ' {ffffff}или используйте команду ' .. message_color_hex .. '/helper', message_color)
-	else
-		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для открытия меню хелпера используйте команду ' .. message_color_hex .. '/helper', message_color)
-	end
-
-	if MODULE.Update then
-		MODULE.Update.can_show = true
-		MODULE.Update.show_notice()
-	end
-
+    if hotkey_ok then loadHotkeys() end
+    if hotkey_ok and settings.binds.mainmenu then
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для открытия меню хелпера нажмите ' .. message_color_hex .. getNameKeysFrom(settings.binds.mainmenu) .. ' {ffffff}или используйте команду ' .. message_color_hex .. '/helper', message_color)
+    else
+        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Для открытия меню хелпера используйте команду ' .. message_color_hex .. '/helper', message_color)
+    end
+	if MODULE.Update then MODULE.Update.can_show = true MODULE.Update.show_notice() end
 	if IS_MOBILE and modules.player.data.nick ~= '' then
 		CHECK_ID = true
 		sampSendChat('/id ' .. modules.player.data.nick)
@@ -4912,9 +5017,9 @@ function run_command_lines(chat_cmd, cmd_arg, cmd_text, cmd_waiting, args)
 		elseif cmd_arg == '{id} {number} {arg}' then
 			if args and args ~= '' then
 				id, number, arg = args:match('(%d+) (%d+) (.+)')
-				if isParamSampID(id) and number and arg then id = tonumber(id); apply_nick_formats(id); modifiedText = modifiedText:gsub('%{id%}', id or ""); modifiedText = modifiedText:gsub('%{number%}', number or ""); modifiedText = modifiedText:gsub('%{arg%}', arg or ""); arg_check = true
-				else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое число] [любое значение]', message_color); play_sound() end
-			else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое число] [любое значение]', message_color); play_sound() end
+				if isParamSampID(id) and number and arg then id = tonumber(id) apply_nick_formats(id) modifiedText = modifiedText:gsub('%{id%}', id or "") modifiedText = modifiedText:gsub('%{number%}', number or "") modifiedText = modifiedText:gsub('%{arg%}', arg or "") arg_check = true
+				else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое число] [любое значение]', message_color) play_sound() end
+			else sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Используйте ' .. message_color_hex .. '/' .. chat_cmd .. ' [ID игрока] [любое число] [любое значение]', message_color) play_sound() end		
 		elseif cmd_arg == '' then
 			arg_check = true
 		end
@@ -6757,6 +6862,7 @@ function MODULE.Update.on_finish_download(new_path)
 		if doesFileExist(bak_path) then os.rename(bak_path, old_path) end
 		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Ошибка установки обновления: не удалось заменить файл.', message_color)
 	else
+		if doesFileExist(bak_path) then os.remove(bak_path) end
 		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Обновление успешно установлено! Перезагрузка...', message_color)
 		MODULE.Update.downloading = false
 		MODULE.Update.download_start = nil
@@ -7288,47 +7394,51 @@ function delete_old_helpers()
     end
 end
 function delete_helper_data(checker)
-    local account_dir = account_dir_for(settings.general.current_account or 'Гостевой')
-	os.remove(ACCOUNTS_BASE .. "/Accounts.json")
-	os.remove(account_dir .. "/Player.json")
-    os.remove(account_dir .. "/Commands.json")
-    os.remove(account_dir .. "/Buttons.json")
-    os.remove(account_dir .. "/Departament.json")
-    os.remove(account_dir .. "/PieMenu.json")
-    os.remove(account_dir .. "/Notes.json")
-    os.remove(account_dir .. "/Weapon.json")
-    os.remove(account_dir .. "/Ads.json")
-    os.remove(account_dir .. "/Update.json")
-    os.remove(account_dir .. "/Crosshair.json")
-    os.remove(account_dir .. "/Scoreboard.json")
-    os.remove(account_dir .. "/SmartUK.json")
-    os.remove(account_dir .. "/SmartPDD.json")
-    os.remove(account_dir .. "/SmartRPTP.json")
-    if checker then
-        settings.general.accounts = settings.general.accounts or { { name = 'Гостевой', is_guest = true } }
-        for _, acc in ipairs(settings.general.accounts) do
-            local dir = account_dir_for(acc.name)
-            if dir ~= ACCOUNTS_BASE then
-                local ok, files = pcall(getDirectoryFiles, dir)
-                if ok and type(files) == 'table' then
-                    for _, f in ipairs(files) do pcall(os.remove, f) end
-                end
-                pcall(removeDirectory, dir)
-            end
-        end
-        os.remove(ACCOUNTS_BASE .. "/Settings.json")
-        os.remove(ACCOUNTS_BASE .. "/Vehicles.json")
-        os.remove(ACCOUNTS_BASE .. "/Resourse/notify.mp3")
-        os.remove(ACCOUNTS_BASE .. "/Resourse/logo.png")
-        os.remove(thisScript().path)
-        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Хелпер полностью удалён из вашего устройства!', message_color)
-        reload_script = true
-        thisScript():unload()
-    else
-        sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Перезагрузка хелпера...', message_color)
-        reload_script = true
-        thisScript():reload()
-    end
+	local data = modules.accounts.data
+	local list = data.list or {}
+	for i = #list, 1, -1 do
+		local acc = list[i]
+		if acc and not acc.is_guest then
+			remove_account_dir(acc.name)
+			table.remove(list, i)
+		end
+	end
+	for key, m in pairs(modules) do
+		if key ~= 'accounts' and type(m) == 'table' and m.base_file then
+			os.remove(ACCOUNTS_BASE .. '/' .. m.base_file)
+		end
+	end
+	local guest
+	for _, acc in ipairs(list) do if acc.is_guest then guest = acc end end
+	if not guest then
+		guest = { name = 'Гостевой', server = 'Arizona', is_guest = true }
+		table.insert(list, 1, guest)
+	end
+	guest.setup_complete = false
+	guest.terms_accepted = false
+	guest.fraction_mode = 'none'
+	guest.use_days, guest.first_use_day, guest.last_use_day, guest.total_seconds = nil, nil, nil, nil
+	data.current = guest.name
+	if checker then
+		os.remove(ACCOUNTS_BASE .. "/Settings.json")
+		os.remove(ACCOUNTS_BASE .. "/Vehicles.json")
+		os.remove(ACCOUNTS_BASE .. "/Resourse/notify.mp3")
+		os.remove(ACCOUNTS_BASE .. "/Resourse/logo.png")
+		os.remove(ACCOUNTS_BASE .. "/Accounts.json")
+		pcall(removeDirectory, ACCOUNTS_BASE .. '/Resourse')
+		pcall(removeDirectory, ACCOUNTS_BASE)
+		os.remove(worked_dir .. '/.Arizona Helper Handler.lua')
+		os.remove(worked_dir .. '/Arizona Helper.lua')
+		os.remove(thisScript().path)
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Хелпер полностью удалён с вашего устройства!', message_color)
+		reload_script = true
+		thisScript():unload()
+	else
+		save_module('accounts')
+		sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Перезагрузка хелпера...', message_color)
+		reload_script = true
+		thisScript():reload()
+	end
 end
 if isMode('police') or isMode('fbi') then
 	function form_su(name, playerID, message)
@@ -9544,16 +9654,7 @@ local function hash_password(s)
 end
 ---------------------------------------------[ MAIN GUI ]--------------------------------------------
 imgui.OnFrame(
-    function()
-        local acc = find_account(modules.accounts.data.current)
-        local is_setup = acc and acc.setup_complete == true
-        local has_nick = modules.player.data.nick and modules.player.data.nick ~= ''
-        if not is_setup or not has_nick then
-            MODULE.Main.Window[0] = false
-            return false
-        end
-        
-        return MODULE.Main.Window[0]
+    function() return MODULE.Main.Window[0]
     end,
 	function(player)
 		MODULE.Main.cmd_search = MODULE.Main.cmd_search or imgui.new.char[128]()
@@ -9877,8 +9978,13 @@ imgui.OnFrame(
 									if imgui.SmallButton((item.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##cc_' .. index) then
 										item.enable = not item.enable
 										save_module('custom_commands')
-										if item.enable then register_custom_command(item.key)
-										else sampUnregisterChatCommand(item.cmd) end
+										if item.enable then
+											register_custom_command(item.key)
+											createHotkeyForCommand(item)
+										else
+											sampUnregisterChatCommand(item.cmd)
+											removeHotkeyForCommand(item.cmd)
+										end
 									end
 									if imgui.IsItemHovered() then imgui.SetTooltip(u8((item.enable and "Отключение команды /" or "Включение команды /") .. item.cmd)) end
 									imgui.SameLine()
@@ -9892,9 +9998,11 @@ imgui.OnFrame(
 										elseif item.arg == '{id}' then arg_idx = 2
 										elseif item.arg == '{id} {arg}' then arg_idx = 3
 										elseif item.arg == '{id} {number} {arg}' then arg_idx = 4 end
+										if item.bind == nil then item.bind = "[]"; save_module('custom_commands') end
 										MODULE.CustomCmdEdit.index = index
 										MODULE.CustomCmdEdit.key = item.key
 										MODULE.CustomCmdEdit.original_cmd = item.cmd
+										MODULE.CustomCmdEdit.change_bind = item.bind
 										MODULE.CustomCmdEdit.input_cmd = imgui.new.char[256](ok_cmd and enc_cmd or item.cmd)
 										MODULE.CustomCmdEdit.input_text = imgui.new.char[8192](ok_txt and enc_txt or text_raw)
 										MODULE.CustomCmdEdit.input_description = imgui.new.char[256](ok_desc and enc_desc or item.description)
@@ -10003,6 +10111,10 @@ imgui.OnFrame(
 									if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование стандартной команды ' .. fa.PEN_TO_SQUARE .. '##cc_edit_popup_' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
 										change_dpi()
 										local edit = MODULE.CustomCmdEdit
+										local stb = imgui.GetStyle()
+										local btn_count = IS_MOBILE and 4 or 5
+										local btn_w = (imgui.GetContentRegionAvail().x - (btn_count - 1) * stb.ItemSpacing.x) / btn_count
+										local btn_h = 25 * settings.ui.dpi
 										if imgui.BeginChild('##cc_edit', imgui.ImVec2(589 * settings.ui.dpi, 361 * settings.ui.dpi), true) then
 											imgui.CenterText(fa.FILE_LINES .. u8' Описание команды (нельзя изменить):')
 											imgui.PushItemWidth(579 * settings.ui.dpi)
@@ -10035,10 +10147,10 @@ imgui.OnFrame(
 											end
 											imgui.EndChild()
 										end
-										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cc_cancel', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then imgui.CloseCurrentPopup() end
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cc_cancel', imgui.ImVec2(btn_w, btn_h)) then imgui.CloseCurrentPopup() end
 										imgui.SameLine()
-										if imgui.Button(fa.CLOCK .. u8' Задержка##cc_wait', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then imgui.OpenPopup(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##cc') end
-										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+									if imgui.Button(fa.CLOCK .. u8' Задержка##cc_wait', imgui.ImVec2(btn_w, btn_h)) then imgui.OpenPopup(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##cc') end
+									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 										if imgui.BeginPopupModal(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##cc', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
 											imgui.PushItemWidth(250 * settings.ui.dpi)
 											imgui.SliderFloat(u8'##cc_waiting', edit.waiting_slider, 0.3, 10)
@@ -10049,7 +10161,7 @@ imgui.OnFrame(
 											imgui.End()
 										end
 										imgui.SameLine()
-										if imgui.Button(fa.TAGS .. u8' Теги##cc_tags', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then imgui.OpenPopup(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##cc') end
+										if imgui.Button(fa.TAGS .. u8' Теги##cc_tags', imgui.ImVec2(btn_w, btn_h)) then imgui.OpenPopup(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##cc') end
 										imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 										if imgui.BeginPopupModal(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##cc', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
 											if imgui.BeginChild("cc_taglist", imgui.ImVec2(589 * settings.ui.dpi, 361 * settings.ui.dpi), true) then
@@ -10082,8 +10194,69 @@ imgui.OnFrame(
 											if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##cc_tags_close', imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then imgui.CloseCurrentPopup() end
 											imgui.End()
 										end
+										if not IS_MOBILE then
+											imgui.SameLine()
+											if imgui.Button(fa.KEYBOARD .. u8' Забиндить##cc_bind', imgui.ImVec2(btn_w, btn_h)) then
+												if item.arg == '' then
+													if hotkey_ok then
+														if hotkey.HotKeyIsEdit ~= nil then hotkey.HotKeyIsEdit = nil end
+														imgui.OpenPopup(fa.KEYBOARD .. u8' Бинд для команды /' .. (ffi.string(edit.input_cmd)) .. '##cc_bind_popup_' .. index)
+													else
+														sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Данная функция недоступна: отсутствуют файлы библиотеки mimgui_hotkeys!', message_color)
+													end
+												else
+													sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Бинд доступен только для команд без аргументов.', message_color)
+												end
+											end
+											imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+											if imgui.BeginPopupModal(fa.KEYBOARD .. u8' Бинд для команды /' .. (ffi.string(edit.input_cmd)) .. '##cc_bind_popup_' .. index, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
+												local hkName = item.cmd .. "HotKey"
+												local hotkeyObject = hotkeys[hkName] or (hotkey_ok and registerCommandHotkey(item) or nil)
+												if hotkeyObject then
+													imgui.CenterText(u8('Клавиша активации бинда:'))
+													local st2 = imgui.GetStyle()
+													local label
+													if hotkey.HotKeyIsEdit then
+														label = hotkey.Text.WaitForKey
+													elseif edit.change_bind and edit.change_bind ~= '{}' and edit.change_bind ~= '[]' then
+														label = u8(getNameKeysFrom(edit.change_bind))
+													else
+														label = hotkey.Text.NoKey
+													end
+													local calc = imgui.CalcTextSize(label)
+													local btnW = calc.x + 2 * st2.FramePadding.x
+													imgui.SetCursorPosX((imgui.GetWindowWidth() - btnW) / 2)
+													if hotkeyObject:ShowHotKey() then
+														edit.change_bind = encodeJson(hotkeyObject:GetHotKey())
+														item.bind = edit.change_bind
+														save_module('custom_commands')
+														registerCommandHotkey(item)
+													end
+													local has_bind = not (edit.change_bind == nil or edit.change_bind == '{}' or edit.change_bind == '[]')
+													if has_bind then
+														imgui.SameLine()
+														if imgui.SmallButton(fa.TRASH_CAN .. '##cc_unbind_' .. index) then
+															edit.change_bind = "[]"
+															item.bind = "[]"
+															save_module('custom_commands')
+															removeHotkeyForCommand(item.cmd)
+														end
+														if imgui.IsItemHovered() then imgui.SetTooltip(u8'Снять бинд с команды') end
+													end
+												else
+													imgui.CenterTextDisabled(hotkey.Text.NoKey)
+												end
+												imgui.Separator()
+												if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##cc_bind_close_' .. index, imgui.ImVec2(300 * settings.ui.dpi, 30 * settings.ui.dpi)) then
+													if hotkey.HotKeyIsEdit ~= nil then hotkey.HotKeyIsEdit = nil end
+													imgui.CloseCurrentPopup()
+												end
+												imgui.End()
+											end
+										end
 										imgui.SameLine()
-										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##cc_save', imgui.ImVec2(imgui.GetMiddleButtonX(4), 0)) then
+										imgui.SameLine()
+										if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##cc_save', imgui.ImVec2(btn_w, btn_h)) then
 											local new_cmd = ffi.string(edit.input_cmd)
 											if new_cmd:find("[^%w_]") or new_cmd == '' then
 												imgui.OpenPopup(fa.TRIANGLE_EXCLAMATION .. u8' Ошибка сохранения команды ' .. fa.TRIANGLE_EXCLAMATION .. '##cc')
@@ -10091,21 +10264,37 @@ imgui.OnFrame(
 												local old_cmd = edit.original_cmd or item.cmd
 												new_cmd = u8:decode(new_cmd)
 												local text_value = ffi.string(edit.input_text)
-												local has_id = text_value:find("{id}"); local has_arg = text_value:find("{arg}"); local has_number = text_value:find("{number}")
+												local has_id = text_value:find("{id}") or text_value:find("%{id%}")
+												local has_arg = text_value:find("{arg}") or text_value:find("%{arg%}")
+												local has_number = text_value:find("{number}") or text_value:find("%{number%}")
 												local new_arg = ''
-												if has_number or edit.ComboTags[0] == 4 then new_arg = '{id} {number} {arg}'
-												elseif (has_id and has_arg) or edit.ComboTags[0] == 3 then new_arg = '{id} {arg}'
-												elseif has_id or edit.ComboTags[0] == 2 then new_arg = '{id}'
-												elseif has_arg or edit.ComboTags[0] == 1 then new_arg = '{arg}'
-												else new_arg = '' end
-												item.cmd = new_cmd
+												if edit.ComboTags[0] == 4 or (has_id and has_number and has_arg) then 
+													new_arg = '{id} {number} {arg}'
+												elseif edit.ComboTags[0] == 3 or (has_id and has_arg) then 
+													new_arg = '{id} {arg}'
+												elseif edit.ComboTags[0] == 2 or (has_id and not has_arg and not has_number) then 
+													new_arg = '{id}'
+												elseif edit.ComboTags[0] == 1 or (has_arg and not has_id) then 
+													new_arg = '{arg}'
+												elseif edit.ComboTags[0] == 0 or (not has_id and not has_arg and not has_number) then 
+													new_arg = ''
+												end
 												item.arg = new_arg
+												item.cmd = new_cmd
 												item.text = u8:decode(text_value):gsub('\n', '&')
 												item.waiting = string.format('%.1f', edit.waiting_slider[0])
+												item.bind = edit.change_bind or "[]"
 												save_module('custom_commands')
+												custom_cmd_cache = {}
 												sampUnregisterChatCommand(old_cmd)
 												if old_cmd ~= new_cmd then sampUnregisterChatCommand(new_cmd) end
-												register_custom_command(edit.key)
+												if item.enable then
+													register_custom_command(edit.key)
+												end
+												if not IS_MOBILE and hotkey_ok then
+													if old_cmd ~= new_cmd then removeHotkeyForCommand(old_cmd) end
+													createHotkeyForCommand(item)
+												end
 												local sig_text = ''
 												if new_arg == '{arg}' then sig_text = ' [аргумент]'
 												elseif new_arg == '{id}' then sig_text = ' [ID игрока]'
@@ -10418,6 +10607,10 @@ imgui.OnFrame(
 							imgui.SetNextWindowSize(imgui.ImVec2(600 * settings.ui.dpi, 425 * settings.ui.dpi), imgui.Cond.FirstUseEver)
 							if imgui.BeginPopupModal(fa.PEN_TO_SQUARE .. u8' Редактирование команды ' .. fa.PEN_TO_SQUARE .. popup_id, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
 								change_dpi()
+								local stb = imgui.GetStyle()
+								local btn_count = IS_MOBILE and 4 or 5
+								local btn_w = (imgui.GetContentRegionAvail().x - (btn_count - 1) * stb.ItemSpacing.x) / btn_count
+								local btn_h = 25 * settings.ui.dpi
 								if imgui.BeginChild('##binder_edit' .. popup_id, imgui.ImVec2(589 * settings.ui.dpi, 361 * settings.ui.dpi), true) then
 									imgui.CenterText(fa.FILE_LINES .. u8' Описание команды:')
 									imgui.PushItemWidth(579 * settings.ui.dpi)
@@ -10445,9 +10638,9 @@ imgui.OnFrame(
 									imgui.InputTextMultiline("##binder_text" .. popup_id, MODULE.Binder.input_text, 8192, imgui.ImVec2(579 * settings.ui.dpi, 173 * settings.ui.dpi), imgui.InputTextFlags.CallbackAlways + imgui.InputTextFlags.CallbackCompletion, TextEditCallback)
 									imgui.EndChild()
 								end
-								if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##binder_cancel' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then imgui.CloseCurrentPopup() end
+								if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##binder_cancel' .. popup_id, imgui.ImVec2(btn_w, btn_h)) then imgui.CloseCurrentPopup() end
 								imgui.SameLine()
-								if imgui.Button(fa.CLOCK .. u8' Задержка##binder_wait' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then imgui.OpenPopup(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##binder_wait' .. popup_id) end
+								if imgui.Button(fa.CLOCK .. u8' Задержка##binder_wait' .. popup_id, imgui.ImVec2(btn_w, btn_h)) then imgui.OpenPopup(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##binder_wait' .. popup_id) end
 								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 								if imgui.BeginPopupModal(fa.CLOCK .. u8' Задержка (в секундах) ' .. fa.CLOCK .. '##binder_wait' .. popup_id, _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
 									imgui.PushItemWidth(250 * settings.ui.dpi)
@@ -10456,10 +10649,10 @@ imgui.OnFrame(
 									if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##binder_wait_cancel' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then MODULE.Binder.waiting_slider = imgui.new.float(tonumber(MODULE.Binder.data.change_waiting)); imgui.CloseCurrentPopup() end
 									imgui.SameLine()
 									if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##binder_wait_save' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(2), 0)) then imgui.CloseCurrentPopup() end
-									imgui.End()
+									imgui.EndPopup()
 								end
 								imgui.SameLine()
-								if imgui.Button(fa.TAGS .. u8' Теги##binder_tags' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then imgui.OpenPopup(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##binder_tags' .. popup_id) end
+								if imgui.Button(fa.TAGS .. u8' Теги##binder_tags' .. popup_id, imgui.ImVec2(btn_w, btn_h)) then imgui.OpenPopup(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##binder_tags' .. popup_id) end
 								imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 								if imgui.BeginPopupModal(fa.TAGS .. u8' Теги для использования в биндере ' .. fa.TAGS .. '##binder_tags' .. popup_id, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
 									if imgui.BeginChild("binder_taglist" .. popup_id, imgui.ImVec2(589 * settings.ui.dpi, 361 * settings.ui.dpi), true) then
@@ -10490,11 +10683,11 @@ imgui.OnFrame(
 									end
 									imgui.Separator()
 									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_tags_close' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(1), 0)) then imgui.CloseCurrentPopup() end
-									imgui.End()
+									imgui.EndPopup()
 								end
 								if not IS_MOBILE then
 									imgui.SameLine()
-									if imgui.Button(fa.KEYBOARD .. u8' Забиндить##binder_bind' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(5), 0)) then
+									if imgui.Button(fa.KEYBOARD .. u8' Забиндить##binder_bind' .. popup_id, imgui.ImVec2(btn_w, btn_h)) then
 										if MODULE.Binder.ComboTags[0] == 0 then
 											if hotkey_ok then
 												if hotkey.HotKeyIsEdit ~= nil then hotkey.HotKeyIsEdit = nil end
@@ -10508,31 +10701,65 @@ imgui.OnFrame(
 									end
 									imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 									if imgui.BeginPopupModal(fa.KEYBOARD .. u8' Бинд для команды /' .. MODULE.Binder.data.change_cmd .. '##binder_bind' .. popup_id, _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar + imgui.WindowFlags.AlwaysAutoResize) then
-										local hotkeyObject = hotkeys[MODULE.Binder.data.change_cmd .. "HotKey"]
+										local hkName = MODULE.Binder.data.change_cmd .. "HotKey"
+										local temp_cmd = {cmd = MODULE.Binder.data.change_cmd, arg = MODULE.Binder.data.change_arg, bind = MODULE.Binder.data.change_bind, enable = true}
+										local hotkeyObject = hotkeys[hkName] or (hotkey_ok and registerCommandHotkey(temp_cmd) or nil)
 										if hotkeyObject then
 											imgui.CenterText(u8('Клавиша активации бинда:'))
-											local calc
-											if MODULE.Binder.data.change_bind == '{}' or MODULE.Binder.data.change_bind == '[]' then calc = imgui.CalcTextSize('< click and select keys >')
-											elseif MODULE.Binder.data.change_bind == nil then MODULE.Binder.data.change_bind = {}
-											else calc = imgui.CalcTextSize(getNameKeysFrom(MODULE.Binder.data.change_bind)) end
-											local width = imgui.GetWindowWidth()
-											local temp = (calc and calc.x and calc.x / 2) or 0
-											imgui.SetCursorPosX(width / 2 - temp)
-											if hotkeyObject:ShowHotKey() then MODULE.Binder.data.change_bind = encodeJson(hotkeyObject:GetHotKey()) end
+											local st2 = imgui.GetStyle()
+											local label
+											if hotkey.HotKeyIsEdit then
+												label = hotkey.Text.WaitForKey
+											elseif MODULE.Binder.data.change_bind and MODULE.Binder.data.change_bind ~= '{}' and MODULE.Binder.data.change_bind ~= '[]' then
+												label = u8(getNameKeysFrom(MODULE.Binder.data.change_bind))
+											else
+												label = hotkey.Text.NoKey
+											end
+											local calc = imgui.CalcTextSize(label)
+											local btnW = calc.x + 2 * st2.FramePadding.x
+											imgui.SetCursorPosX((imgui.GetWindowWidth() - btnW) / 2)
+											if hotkeyObject:ShowHotKey() then
+												MODULE.Binder.data.change_bind = encodeJson(hotkeyObject:GetHotKey())
+												local arr = (MODULE.Binder.data.create_command_9_10) and modules.commands.data.commands_manage.my or modules.commands.data.commands.my
+												for _, c2 in ipairs(arr) do
+													if c2.cmd == MODULE.Binder.data.change_cmd and c2.arg == MODULE.Binder.data.change_arg then
+														c2.bind = MODULE.Binder.data.change_bind
+														break
+													end
+												end
+												save_module('commands')
+												temp_cmd.bind = MODULE.Binder.data.change_bind
+												registerCommandHotkey(temp_cmd)
+											end
+											local has_bind = not (MODULE.Binder.data.change_bind == nil or MODULE.Binder.data.change_bind == '{}' or MODULE.Binder.data.change_bind == '[]')
+											if has_bind then
+												imgui.SameLine()
+												if imgui.SmallButton(fa.TRASH_CAN .. '##binder_unbind' .. popup_id) then
+													MODULE.Binder.data.change_bind = "[]"
+													removeHotkeyForCommand(MODULE.Binder.data.change_cmd)
+													local arr = (MODULE.Binder.data.create_command_9_10) and modules.commands.data.commands_manage.my or modules.commands.data.commands.my
+													for _, c2 in ipairs(arr) do
+														if c2.cmd == MODULE.Binder.data.change_cmd and c2.arg == MODULE.Binder.data.change_arg then
+															c2.bind = "[]"
+														end
+													end
+													save_module('commands')
+												end
+												if imgui.IsItemHovered() then imgui.SetTooltip(u8'Снять бинд с команды') end
+											end
 										else
-											if not MODULE.Binder.data.change_bind then MODULE.Binder.data.change_bind = {} end
-											hotkeys[MODULE.Binder.data.change_cmd .. "HotKey"] = hotkey.RegisterHotKey(MODULE.Binder.data.change_cmd .. "HotKey", false, decodeJson(MODULE.Binder.data.change_bind), function()
-												if not sampIsCursorActive() then sampProcessChatInput('/' .. MODULE.Binder.data.change_cmd) end
-											end)
-											hotkeyObject = hotkeys[MODULE.Binder.data.change_cmd .. "HotKey"]
+											imgui.CenterTextDisabled(hotkey.Text.NoKey)
 										end
 										imgui.Separator()
-										if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_bind_close' .. popup_id, imgui.ImVec2(300 * settings.ui.dpi, 30 * settings.ui.dpi)) then imgui.CloseCurrentPopup() end
-										imgui.End()
+										if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_bind_close' .. popup_id, imgui.ImVec2(300 * settings.ui.dpi, 30 * settings.ui.dpi)) then
+											if hotkey.HotKeyIsEdit ~= nil then hotkey.HotKeyIsEdit = nil end
+											imgui.CloseCurrentPopup()
+										end
+										imgui.EndPopup()
 									end
 								end
 								imgui.SameLine()
-								if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##binder_save' .. popup_id, imgui.ImVec2(imgui.GetMiddleButtonX(IS_MOBILE and 4 or 5), 0)) then
+								if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить##binder_save' .. popup_id, imgui.ImVec2(btn_w, btn_h)) then
 									local cmd = ffi.string(MODULE.Binder.input_cmd)
 									local desc = ffi.string(MODULE.Binder.input_description)
 									local text_value = ffi.string(MODULE.Binder.input_text)
@@ -10548,6 +10775,7 @@ imgui.OnFrame(
 										else new_arg = '' end
 										local new_command = u8:decode(ffi.string(MODULE.Binder.input_cmd))
 										local temp_array = (MODULE.Binder.data.create_command_9_10) and modules.commands.data.commands_manage.my or modules.commands.data.commands.my
+										local found_cmd = nil
 										for _, command2 in ipairs(temp_array) do
 											if command2.cmd == MODULE.Binder.data.change_cmd and command2.arg == MODULE.Binder.data.change_arg and command2.text:gsub('&', '\n') == MODULE.Binder.data.change_text then
 												command2.cmd = new_command
@@ -10556,18 +10784,26 @@ imgui.OnFrame(
 												command2.text = u8:decode(ffi.string(MODULE.Binder.input_text)):gsub('\n', '&')
 												command2.bind = MODULE.Binder.data.change_bind
 												command2.waiting = MODULE.Binder.waiting_slider[0]
-												command2.enable = true
+												found_cmd = command2
 												save_module('commands')
 												if command2.arg == '' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' {ffffff}успешно сохранена!', message_color)
 												elseif command2.arg == '{arg}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [аргумент] {ffffff}успешно сохранена!', message_color)
 												elseif command2.arg == '{id}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [ID игрока] {ffffff}успешно сохранена!', message_color)
 												elseif command2.arg == '{id} {arg}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [ID игрока] [аргумент] {ffffff}успешно сохранена!', message_color)
 												elseif command2.arg == '{id} {number} {arg}' then sampAddChatMessage(CHAT_PREFIX .. ' {ffffff}Команда ' .. message_color_hex .. '/' .. new_command .. ' [ID игрока] [число] [аргумент] {ffffff}успешно сохранена!', message_color) end
-												if MODULE.Binder.data.change_cmd ~= 'afind' then sampUnregisterChatCommand(MODULE.Binder.data.change_cmd) end
-												register_command(command2.cmd, command2.arg, command2.text, tonumber(command2.waiting))
-												if not IS_MOBILE then createHotkeyForCommand(command2) end
 												break
 											end
+										end
+										if not IS_MOBILE and hotkey_ok and found_cmd then
+											local old_cmd = MODULE.Binder.data.change_cmd
+											if old_cmd ~= new_command then
+												local oldHk = hotkeys[old_cmd .. "HotKey"]
+												if oldHk then
+													pcall(function() oldHk:UnRegister() end)
+													hotkeys[old_cmd .. "HotKey"] = nil
+												end
+											end
+											createHotkeyForCommand(found_cmd)
 										end
 										imgui.CloseCurrentPopup()
 									end
@@ -10580,9 +10816,9 @@ imgui.OnFrame(
 									if ffi.string(MODULE.Binder.input_text) == '' then imgui.BulletText(u8" Бинд команды не может быть пустой!") end
 									imgui.Separator()
 									if imgui.Button(fa.CIRCLE_XMARK .. u8' Закрыть##binder_error_close' .. popup_id, imgui.ImVec2(400 * settings.ui.dpi, 25 * settings.ui.dpi)) then imgui.CloseCurrentPopup() end
-									imgui.End()
+									imgui.EndPopup()
 								end
-								imgui.End()
+								imgui.EndPopup()
 							end
 						end
 						imgui.PushItemWidth(-1)
@@ -10630,8 +10866,13 @@ imgui.OnFrame(
 									if imgui.SmallButton((command.enable and fa.TOGGLE_ON or fa.TOGGLE_OFF) .. '##' .. index) then
 										command.enable = not command.enable
 										save_module('commands')
-										if command.enable then register_command(command.cmd, command.arg, command.text, tonumber(command.waiting))
-										else sampUnregisterChatCommand(command.cmd) end
+										if command.enable then
+											register_command(command.cmd, command.arg, command.text, tonumber(command.waiting))
+											createHotkeyForCommand(command)
+										else
+											sampUnregisterChatCommand(command.cmd)
+											removeHotkeyForCommand(command.cmd)
+										end
 									end
 									if imgui.IsItemHovered() then imgui.SetTooltip(u8((command.enable and "Отключение команды /" or "Включение команды /") .. command.cmd)) end
 									imgui.SameLine()
@@ -10644,7 +10885,7 @@ imgui.OnFrame(
 										MODULE.Binder.data = {
 											change_waiting = command.waiting, change_cmd = command.cmd,
 											change_text = command.text:gsub('&', '\n'), change_arg = command.arg,
-											change_bind = command.bind, create_command_9_10 = isManage
+											change_bind = command.bind or "{}", create_command_9_10 = isManage
 										}
 										MODULE.Binder.input_description = imgui.new.char[256](u8(command.description))
 										MODULE.Binder.input_cmd = imgui.new.char[256](u8(command.cmd))
@@ -11540,7 +11781,7 @@ imgui.OnFrame(
 							settings.general.news_likes[key] = (vote == 'like') and nil or 'like'
 							save_settings()
 						end
-						if imgui.IsItemHovered() then imgui.SetTooltip(u8(vote == 'like' and 'Вам нравится эта новость (клик - убрать лайк)' or 'Лайкнуть новость')) end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8(vote == 'like' and 'Вам нравится эта новость' or 'Лайкнуть новость')) end
 						if vote == 'like' then imgui.PopStyleColor() end
 						imgui.SameLine()
 						if vote == 'dislike' then imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.9, 0.2, 0.2, 1)) end
@@ -11548,7 +11789,7 @@ imgui.OnFrame(
 							settings.general.news_likes[key] = (vote == 'dislike') and nil or 'dislike'
 							save_settings()
 						end
-						if imgui.IsItemHovered() then imgui.SetTooltip(u8(vote == 'dislike' and 'Вам не нравится эта новость (клик - убрать дизлайк)' or 'Дизлайкнуть новость')) end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8(vote == 'dislike' and 'Вам не нравится эта новость' or 'Дизлайкнуть новость')) end
 						if vote == 'dislike' then imgui.PopStyleColor() end
 						imgui.Separator()
 						if n.image and n.image ~= '' then
@@ -12661,8 +12902,13 @@ imgui.OnFrame(
 					imgui.Separator()
 					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_restore', imgui.ImVec2(200 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
 					imgui.SameLine()
-					if imgui.Button(fa.CLOCK_ROTATE_LEFT .. u8' Сбросить##yes_restore', imgui.ImVec2(200 * dpi, 25 * dpi)) then delete_helper_data() end
-					imgui.End()
+					if imgui.Button(fa.CLOCK_ROTATE_LEFT .. u8' Сбросить##yes_restore', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+						imgui.CloseCurrentPopup()
+						delete_helper_data()
+						reload_script = true
+						thisScript():reload()
+					end
+					imgui.EndPopup()
 				end
 				imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
 				if imgui.BeginPopupModal(fa.TRIANGLE_EXCLAMATION .. u8' Предупреждение ' .. fa.TRIANGLE_EXCLAMATION .. '##delete_helper', _, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
@@ -12672,8 +12918,12 @@ imgui.OnFrame(
 					imgui.Separator()
 					if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##cancel_delete_helper', imgui.ImVec2(200 * dpi, 25 * dpi)) then imgui.CloseCurrentPopup() end
 					imgui.SameLine()
-					if imgui.Button(fa.TRASH_CAN .. u8' Удалить##delete_helper', imgui.ImVec2(200 * dpi, 25 * dpi)) then delete_helper_data(true) end
-					imgui.End()
+					if imgui.Button(fa.TRASH_CAN .. u8' Удалить##delete_helper', imgui.ImVec2(200 * dpi, 25 * dpi)) then
+						imgui.CloseCurrentPopup()
+						delete_helper_data(true)
+						thisScript():unload()
+					end
+					imgui.EndPopup()
 				end
 				imgui.EndTabItem()
 			end
@@ -13481,7 +13731,7 @@ function firs_render_assist_gui()
 		end
 		imgui.PopItemWidth()
 		imgui.Separator()
-		imgui.Text(u8('Текущая задержка: ') .. (settings.general.aflip_domkrat_delay or 5) .. u8(' сек.'))
+		imgui.TextDisabled(u8('Текущая задержка: ') .. (settings.general.aflip_domkrat_delay or 5) .. u8(' сек.'))
 		imgui.Separator()
 		if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.ui.dpi, 25 * settings.ui.dpi)) then
 			imgui.CloseCurrentPopup()
@@ -13528,8 +13778,12 @@ function firs_render_assist_gui()
 			local decoded_input = u8:decode(ffi.string(MODULE.RPWeapon.input_search))
 			for index, value in ipairs(modules.weapon.data.rp_weapon) do
 				if decoded_input == '' or (value.name and value.name:upper():find(decoded_input:upper())) or value.id == tonumber(decoded_input) then
+					local enabled = value.enable
+					if not enabled then
+						imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.5, 0.5, 0.5, 0.6))
+					end
 					imgui.Columns(3)
-					if value.enable then
+					if enabled then
 						if imgui.CenterColumnSmallButton(fa.SQUARE_CHECK .. u8'  (работает)##' .. index, imgui.ImVec2(imgui.GetMiddleButtonX(5), 0)) then
 							value.enable = not value.enable
 							save_module('weapon')
@@ -13541,7 +13795,11 @@ function firs_render_assist_gui()
 						end
 					end
 					imgui.NextColumn()
-					imgui.CenterColumnText('[' .. value.id .. '] ' .. u8(value.name))
+					if enabled then
+						imgui.CenterColumnText('[' .. value.id .. '] ' .. u8(value.name))
+					else
+						imgui.CenterColumnTextDisabled('[' .. value.id .. '] ' .. u8(value.name))
+					end
 					imgui.SameLine()
 					if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##weapon_name' .. index) then
 						_G.weapon_input = imgui.new.char[256]()
@@ -13570,7 +13828,11 @@ function firs_render_assist_gui()
 					elseif value.rpTake == 2 then position = 'Карман'
 					elseif value.rpTake == 3 then position = 'Пояс'
 					elseif value.rpTake == 4 then position = 'Кобура' end
-					imgui.CenterColumnText(u8(position))
+					if enabled then
+						imgui.CenterColumnText(u8(position))
+					else
+						imgui.CenterColumnTextDisabled(u8(position))
+					end
 					imgui.SameLine()
 					if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##weapon_position' .. index) then
 						MODULE.RPWeapon.ComboTags[0] = value.rpTake - 1
@@ -13592,6 +13854,7 @@ function firs_render_assist_gui()
 						imgui.EndPopup()
 					end
 					imgui.Columns(1)
+					if not enabled then imgui.PopStyleColor() end
 					imgui.Separator()
 				end
 			end
@@ -13614,52 +13877,110 @@ function firs_render_assist_gui()
 			smg = true, sniper = false, smoke = true, shield = true, spikes = false, pistol = 'de',
 		}
 		local c = settings.general.armory
+		c.pistol = c.pistol or 'de'
 		MODULE.Armory._b = MODULE.Armory._b or {}
-		if not MODULE.Armory._pistol_buf then MODULE.Armory._pistol_buf = imgui.new.int(c.pistol == 'stun' and 1 or 0) end
-		local function cb(key, label, tip)
+		local weapons_on = c.auto_armory ~= false
+		local pistol_on  = c.pistol ~= 'none'
+		local gray = imgui.ImVec4(0.5, 0.5, 0.5, 0.6)
+		if not MODULE.Armory._pistol_buf then MODULE.Armory._pistol_buf = imgui.new.int(-1) end
+		if not MODULE.Armory._pistol_on then MODULE.Armory._pistol_on = imgui.new.bool(pistol_on) end
+		local function cb(key, label, tip, disabled)
 			if not MODULE.Armory._b[key] then MODULE.Armory._b[key] = imgui.new.bool(c[key] and true or false) end
+			local off = disabled or not MODULE.Armory._b[key][0]
+			if off then
+				imgui.PushStyleColor(imgui.Col.Text, gray)
+				imgui.PushStyleColor(imgui.Col.CheckMark, gray)
+			end
 			imgui.Checkbox(label .. '##arm_' .. key, MODULE.Armory._b[key])
-			c[key] = MODULE.Armory._b[key][0]
-			if tip and imgui.IsItemHovered() then imgui.SetTooltip(u8(tip)) end
+			if disabled then
+				MODULE.Armory._b[key][0] = c[key] and true or false
+			else
+				c[key] = MODULE.Armory._b[key][0]
+			end
+			if off then imgui.PopStyleColor(2) end
+			if tip and imgui.IsItemHovered() then
+				imgui.SetTooltip(u8(tip .. (disabled and ' (недоступно)' or '')))
+			end
 		end
 		local colW = 150 * settings.ui.dpi
-		local colH = 205 * settings.ui.dpi
-
+		local colH = 225 * settings.ui.dpi
 		if imgui.BeginChild('##arm_col1', imgui.ImVec2(colW, colH), false) then
 			imgui.Text((fa.USER or fa.CIRCLE_INFO) .. u8' Раздевалка')
 			cb('auto_locker', u8'Авто-вход', 'Авто в раздевалке. По умолчанию ВЫКЛ.')
-			cb('mask', u8'Маска МО', 'Только при форме S.W.A.T.')
-			cb('swat', u8'Форма S.W.A.T.')
+			cb('swat', u8'Форма S.W.A.T.', 'Без формы маска МО недоступна.')
+			cb('mask', u8'Маска МО', 'Только при форме S.W.A.T.', c.swat ~= true)
 			cb('bodycam', u8'Бодикамера')
 			cb('objects', u8'Набор объектов')
 			cb('heals', u8'Рабочая аптечка')
+			imgui.EndChild()
 		end
-		imgui.EndChild()
 		imgui.SameLine()
 		if imgui.BeginChild('##arm_col2', imgui.ImVec2(colW, colH), false) then
 			imgui.Text((fa.GUN or fa.CIRCLE_INFO) .. u8' Оружие')
 			cb('auto_armory', u8'Авто-взятие', 'Брать оружие при открытии оружейной.')
-			cb('vest', u8'Бронежилет')
-			imgui.Text(u8'Пистолет:')
-			if imgui.RadioButtonIntPtr(u8' DE ', MODULE.Armory._pistol_buf, 0) then c.pistol = 'de' end
+			cb('vest', u8'Бронежилет', nil, not weapons_on)
+			if not weapons_on then
+				imgui.PushStyleColor(imgui.Col.Text, gray)
+				imgui.PushStyleColor(imgui.Col.CheckMark, gray)
+			end
+			local pistol_off = (not weapons_on) or not MODULE.Armory._pistol_on[0]
+			if pistol_off then
+				imgui.PushStyleColor(imgui.Col.Text, gray)
+				imgui.PushStyleColor(imgui.Col.CheckMark, gray)
+			end
+			if imgui.Checkbox(u8'Пистолет##arm_pistol_on', MODULE.Armory._pistol_on) then
+				if weapons_on then
+					if MODULE.Armory._pistol_on[0] then
+						c.pistol = (MODULE.Armory._last_pistol and MODULE.Armory._last_pistol ~= 'none') and MODULE.Armory._last_pistol or 'de'
+					else
+						MODULE.Armory._last_pistol = c.pistol
+						c.pistol = 'none'
+					end
+				end
+			end
+			if not weapons_on then
+				MODULE.Armory._pistol_on[0] = pistol_on
+			end
+			if pistol_off then imgui.PopStyleColor(2) end
+			pistol_on = c.pistol ~= 'none'
+			if not weapons_on then
+				MODULE.Armory._pistol_on[0] = pistol_on
+				imgui.PopStyleColor(2)
+			end
+			pistol_on = c.pistol ~= 'none'
+			local radio_off = (not weapons_on) or (not pistol_on)
+			if radio_off then
+				imgui.PushStyleColor(imgui.Col.Text, gray)
+				imgui.PushStyleColor(imgui.Col.CheckMark, gray)
+			end
+			if imgui.RadioButtonIntPtr(u8' DE ', MODULE.Armory._pistol_buf, 0) then
+				if not radio_off then c.pistol = 'de' end
+			end
 			imgui.SameLine()
-			if imgui.RadioButtonIntPtr(u8' Оглуш. ', MODULE.Armory._pistol_buf, 1) then c.pistol = 'stun' end
-			cb('taser', u8'Тазер')
-			cb('baton', u8'Дубинка')
-			cb('rifle', u8'Автомат M4')
+			if imgui.RadioButtonIntPtr(u8' Оглуш. ', MODULE.Armory._pistol_buf, 1) then
+				if not radio_off then c.pistol = 'stun' end
+			end
+			MODULE.Armory._pistol_buf[0] = (pistol_on and weapons_on) and ((c.pistol == 'stun') and 1 or 0) or -1
+			if radio_off then imgui.PopStyleColor(2) end
+			if radio_off and imgui.IsItemHovered() then
+				imgui.SetTooltip(u8'Пистолет не берётся: включите его (или авто-взятие).')
+			end
+			cb('taser', u8'Тазер', nil, not weapons_on)
+			cb('baton', u8'Дубинка', nil, not weapons_on)
+			cb('rifle', u8'Автомат M4', nil, not weapons_on)
+			imgui.EndChild()
 		end
-		imgui.EndChild()
 		imgui.SameLine()
 		if imgui.BeginChild('##arm_col3', imgui.ImVec2(colW, colH), false) then
 			imgui.Text((fa.BOX or fa.CIRCLE_INFO) .. u8' Снаряжение')
-			cb('shotgun', u8'Дробовик')
-			cb('smg', u8'MP5')
-			cb('sniper', u8'Снайперка')
-			cb('smoke', u8'Дымовые')
-			cb('shield', u8'Щит')
-			cb('spikes', u8'Шипы')
+			cb('shotgun', u8'Дробовик', nil, not weapons_on)
+			cb('smg', u8'MP5', nil, not weapons_on)
+			cb('sniper', u8'Снайперка', nil, not weapons_on)
+			cb('smoke', u8'Дымовые', nil, not weapons_on)
+			cb('shield', u8'Щит', nil, not weapons_on)
+			cb('spikes', u8'Шипы', nil, not weapons_on)
+			imgui.EndChild()
 		end
-		imgui.EndChild()
 		imgui.Separator()
 		if imgui.Button(fa.FLOPPY_DISK .. u8' Сохранить', imgui.ImVec2(-1, 25 * settings.ui.dpi)) then
 			save_settings()
@@ -13713,8 +14034,8 @@ function render_fractions_functions()
 						true
 					)
 					render_assist_item(
-						"Действия для завершения ГРП [-FPS]",
-						"Показывает информацию о действиях которые нужно сделать для завершения Случайной Ситуации.\nВНИМАНИЕ! Функция влияет на FPS, включайте только во время ГРП!",
+						"Действия для завершения ГРП",
+						"Показывает информацию о действиях которые нужно сделать для завершения Случайной Ситуации.",
 						settings.mj,
 						"show_grp_info"
 					)
@@ -14010,8 +14331,8 @@ function render_fractions_functions()
 						true
 					)
 					render_assist_item(
-						"Действия для завершения ГРП [-FPS]",
-						"Показывает информацию о действиях которые нужно сделать для завершения Случайной Ситуации.\nВНИМАНИЕ! Функция влияет на FPS, включайте только во время ГРП!",
+						"Действия для завершения ГРП",
+						"Показывает информацию о действиях которые нужно сделать для завершения Случайной Ситуации.",
 						settings.smi,
 						"show_grp_info"
 					)
@@ -14135,8 +14456,8 @@ function render_fractions_functions()
 						function() imgui.OpenPopup(fa.KIT_MEDICAL .. u8' Режим лечения игроков ' .. fa.KIT_MEDICAL) end
 					)
 					render_assist_item(
-						"Действия для завершения ГРП [-FPS]",
-						"Показывает информацию о действиях которые нужно сделать для завершения Случайной Ситуации.\nВНИМАНИЕ! Функция влияет на FPS, включайте только во время ГРП!",
+						"Действия для завершения ГРП",
+						"Показывает информацию о действиях которые нужно сделать для завершения Случайной Ситуации.",
 						settings.mh,
 						"show_grp_info"
 					)
@@ -14372,7 +14693,7 @@ function render_fractions_functions()
 				imgui.SliderInt('##zeks_update_period', MODULE.Zeks.update_period_slider, 5, 60)
 				imgui.PopItemWidth()
 				imgui.Separator()
-				imgui.Text(u8('Текущая задержка: ') .. (settings.gov.zeks_update_period or 10) .. u8(' сек.'))
+				imgui.TextDisabled(u8('Текущая задержка: ') .. (settings.gov.zeks_update_period or 10) .. u8(' сек.'))
 				imgui.Separator()
 				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена', imgui.ImVec2(150 * settings.ui.dpi, 25 * settings.ui.dpi)) then
 					imgui.CloseCurrentPopup()
@@ -16891,40 +17212,100 @@ if isMode('smi') then
 	)
 end
 if isMode('police') or isMode('fbi') or isMode('smi') or isMode('hospital') then
-	function getGrpInfo()
-		local now = os.clock() * 1000
-		if now - MODULE.GrpInfo.last_update < MODULE.GrpInfo.update_interval then
-			if MODULE.GrpInfo.npc_toheal > 0 or MODULE.GrpInfo.npc_tocar > 0 or 
-			MODULE.GrpInfo.zavals > 0 or MODULE.GrpInfo.cars > 0 then
-				local dpi = settings.ui.dpi
-				renderFontDrawText(font, string.format('[ Вылечить %d ] [ Носилки %d ] [ Завалы %d ] [ Штрафстоянка %d ]', MODULE.GrpInfo.npc_toheal, MODULE.GrpInfo.npc_tocar, MODULE.GrpInfo.zavals, MODULE.GrpInfo.cars), sizeX / 2.8, sizeY - 50 * dpi, 0xFFFFFFFF)
-			end
-			return
+	MODULE.GrpInfo = MODULE.GrpInfo or {}
+	MODULE.GrpInfo.npc_toheal = 0
+	MODULE.GrpInfo.npc_tocar = 0
+	MODULE.GrpInfo.zavals = 0
+	MODULE.GrpInfo.cars = 0
+	MODULE.GrpInfo.checker = false
+	MODULE.GrpInfo.last_update = 0
+	MODULE.GrpInfo.update_interval = 1000
+	local V_HEAL = {'чтобы вылечить'}
+	local V_TOC = {'на носилки'}
+	local V_ZAV = {'Завалы'}
+	local V_CAR = {'Транспорт для эвакуации'}
+	local function has_any(text, variants)
+		for i = 1, #variants do
+			if text:find(variants[i], 1, true) then return true end
 		end
-		MODULE.GrpInfo.npc_toheal = 0
-		MODULE.GrpInfo.npc_tocar = 0
-		MODULE.GrpInfo.zavals = 0
-		MODULE.GrpInfo.cars = 0
-		local max_texts = sampGetMax3dTexts and sampGetMax3dTexts() or 2048
-		for i = 0, max_texts - 1 do
-			if sampIs3dTextDefined(i) then
-				local text = sampGet3dTextInfoById(i)
-				if text and type(text) == "string" then
-					if text:find('чтобы вылечить', 1, true) then MODULE.GrpInfo.npc_toheal = MODULE.GrpInfo.npc_toheal + 1
-					elseif text:find('на носилки', 1, true) then MODULE.GrpInfo.npc_tocar = MODULE.GrpInfo.npc_tocar + 1
-					elseif text:find('Завалы', 1, true) then MODULE.GrpInfo.zavals = MODULE.GrpInfo.zavals + 1
-					elseif text:find('Транспорт для эвакуации', 1, true) then MODULE.GrpInfo.cars = MODULE.GrpInfo.cars + 1
-					end
-				end
-			end
-		end
-		MODULE.GrpInfo.last_update = now
-		if MODULE.GrpInfo.npc_toheal > 0 or MODULE.GrpInfo.npc_tocar > 0 or 
-		MODULE.GrpInfo.zavals > 0 or MODULE.GrpInfo.cars > 0 then
-			local dpi = settings.ui.dpi
-			renderFontDrawText(font, string.format('[ Вылечить %d ] [ Носилки %d ] [ Завалы %d ] [ Штрафстоянка %d ]', MODULE.GrpInfo.npc_toheal, MODULE.GrpInfo.npc_tocar, MODULE.GrpInfo.zavals, MODULE.GrpInfo.cars), sizeX / 2.8, sizeY - 50 * dpi, 0xFFFFFFFF)
-		end
+		return false
 	end
+	local function grp_info_enabled()
+		if isMode('hospital') then return settings.mh.show_grp_info == true end
+		if isMode('smi') then return settings.smi.show_grp_info == true end
+		return settings.mj.show_grp_info == true
+	end
+	lua_thread.create(function()
+		while true do
+			wait(1000)
+			if not grp_info_enabled() then
+				MODULE.GrpInfo.checker = false
+			else
+				pcall(function()
+					local now = os.clock() * 1000
+					if now - MODULE.GrpInfo.last_update < MODULE.GrpInfo.update_interval then return end
+					local heal, tocar, zavals, cars = 0, 0, 0, 0
+					local max_texts = sampGetMax3dTexts and sampGetMax3dTexts() or 2048
+					for i = 0, max_texts - 1 do
+						if sampIs3dTextDefined(i) then
+							local text = sampGet3dTextInfoById(i)
+							if type(text) == 'string' and text ~= '' then
+								if has_any(text, V_HEAL) then
+									heal = heal + 1
+								elseif has_any(text, V_TOC) then
+									tocar = tocar + 1
+								elseif has_any(text, V_ZAV) then
+									zavals = zavals + 1
+								elseif has_any(text, V_CAR) then
+									cars = cars + 1
+								end
+							end
+						end
+					end
+					MODULE.GrpInfo.npc_toheal = heal
+					MODULE.GrpInfo.npc_tocar = tocar
+					MODULE.GrpInfo.zavals = zavals
+					MODULE.GrpInfo.cars = cars
+					MODULE.GrpInfo.checker = (heal + tocar + zavals + cars) > 0
+					MODULE.GrpInfo.last_update = now
+				end)
+			end
+		end
+	end)
+	imgui.OnFrame(
+		function() return grp_info_enabled() and MODULE.GrpInfo.checker == true end,
+		function(player)
+			settings.windows_pos.grp_info = settings.windows_pos.grp_info or { x = sizeX / 2 - 150, y = 80 }
+			local dpi = settings.ui.dpi
+			local pad = 5 * dpi
+			local s_heal = fa.USER .. u8(' Вылечить: ') .. u8(tostring(MODULE.GrpInfo.npc_toheal))
+			local s_toc = fa.HOSPITAL .. u8(' Носилки: ') .. u8(tostring(MODULE.GrpInfo.npc_tocar))
+			local s_zav = fa.MOUNTAIN .. u8(' Завалы: ') .. u8(tostring(MODULE.GrpInfo.zavals))
+			local s_car = fa.CAR_SIDE .. u8(' Штрафстоянка: ') .. u8(tostring(MODULE.GrpInfo.cars))
+			local left_w = math.max(imgui.CalcTextSize(s_heal).x, imgui.CalcTextSize(s_zav).x) + 10 * dpi
+			local win_w = left_w + math.max(imgui.CalcTextSize(s_toc).x, imgui.CalcTextSize(s_car).x) + pad * 2
+			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.grp_info.x, settings.windows_pos.grp_info.y), imgui.Cond.FirstUseEver)
+			pcall(function()
+				imgui.SetNextWindowSizeConstraints(imgui.ImVec2(win_w, 0), imgui.ImVec2(win_w, sizeY))
+			end)
+			imgui.Begin(getHelperIcon() .. u8" Arizona Helper Unlimited " .. getHelperIcon() .. '##grp_info_menu', _,
+				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoScrollbar)
+			change_dpi()
+			safery_disable_cursor(player)
+			imgui.Text(s_heal)
+			imgui.SameLine(left_w + pad)
+			imgui.Text(s_toc)
+			imgui.Text(s_zav)
+			imgui.SameLine(left_w + pad)
+			imgui.Text(s_car)
+			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+			if posX ~= settings.windows_pos.grp_info.x or posY ~= settings.windows_pos.grp_info.y then
+				settings.windows_pos.grp_info = { x = posX, y = posY }
+				save_settings()
+			end
+			imgui.End()
+		end
+	)
 end
 if isMode('gov') then
 	imgui.OnFrame(
@@ -17030,12 +17411,8 @@ imgui.OnFrame(
 		end
 		local check = false
 		for _, command in ipairs(modules.commands.data.commands.my) do
-			if command.enable and command.arg == '{id}' and command.in_fastmenu then
-				if imgui.Button(u8(command.description), imgui.ImVec2(290 * settings.ui.dpi, 30 * settings.ui.dpi)) then
-					sampProcessChatInput("/" .. command.cmd .. " " .. MODULE.FastMenu.player_id)
-					MODULE.FastMenu.Window[0] = false
-				end
-				check = true
+			if command.enable ~= false then
+				register_command(command.cmd, command.arg, command.text, tonumber(command.waiting))
 			end
 		end
 		if not check then
