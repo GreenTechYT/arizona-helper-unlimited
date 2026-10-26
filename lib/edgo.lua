@@ -1,3 +1,4 @@
+-- LIB_VERSION: 1.0
 local function setup(ctx)
 	ctx = ctx or {}
 	local u8 = ctx.u8
@@ -6,7 +7,7 @@ local function setup(ctx)
 	local settings = ctx.settings
 	local modules = ctx.modules
 	if not (u8 and ffi and MODULE and settings and modules) then
-		print('[EDGO] lib/edgo.lua: РЅРµ РїРµСЂРµРґР°РЅС‹ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё (u8, ffi, MODULE, settings, modules)')
+		print('[EDGO] lib/edgo.lua: не переданы зависимости (u8, ffi, MODULE, settings, modules)')
 		return
 	end
 	local function edgo_lower(s)
@@ -24,7 +25,7 @@ local function setup(ctx)
 	local function edgo_is_fbi()
 		if type(isMode) == "function" and isMode("fbi") then return true end
 		local fr, ft = modules.player.data.fraction, modules.player.data.fraction_tag
-		return ft == "Р¤Р‘Р " or fr == "FBI" or fr == "Р¤Р‘Р "
+		return ft == "ФБР" or fr == "FBI" or fr == "ФБР"
 	end
 	local function edgo_go_phone()
 		local b = MODULE.Edgo.badge
@@ -59,11 +60,11 @@ local function setup(ctx)
 	end
 	function MODULE.Edgo.validate(d)
 		if d.online then
-			if not d.id then return false, 'Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ ID РёРіСЂРѕРєР°.' end
-			if not sampIsPlayerConnected(d.id) then return false, 'РРіСЂРѕРє СЃ ID ' .. d.id .. ' РЅРµ РІ СЃРµС‚Рё (СЂРµР¶РёРј Online).' end
+			if not d.id then return false, 'Введите корректный ID игрока.' end
+			if not sampIsPlayerConnected(d.id) then return false, 'Игрок с ID ' .. d.id .. ' не в сети (режим Online).' end
 		else
 			if d.nick == '' and d.year == '' and d.org == '' and d.rank == '' and d.phone == '' and d.status == '' then
-				return false, 'Р РµР¶РёРј Offline: Р·Р°РїРѕР»РЅРёС‚Рµ С…РѕС‚СЏ Р±С‹ РѕРґРЅРѕ РїРѕР»Рµ.'
+				return false, 'Режим Offline: заполните хотя бы одно поле.'
 			end
 		end
 		return true
@@ -72,7 +73,7 @@ local function setup(ctx)
 		if d.online then
 			return format_nick_for_rp(sampGetPlayerNickname(d.id))
 		else
-			return (d.nick ~= '' and format_nick_for_rp(d.nick)) or '(РїРѕ РґР°РЅРЅС‹Рј РїР°СЃРїРѕСЂС‚Р°)'
+			return (d.nick ~= '' and format_nick_for_rp(d.nick)) or '(по данным паспорта)'
 		end
 	end
 	function MODULE.Edgo.ru_name(d)
@@ -89,8 +90,8 @@ local function setup(ctx)
 		return format_nick_for_rp(nick)
 	end
 	local function rp_sex()
-		local f = modules.player.data.sex == "Р–РµРЅС‰РёРЅР°"
-		return (f and "Р°" or ""), (f and "Р»Р°" or "С‘Р»")
+		local f = modules.player.data.sex == "Женщина"
+		return (f and "а" or ""), (f and "ла" or "ёл")
 	end
 	function MODULE.Edgo.say(line) table.insert(MODULE.Edgo.rp_queue, { line = line }) end
 	function MODULE.Edgo.done() table.insert(MODULE.Edgo.rp_queue, { done = true }) end
@@ -127,24 +128,24 @@ local function setup(ctx)
 		return name
 	end
 	local RP_START_LINES = {
-		bodycam_offline = 	'/me Р·Р°РіСЂСѓР·РёР»%s РІ РљРџРљ СЃРѕС…СЂР°РЅС‘РЅРЅСѓСЋ Р·Р°РїРёСЃСЊ РЅР°С‚РµР»СЊРЅРѕР№ РєР°РјРµСЂС‹ Рё РїРµСЂРµРґР°Р»%s С„СЂР°РіРјРµРЅС‚ РЅР° РѕРїРѕР·РЅР°РЅРёРµ РїРѕ Р°СЂС…РёРІСѓ Р­Р‘Р“Рћ.',
+		bodycam_offline = 	'/me загрузил%s в КПК сохранённую запись нательной камеры и передал%s фрагмент на опознание по архиву ЭБГО.',
 		bodycam_online = {
-							'/me РґРѕСЃС‚Р°Р»%s РёР· РЅР°С‚РµР»СЊРЅРѕР№ РєР°РјРµСЂС‹ SD-РЅР°РєРѕРїРёС‚РµР»СЊ Рё, РІСЃС‚Р°РІРёРІ РµРіРѕ РІ РљРџРљ, СЃРёСЃС‚РµРјР° Р·Р°РїСЂРѕСЃРёР»Р° РѕР±СЉРµРєС‚ РѕРїРѕР·РЅР°РЅРёСЏ.',
-							'/me РїСЂРѕРІРµРґСЏ РїР°Р»СЊС†РµРј РїРѕ СЌРєСЂР°РЅСѓ, РІС‹РґРµР»РёР»%s Р»РёС†Рѕ С‡РµР»РѕРІРµРєР° РЅР° С„СЂР°РіРјРµРЅС‚Рµ Рё РїРµСЂРµРґР°Р»%s РµРіРѕ РЅР° РѕРїРѕР·РЅР°РЅРёРµ РІ Р­Р‘Р“Рћ.',
+							'/me достал%s из нательной камеры SD-накопитель и, вставив его в КПК, система запросила объект опознания.',
+							'/me проведя пальцем по экрану, выделил%s лицо человека на фрагменте и передал%s его на опознание в ЭБГО.',
 		},
 		voiced = {
-							'/me РІС‹С€%s РІ СЌС„РёСЂ СЂР°С†РёРё РґРµРїР°СЂС‚Р°РјРµРЅС‚Р° Рё РїРѕР»СѓС‡РёР»%s Р·Р°РїРёСЃСЊ РїРµСЂРµРіРѕРІРѕСЂРѕРІ.',
-							'/me Р·Р°РіСЂСѓР·РёР»%s РѕР±СЂР°Р·РµС† РіРѕР»РѕСЃР° РІ Р­Р‘Р“Рћ Рё Р·Р°РїСѓСЃС‚РёР»%s РёРґРµРЅС‚РёС„РёРєР°С†РёСЋ.',
+							'/me выш%s в эфир рации департамента и получил%s запись переговоров.',
+							'/me загрузил%s образец голоса в ЭБГО и запустил%s идентификацию.',
 		},	
-		voice = 			'/me Р·Р°РіСЂСѓР·РёР»%s РІ Р­Р‘Р“Рћ СЃРѕС…СЂР°РЅС‘РЅРЅС‹Р№ РѕР±СЂР°Р·РµС† РіРѕР»РѕСЃР° Рё Р·Р°РїСѓСЃС‚РёР»%s РїРѕРёСЃРє СЃРѕРІРїР°РґРµРЅРёР№ РїРѕ Р±Р°Р·Рµ.',
-		unsu =				'/me Р·Р°РїСЂРѕСЃРёР»%s Сѓ РґРёСЃРїРµС‚С‡РµСЂР° РґР°РЅРЅС‹Рµ Рѕ СЃРЅСЏС‚РёРё СЂРѕР·С‹СЃРєР° СЃ РіСЂР°Р¶РґР°РЅРёРЅР° Рё, РїРѕР»СѓС‡РёРІ РёС…, Р·Р°РїСѓСЃС‚РёР»%s РїСЂРѕР±РёРІ РїРѕ Р±Р°Р·Рµ.',
-		offline = 			'/me РІСЂСѓС‡РЅСѓСЋ РІРІС‘Р»%s РІ СЃРёСЃС‚РµРјСѓ РёРјРµСЋС‰РёРµСЃСЏ РґР°РЅРЅС‹Рµ Рё Р·Р°РїСЂРѕСЃРёР»%s СЃРІРµСЂРєСѓ РїРѕ Р°СЂС…РёРІСѓ Р­Р‘Р“Рћ.',
-		online = 			'/me РѕС‚РєСЂС‹Р»%s РІ СЃРёСЃС‚РµРјРµ Р­Р‘Р“Рћ СЂР°Р·РґРµР» СЃРѕС‚СЂСѓРґРЅРёРєРѕРІ РѕСЂРіР°РЅРёР·Р°С†РёР№ Рё Р·Р°РїСѓСЃС‚РёР»%s РїРѕРёСЃРє РїРѕ Р±Р°Р·Рµ.',
+		voice = 			'/me загрузил%s в ЭБГО сохранённый образец голоса и запустил%s поиск совпадений по базе.',
+		unsu =				'/me запросил%s у диспетчера данные о снятии розыска с гражданина и, получив их, запустил%s пробив по базе.',
+		offline = 			'/me вручную ввёл%s в систему имеющиеся данные и запросил%s сверку по архиву ЭБГО.',
+		online = 			'/me открыл%s в системе ЭБГО раздел сотрудников организаций и запустил%s поиск по базе.',
 	}
 	function MODULE.Edgo.rp_start(mode, who, offline)
 		if not settings.mj.edgo_rp_enabled then return end
 		local p, g = rp_sex()
-		MODULE.Edgo.say('/me РґРѕСЃС‚Р°Р»'..p..' РёР· РєР°СЂРјР°РЅР° СЃР»СѓР¶РµР±РЅС‹Р№ РљРџРљ Рё, РІРєР»СЋС‡РёРІ РµРіРѕ, РЅР° РґРёСЃРїР»РµРµ РѕС‚РѕР±СЂР°Р·РёР»Р°СЃСЊ СЃРёСЃС‚РµРјР° "Р­Р‘Р“Рћ".')
+		MODULE.Edgo.say('/me достал'..p..' из кармана служебный КПК и, включив его, на дисплее отобразилась система "ЭБГО".')
 		local lines
 		if mode == 'bodycam' then lines = offline and RP_START_LINES.bodycam_offline or RP_START_LINES.bodycam_online
 		elseif mode == 'voiced' then lines = RP_START_LINES.voiced
@@ -173,7 +174,7 @@ local function setup(ctx)
 	end
 	function MODULE.Edgo.start_unsu(arg)
 		if MODULE.Edgo.badge.active or MODULE.Binder.state.isActive then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ СѓР¶Рµ РёРґС‘С‚, РґРѕР¶РґРёС‚РµСЃСЊ Р·Р°РІРµСЂС€РµРЅРёСЏ.', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив уже идёт, дождитесь завершения.', message_color); play_sound(); return
 		end
 		local d = { online = false, id = -1 }
 		if type(arg) == 'number' then
@@ -186,13 +187,13 @@ local function setup(ctx)
 			end
 		end
 		if not d.online then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РРіСЂРѕРє РЅРµ РІ СЃРµС‚Рё. РСЃРїРѕР»СЊР·СѓР№С‚Рµ Offline-РїСЂРѕР±РёРІ СЃ СЂСѓС‡РЅС‹Рј РІРІРѕРґРѕРј РґР°РЅРЅС‹С….', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Игрок не в сети. Используйте Offline-пробив с ручным вводом данных.', message_color); play_sound(); return
 		end
 		MODULE.Edgo.Window[0] = false; MODULE.Binder.state.isActive = true
 		MODULE.Edgo.rp_queue = {}; MODULE.Edgo.cmd_queue = {}; MODULE.Edgo.last_send = 0
 		local b, who = edgo_init_badge('unsu', d)
 		if settings.mj.edgo_rp_enabled then info_stop_command() end
-		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ Р­Р‘Р“Рћ РґР»СЏ ' .. message_color_hex .. who .. '{ffffff} Р·Р°РїСѓС‰РµРЅ.', message_color)
+		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} запущен.', message_color)
 		MODULE.Edgo.rp_start('unsu', who, false); MODULE.Edgo.send_cmd('/leaders')
 	end
 	function MODULE.Edgo.emit_result(mode, who, r, org_raw)
@@ -200,54 +201,54 @@ local function setup(ctx)
 		local has_phone  = r and r.phone  and r.phone  ~= "" and r.phone  ~= "-"
 		local has_status = r and r.status and r.status ~= "" and r.status ~= "-"
 		local phone  = has_phone and r.phone or "-"
-		local status = has_status and r.status or "Р’ С€С‚Р°С‚Рµ"
+		local status = has_status and r.status or "В штате"
 		local year = (r and r.year and r.year ~= "" and r.year ~= "-") and r.year or nil
 		local found_gov = org_raw and org_raw ~= "" and org_raw ~= "-"
 		if not settings.mj.edgo_rp_enabled then
 			if found_gov then
 				local org = MODULE.Edgo.org_tag(org_raw)
 				local rank = (r and r.rank ~= "" and r.rank) or "-"
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р“СЂР°Р¶РґР°РЅРёРЅ ' .. message_color_hex .. who .. '{ffffff} РЅР°Р№РґРµРЅ РІ РѕСЂРіР°РЅРёР·Р°С†РёРё: ' .. message_color_hex .. org .. '{ffffff}, РЅР° РґРѕР»Р¶РЅРѕСЃС‚Рё: ' .. message_color_hex .. rank .. '{ffffff}.', message_color)
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} найден в организации: ' .. message_color_hex .. org .. '{ffffff}, на должности: ' .. message_color_hex .. rank .. '{ffffff}.', message_color)
 			else
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р“СЂР°Р¶РґР°РЅРёРЅ ' .. message_color_hex .. who .. '{ffffff} РїРѕ Р±Р°Р·Рµ Р­Р‘Р“Рћ РЅР° РіРѕСЃ. СЃР»СѓР¶Р±Рµ РЅРµ С‡РёСЃР»РёС‚СЃСЏ. РљРѕРЅС‚Р°РєС‚: ' .. message_color_hex .. phone .. '{ffffff}.', message_color)
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} по базе ЭБГО на гос. службе не числится. Контакт: ' .. message_color_hex .. phone .. '{ffffff}.', message_color)
 			end
 			MODULE.Binder.state.isActive = false
 			MODULE.Edgo.stop_badge(nil)
 			return
 		end
 		local p = rp_sex()
-		if mode == 'bodycam' then MODULE.Edgo.say('/do РљРџРљ РІС‹РґР°Р» СЂРµР·СѓР»СЊС‚Р°С‚ РѕРїРѕР·РЅР°РЅРёСЏ.') end
+		if mode == 'bodycam' then MODULE.Edgo.say('/do КПК выдал результат опознания.') end
 		if found_gov then
 			local org = MODULE.Edgo.org_tag(org_raw)
 			local rank = (r and r.rank ~= "" and r.rank) or "-"
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р“СЂР°Р¶РґР°РЅРёРЅ ' .. message_color_hex .. who .. '{ffffff} РЅР°Р№РґРµРЅ РІ РѕСЂРіР°РЅРёР·Р°С†РёРё: ' .. message_color_hex .. org .. '{ffffff}, РЅР° РґРѕР»Р¶РЅРѕСЃС‚Рё: ' .. message_color_hex .. rank .. '{ffffff}.', message_color)
-			MODULE.Edgo.say('/do Р­Р‘Р“Рћ: РїРѕ РіСЂР°Р¶РґР°РЅРёРЅСѓ ' .. who .. ' РЅР°Р№РґРµРЅРѕ СЃРѕРІРїР°РґРµРЅРёРµ.')
-			MODULE.Edgo.say('/do РћСЂРіР°РЅРёР·Р°С†РёСЏ: ' .. org .. ', РґРѕР»Р¶РЅРѕСЃС‚СЊ: ' .. rank .. '.')
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} найден в организации: ' .. message_color_hex .. org .. '{ffffff}, на должности: ' .. message_color_hex .. rank .. '{ffffff}.', message_color)
+			MODULE.Edgo.say('/do ЭБГО: по гражданину ' .. who .. ' найдено совпадение.')
+			MODULE.Edgo.say('/do Организация: ' .. org .. ', должность: ' .. rank .. '.')
 			local extra = {}
-			if year then table.insert(extra, 'РіРѕРґ СЂРѕР¶РґРµРЅРёСЏ: ' .. year) end
-			if has_phone then table.insert(extra, 'РєРѕРЅС‚Р°РєС‚: ' .. r.phone) end
-			if has_status then table.insert(extra, 'СЃС‚Р°С‚СѓСЃ: ' .. r.status) end
-			if #extra > 0 then MODULE.Edgo.say('/do Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ: ' .. table.concat(extra, ', ') .. '.') end
+			if year then table.insert(extra, 'год рождения: ' .. year) end
+			if has_phone then table.insert(extra, 'контакт: ' .. r.phone) end
+			if has_status then table.insert(extra, 'статус: ' .. r.status) end
+			if #extra > 0 then MODULE.Edgo.say('/do Дополнительно: ' .. table.concat(extra, ', ') .. '.') end
 		else
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р“СЂР°Р¶РґР°РЅРёРЅ ' .. message_color_hex .. who .. '{ffffff} РїРѕ Р±Р°Р·Рµ Р­Р‘Р“Рћ РЅР° РіРѕСЃ. СЃР»СѓР¶Р±Рµ РЅРµ С‡РёСЃР»РёС‚СЃСЏ. РљРѕРЅС‚Р°РєС‚: ' .. message_color_hex .. phone .. '{ffffff}.', message_color)
-			MODULE.Edgo.say('/do Р­Р‘Р“Рћ: Р·Р°РїСЂРѕСЃ РїРѕ РіСЂР°Р¶РґР°РЅРёРЅСѓ ' .. who .. ' РѕР±СЂР°Р±РѕС‚Р°РЅ.')
-			MODULE.Edgo.say('/do Р“СЂР°Р¶РґР°РЅРёРЅ: ' .. who .. ', РєРѕРЅС‚Р°РєС‚: ' .. phone .. ', СЃС‚Р°С‚СѓСЃ: ' .. status .. '.')
-			if year then MODULE.Edgo.say('/do Р“РѕРґ СЂРѕР¶РґРµРЅРёСЏ: ' .. year .. '.') end
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff} по базе ЭБГО на гос. службе не числится. Контакт: ' .. message_color_hex .. phone .. '{ffffff}.', message_color)
+			MODULE.Edgo.say('/do ЭБГО: запрос по гражданину ' .. who .. ' обработан.')
+			MODULE.Edgo.say('/do Гражданин: ' .. who .. ', контакт: ' .. phone .. ', статус: ' .. status .. '.')
+			if year then MODULE.Edgo.say('/do Год рождения: ' .. year .. '.') end
 		end
-		MODULE.Edgo.say('/me РѕР·РЅР°РєРѕРјРёРІС€РёСЃСЊ СЃ СЂРµР·СѓР»СЊС‚Р°С‚Р°РјРё, СѓР±СЂР°Р»'..p..' СЃР»СѓР¶РµР±РЅС‹Р№ РљРџРљ РѕР±СЂР°С‚РЅРѕ.')
+		MODULE.Edgo.say('/me ознакомившись с результатами, убрал'..p..' служебный КПК обратно.')
 		MODULE.Edgo.done()
 	end
 	local function edgo_notfound_basic(b)
 		b.closing = true
-		MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "Р’ С€С‚Р°С‚Рµ", rank = "-" }, "", b.target_id)
+		MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "В штате", rank = "-" }, "", b.target_id)
 	end
 	local function edgo_parse_leader_line(raw, target_id)
 		local cleaned = MODULE.Edgo.clean(raw)
 		local name, idstr = cleaned:match("([%w_]+)%s*%[(%d+)%]")
 		if not name or tonumber(idstr) ~= target_id then return nil end
-		local org = cleaned:match("[%-%вЂ“]%s*([^\t]+)") or "-"
+		local org = cleaned:match("[%-%-]%s*([^\t]+)") or "-"
 		org = org:gsub("^%s+", ""):gsub("%s+$", "")
-		local phone = cleaned:match("РўР•Р›[:%s]+(%d+)") or cleaned:match("%[%(]%s*(%d+)") or ""
+		local phone = cleaned:match("ТЕЛ[:%s]+(%d+)") or cleaned:match("%[%(]%s*(%d+)") or ""
 		return { org = org, phone = phone }
 	end
 	local function edgo_org_order(target_color)
@@ -331,10 +332,10 @@ local function setup(ctx)
 							local low_content = edgo_lower(last_bracket_content)
 							if last_bracket_content ~= "" 
 							and not last_bracket_content:match("^%d+$") 
-							and not low_content:find("СЂР°Р±РѕС‚Р°РµС‚", 1, true) 
-							and not low_content:find("РЅРµ СЂР°Р±РѕС‚Р°РµС‚", 1, true)
-							and not low_content:find("Р°С„Рє", 1, true) 
-							and not low_content:find("СЃРїРµС†", 1, true) then
+							and not low_content:find("работает", 1, true) 
+							and not low_content:find("не работает", 1, true)
+							and not low_content:find("афк", 1, true) 
+							and not low_content:find("спец", 1, true) then
 								rank = last_bracket_content
 							end
 						end
@@ -362,20 +363,20 @@ local function setup(ctx)
 		local low_title = edgo_lower(title or "")
 		local _ht = low_title
 		local detected_type = nil
-		if low_title:find("Р»РёРґРµСЂ", 1, true) or low_title:find("СЂСѓРєРѕРІРѕРґРёС‚", 1, true) then
+		if low_title:find("лидер", 1, true) or low_title:find("руководит", 1, true) then
 			detected_type = 'leaders'
-		elseif low_title:find("Р·Р°РјРµСЃС‚РёС‚", 1, true) then
+		elseif low_title:find("заместит", 1, true) then
 			detected_type = 'zams'
-		elseif low_title:find("СЃРѕС‚СЂСѓРґРЅРёРєРё РѕРЅР»Р°Р№РЅ", 1, true) or low_title:find("%(РІ СЃРµС‚Рё", 1, true) or low_title:find("РІ СЃРµС‚Рё РІСЃРµРіРѕ", 1, true) then
+		elseif low_title:find("сотрудники онлайн", 1, true) or low_title:find("%(в сети", 1, true) or low_title:find("в сети всего", 1, true) then
 			detected_type = 'members'
 		end
 		local effective_phase = detected_type or b.phase
-		local _is_own_members = _ht:find("(РІ СЃРµС‚Рё", 1, true) or _ht:find("РІ СЃРµС‚Рё РІСЃРµРіРѕ", 1, true)
-		local _is_lead_dialog = (not _is_own_members) and (_ht:find("Р»РёРґРµСЂ", 1, true) or _ht:find("Р·Р°РјРµСЃС‚РёС‚", 1, true) or _ht:find("СЂСѓРєРѕРІРѕРґРёС‚", 1, true))
+		local _is_own_members = _ht:find("(в сети", 1, true) or _ht:find("в сети всего", 1, true)
+		local _is_lead_dialog = (not _is_own_members) and (_ht:find("лидер", 1, true) or _ht:find("заместит", 1, true) or _ht:find("руководит", 1, true))
 		if _is_lead_dialog or effective_phase == 'leaders' or effective_phase == 'zams' then
 			local role_from_header = nil
-			if _ht:find("Р»РёРґРµСЂ", 1, true) or _ht:find("СЂСѓРєРѕРІРѕРґРёС‚", 1, true) then role_from_header = "Р СѓРєРѕРІРѕРґРёС‚РµР»СЊ"
-			elseif _ht:find("Р·Р°РјРµСЃС‚РёС‚", 1, true) then role_from_header = "Р—Р°РјРµСЃС‚РёС‚РµР»СЊ" end
+			if _ht:find("лидер", 1, true) or _ht:find("руководит", 1, true) then role_from_header = "Руководитель"
+			elseif _ht:find("заместит", 1, true) then role_from_header = "Заместитель" end
 			local hit = nil
 			for _, line in ipairs(lines) do
 				local r = edgo_parse_leader_line(MODULE.Edgo.clean(line), b.target_id)
@@ -384,8 +385,8 @@ local function setup(ctx)
 			sampSendDialogResponse(id, 1, 0, "")
 			if hit then
 				b.closing = true
-				local role = role_from_header or ((effective_phase == 'leaders') and "Р СѓРєРѕРІРѕРґРёС‚РµР»СЊ" or "Р—Р°РјРµСЃС‚РёС‚РµР»СЊ")
-				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = hit.phone, status = "Р’ С€С‚Р°С‚Рµ", rank = role }, hit.org, b.target_id)
+				local role = role_from_header or ((effective_phase == 'leaders') and "Руководитель" or "Заместитель")
+				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = hit.phone, status = "В штате", rank = role }, hit.org, b.target_id)
 			else
 				local cur = b.phase
 				lua_thread.create(function()
@@ -400,21 +401,21 @@ local function setup(ctx)
 			end
 			return false
 		end
-		local is_members_dialog = low_title:find("СЃРѕС‚СЂСѓРґРЅРёРєРё РѕРЅР»Р°Р№РЅ", 1, true) ~= nil
+		local is_members_dialog = low_title:find("сотрудники онлайн", 1, true) ~= nil
 		if is_members_dialog or _is_own_members or effective_phase == 'members' then
 			local hit_rank = edgo_parse_members(text, b.target_id, b.match_nick)
 			if hit_rank then
 				b.found = true; b.closing = true
 				sampSendDialogResponse(id, 0, 0, "")
-				local org_for_result = (b.phase == 'members') and "Р¤Р‘Р " or (b.full_org_name or "...")
-				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "Р’ С€С‚Р°С‚Рµ", rank = hit_rank }, org_for_result, b.target_id)
+				local org_for_result = (b.phase == 'members') and "ФБР" or (b.full_org_name or "...")
+				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "В штате", rank = hit_rank }, org_for_result, b.target_id)
 				return false
 			end
 			local count, next_btn = 0, -1
 			for line in (text or ""):gmatch("[^\r\n]+") do
 				count = count + 1
 				local ll = edgo_lower(line)
-				if ll:find("СЃР»РµРґСѓСЋС‰Р°СЏ", 1, true) or ll:find(">>>", 1, true) or ll:find("РІРїРµСЂРµРґ", 1, true) then
+				if ll:find("следующая", 1, true) or ll:find(">>>", 1, true) or ll:find("вперед", 1, true) then
 					next_btn = count - 2
 				end
 			end
@@ -429,8 +430,8 @@ local function setup(ctx)
 			end
 			return false
 		end
-		local is_emp = (style == 5 and low_title:find("СЃРѕС‚СЂСѓРґРЅРёРєРё РѕРЅР»Р°Р№РЅ", 1, true)) or (low_text:find("СЃРѕС‚СЂСѓРґРЅРёРє", 1, true) and low_text:find("СЂР°РЅРі", 1, true))
-		local is_empty = low_text:find("0 РёРіСЂРѕРєРѕРІ", 1, true) or low_text:find("РІСЃРµРіРѕ РІ РѕРЅР»Р°Р№РЅРµ: 0", 1, true)
+		local is_emp = (style == 5 and low_title:find("сотрудники онлайн", 1, true)) or (low_text:find("сотрудник", 1, true) and low_text:find("ранг", 1, true))
+		local is_empty = low_text:find("0 игроков", 1, true) or low_text:find("всего в онлайне: 0", 1, true)
 		local is_orglist = (id == 8744) or (style == 2 and not is_emp and not is_empty)
 		if is_emp or is_empty then
 			if is_empty then 
@@ -451,7 +452,7 @@ local function setup(ctx)
 						MODULE.Edgo.request_number(b.mode, b.display_name, b.result, b.full_org_name, b.target_id)
 						return false
 					end
-					if raw:find("РЎР»РµРґСѓСЋС‰Р°СЏ", 1, true) or raw:find(">>>") or raw:find("Р»РµРґ") then
+					if raw:find("Следующая", 1, true) or raw:find(">>>") or raw:find("лед") then
 						next_btn = (i - 1) - offset
 					end
 				end
@@ -467,10 +468,10 @@ local function setup(ctx)
 			if b.order == nil then 
 				b.order = edgo_org_order(b.target_color); b.org_pos = 1 
 			end
-			local is_orglist_dialog = low_text:find("<< СЃРїРёСЃРѕРє СЃРѕР±РµСЃРµРґРѕРІР°РЅРёР№", 1, true) or 
-									low_text:find("<< РїРѕР»РёС†РёСЏ", 1, true) or
-									low_text:find("<< Р±РѕР»СЊРЅРёС†Р°", 1, true) or
-									low_text:find("<< РїСЂР°РІРёС‚РµР»СЊСЃС‚РІРѕ", 1, true)
+			local is_orglist_dialog = low_text:find("<< список собеседований", 1, true) or 
+									low_text:find("<< полиция", 1, true) or
+									low_text:find("<< больница", 1, true) or
+									low_text:find("<< правительство", 1, true)
 			if is_orglist_dialog then
 				local item = b.order[b.org_pos]
 				if item == nil then 
@@ -484,7 +485,7 @@ local function setup(ctx)
 				if hit_rank then
 					b.found = true; b.closing = true
 					sampSendDialogResponse(id, 0, 0, "")
-					MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "Р’ С€С‚Р°С‚Рµ", rank = hit_rank }, b.full_org_name, b.target_id)
+					MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "В штате", rank = hit_rank }, b.full_org_name, b.target_id)
 				else
 					b.org_pos = b.org_pos + 1
 					if b.org_pos > #b.order then
@@ -526,14 +527,14 @@ local function setup(ctx)
 	end
 	local function edgo_run_scan(mode)
 		if MODULE.Edgo.badge.active then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ СѓР¶Рµ РёРґС‘С‚, РґРѕР¶РґРёС‚РµСЃСЊ Р·Р°РІРµСЂС€РµРЅРёСЏ.', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив уже идёт, дождитесь завершения.', message_color); play_sound(); return
 		end
 		if MODULE.Binder.state.isActive then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р”РѕР¶РґРёС‚РµСЃСЊ Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРµРґС‹РґСѓС‰РµР№ РєРѕРјР°РЅРґС‹.', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound(); return
 		end
 		local _now = os.clock()
 		if MODULE.Edgo.last_scan_time and (_now - MODULE.Edgo.last_scan_time) < 5 then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ РјРѕР¶РЅРѕ Р·Р°РїСѓСЃРєР°С‚СЊ РЅРµ С‡Р°С‰Рµ СЂР°Р·Р° РІ 5 СЃРµРєСѓРЅРґ.', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив можно запускать не чаще раза в 5 секунд.', message_color); play_sound(); return
 		end
 		MODULE.Edgo.last_scan_time = _now
 		local d = MODULE.Edgo.collect()
@@ -546,19 +547,19 @@ local function setup(ctx)
 			local b = MODULE.Edgo.badge
 			b.active = true; b.closing = true; b.mode = mode; b.phase = 'offline'
 			b.display_name = who; b.target_id = -1; b.match_nick = ""; b.last_active_time = os.clock()
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ Р­Р‘Р“Рћ РґР»СЏ ' .. message_color_hex .. who .. '{ffffff} РїРѕ РІРІРµРґС‘РЅРЅС‹Рј РґР°РЅРЅС‹Рј.', message_color)
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} по введённым данным.', message_color)
 			MODULE.Edgo.rp_start(mode, who, true)
 			MODULE.Edgo.emit_result(mode, who, { phone = d.phone, status = d.status, rank = d.rank, year = d.year }, d.org)
 			return
 		end
 		if not d.id or not sampIsPlayerConnected(d.id) then
 			MODULE.Binder.state.isActive = false
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ ID РёРіСЂРѕРєР° РІ СЃРµС‚Рё.', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Введите корректный ID игрока в сети.', message_color); play_sound(); return
 		end
 		local b, who_full = edgo_init_badge(mode, d)
 		if settings.mj.edgo_rp_enabled then info_stop_command() end
-		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ Р­Р‘Р“Рћ РґР»СЏ ' .. message_color_hex .. who_full .. '{ffffff} Р·Р°РїСѓС‰РµРЅ.', message_color)
-		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕРёСЃС…РѕРґРёС‚ РїРѕРёСЃРє РѕСЂРіР°РЅРёР·Р°С†РёРё РіСЂР°Р¶РґР°РЅРёРЅР° ' .. message_color_hex .. who_full .. '{ffffff}. РњРѕР¶РµС‚ Р·Р°РЅСЏС‚СЊ РЅРµРєРѕС‚РѕСЂРѕРµ РІСЂРµРјСЏ.', message_color)
+		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who_full .. '{ffffff} запущен.', message_color)
+		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Происходит поиск организации гражданина ' .. message_color_hex .. who_full .. '{ffffff}. Может занять некоторое время.', message_color)
 		MODULE.Edgo.rp_start(mode, who, false); MODULE.Edgo.send_cmd('/leaders')
 	end
 	MODULE.Edgo.run_badge = function() edgo_run_scan('badge') end
@@ -567,35 +568,35 @@ local function setup(ctx)
 	MODULE.Edgo.run_bodycam = function() edgo_run_scan('bodycam') end
 	function MODULE.Edgo.run_history()
 		if not MODULE.Edgo.Online[0] then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РСЃС‚РѕСЂРёСЏ РёРјС‘РЅ РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РІ СЂРµР¶РёРјРµ Online (РїРѕ ID РёРіСЂРѕРєР°).', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}История имён доступна только в режиме Online (по ID игрока).', message_color); play_sound(); return
 		end
 		if MODULE.Binder.state.isActive then
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р”РѕР¶РґРёС‚РµСЃСЊ Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРµРґС‹РґСѓС‰РµР№ РєРѕРјР°РЅРґС‹.', message_color); play_sound(); return
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Дождитесь завершения предыдущей команды.', message_color); play_sound(); return
 		end
 		local d = MODULE.Edgo.collect()
 		local token
 		if d.online then
 			if not d.id or not sampIsPlayerConnected(d.id) then
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ ID РёРіСЂРѕРєР° РІ СЃРµС‚Рё.', message_color); play_sound(); return
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Введите корректный ID игрока в сети.', message_color); play_sound(); return
 			end
 			token = sampGetPlayerNickname(d.id)
 		else
 			token = d.nick
 			if token == "" then
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р”Р»СЏ РёСЃС‚РѕСЂРёРё РёРјС‘РЅ РІРІРµРґРёС‚Рµ РЅРёРєРЅРµР№Рј (Name_Surname) РІ РїРѕР»Рµ "РРјСЏ Рё С„Р°РјРёР»РёСЏ".', message_color); play_sound(); return
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Для истории имён введите никнейм (Name_Surname) в поле "Имя и фамилия".', message_color); play_sound(); return
 			end
 		end
 		local now = os.time()
 		if now - (MODULE.Edgo.last_history_check or 0) < 15 then
 			local rem = 15 - (now - (MODULE.Edgo.last_history_check or 0))
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РСЃС‚РѕСЂРёСЋ РёРјС‘РЅ РјРѕР¶РЅРѕ РїСЂРѕРІРµСЂСЏС‚СЊ РЅРµ С‡Р°С‰Рµ СЂР°Р·Р° РІ 15 СЃРµРєСѓРЅРґ. РџРѕРІС‚РѕСЂРёС‚Рµ С‡РµСЂРµР· ' .. rem .. ' СЃРµРє.', message_color)
+			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Историю имён можно проверять не чаще раза в 15 секунд. Повторите через ' .. rem .. ' сек.', message_color)
 			play_sound(); return
 		end
 		MODULE.Edgo.last_history_check = now
 		local who = MODULE.Edgo.ru_name(d)
 		MODULE.Edgo.Window[0] = false; MODULE.Binder.state.isActive = true
 		if settings.mj.edgo_rp_enabled then info_stop_command() end
-		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РџСЂРѕР±РёРІ Р­Р‘Р“Рћ РґР»СЏ ' .. message_color_hex .. who .. '{ffffff} Р·Р°РїСѓС‰РµРЅ.', message_color)
+		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Пробив ЭБГО для ' .. message_color_hex .. who .. '{ffffff} запущен.', message_color)
 		local H = MODULE.Edgo.history
 		H.active = true; H.finished = false; H.got = nil; H.waiting_result = false
 		H.token = token; H.display_name = who
@@ -603,8 +604,8 @@ local function setup(ctx)
 			local p = rp_sex()
 			local rp_on = settings.mj.edgo_rp_enabled
 			if rp_on then
-				sampSendChat('/me РґРѕСЃС‚Р°Р»'..p..' СЃР»СѓР¶РµР±РЅС‹Р№ РљРџРљ, Р·Р°РїСѓСЃС‚РёР»'..p..' Р­Р‘Р“Рћ Рё, РїСЂРѕР№РґСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ, РѕС‚РєСЂС‹Р»'..p..' Р°СЂС…РёРІРЅС‹Р№ СЂР°Р·РґРµР» РёСЃС‚РѕСЂРёРё РёРјС‘РЅ.'); wait(4000)
-				sampSendChat('/me РёРЅРёС†РёРёСЂРѕРІР°Р»'..p..' Р·Р°РїСЂРѕСЃ Р°СЂС…РёРІРЅРѕР№ РёСЃС‚РѕСЂРёРё РіСЂР°Р¶РґР°РЅРёРЅР°.'); wait(4000)
+				sampSendChat('/me достал'..p..' служебный КПК, запустил'..p..' ЭБГО и, пройдя авторизацию, открыл'..p..' архивный раздел истории имён.'); wait(4000)
+				sampSendChat('/me инициировал'..p..' запрос архивной истории гражданина.'); wait(4000)
 			else
 				wait(500)
 			end
@@ -614,20 +615,20 @@ local function setup(ctx)
 			while H.active and not H.finished and (os.time() - H.result_time) < 12 do wait(100) end
 			H.active = false; H.waiting_result = false
 			if H.got and H.got ~= "" then
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Р“СЂР°Р¶РґР°РЅРёРЅ ' .. message_color_hex .. who .. '{ffffff}, СЂР°РЅРµРµ РёР·РІРµСЃС‚РµРЅ РєР°Рє: ' .. message_color_hex .. H.got .. '{ffffff}.', message_color)
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Гражданин ' .. message_color_hex .. who .. '{ffffff}, ранее известен как: ' .. message_color_hex .. H.got .. '{ffffff}.', message_color)
 				if rp_on then wait(4000) end
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РЎРјРµРЅ РЅРёРєРЅРµР№РјРѕРІ ' .. message_color_hex .. who .. '{ffffff} РІ Р°СЂС…РёРІРµ Р­Р‘Р“Рћ: ' .. tostring(H.count or 0) .. '.', message_color)
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Смен никнеймов ' .. message_color_hex .. who .. '{ffffff} в архиве ЭБГО: ' .. tostring(H.count or 0) .. '.', message_color)
 				if rp_on then
-					sampSendChat('/do РђСЂС…РёРІ Р­Р‘Р“Рћ: Р·Р°РїСЂРѕСЃ РїРѕ РіСЂР°Р¶РґР°РЅРёРЅСѓ ' .. who .. ' РѕР±СЂР°Р±РѕС‚Р°РЅ.'); wait(4000)
-					sampSendChat('/do Р Р°РЅРµРµ Р±С‹Р» Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ РєР°Рє: ' .. H.got .. '.'); wait(4000)
+					sampSendChat('/do Архив ЭБГО: запрос по гражданину ' .. who .. ' обработан.'); wait(4000)
+					sampSendChat('/do Ранее был зарегистрирован как: ' .. H.got .. '.'); wait(4000)
 				end
 			else
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}РђСЂС…РёРІРЅС‹С… Р·Р°РїРёСЃРµР№ Рѕ СЃРјРµРЅРµ РёРјРµРЅРё РіСЂР°Р¶РґР°РЅРёРЅР° ' .. message_color_hex .. who .. '{ffffff} РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ.', message_color)
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Архивных записей о смене имени гражданина ' .. message_color_hex .. who .. '{ffffff} не обнаружено.', message_color)
 				if rp_on then
-					sampSendChat('/do РђСЂС…РёРІ Р­Р‘Р“Рћ: Р·Р°РїРёСЃРµР№ Рѕ РїСЂРµР¶РЅРёС… РёРјРµРЅР°С… РіСЂР°Р¶РґР°РЅРёРЅР° ' .. who .. ' РЅРµ РѕР±РЅР°СЂСѓР¶РµРЅРѕ.'); wait(4000)
+					sampSendChat('/do Архив ЭБГО: записей о прежних именах гражданина ' .. who .. ' не обнаружено.'); wait(4000)
 				end
 			end
-			if rp_on then sampSendChat('/me СѓР±СЂР°Р»'..p..' СЃР»СѓР¶РµР±РЅС‹Р№ РљРџРљ РѕР±СЂР°С‚РЅРѕ.') end
+			if rp_on then sampSendChat('/me убрал'..p..' служебный КПК обратно.') end
 			MODULE.Binder.state.isActive = false
 		end)
 	end
@@ -639,7 +640,7 @@ local function setup(ctx)
 			if b and b.active and MODULE.Binder.state.isStop then
 				MODULE.Edgo.rp_queue = {}
 				MODULE.Binder.state.isStop = false
-				MODULE.Edgo.stop_badge('РџСЂРѕР±РёРІ Р­Р‘Р“Рћ РґРѕСЃСЂРѕС‡РЅРѕ РѕСЃС‚Р°РЅРѕРІР»РµРЅ.')
+				MODULE.Edgo.stop_badge('Пробив ЭБГО досрочно остановлен.')
 			elseif #MODULE.Edgo.rp_queue > 0 and (os.clock() * 1000 - MODULE.Edgo.last_send) >= (settings.mj.edgo_rp_cd or 3000) then
 				local e = table.remove(MODULE.Edgo.rp_queue, 1)
 				if e.done then MODULE.Edgo.stop_badge(nil)

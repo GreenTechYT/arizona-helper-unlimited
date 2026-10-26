@@ -1,3 +1,4 @@
+-- LIB_VERSION: 1.0
 local imgui = require 'mimgui'
 local ImVec2 = imgui.ImVec2
 local ImVec4 = imgui.ImVec4
