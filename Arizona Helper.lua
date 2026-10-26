@@ -9,10 +9,6 @@ local worked_dir = getWorkingDirectory():gsub('\\','/')
 local IS_MOBILE = MONET_VERSION ~= nil 
 print('Инициализация скрипта версии ' .. thisScript().version)
 print('Директория: ' .. worked_dir .. '/')
-do
-	local prev_update_bak = worked_dir .. '/Arizona Helper.lua.bak'
-	if doesFileExist(prev_update_bak) then pcall(os.remove, prev_update_bak) end
-end
 --------------------------------------------[ UPDATE INFO ]-----------------------------------------
 local REPO_RAW = 'https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main'
 local UPDATE_JSON_URL = REPO_RAW .. '/Update.json'
@@ -21,7 +17,7 @@ local NEWS_IMG_BASE = REPO_RAW .. '/News/'
 local LIBS_BASE = REPO_RAW .. '/lib/'
 local RES_BASE = REPO_RAW .. '/Resourse/'
 local VEHICLES_BASE = REPO_RAW .. '/SmartVEH/Vehicles'
-local DEFAULT_LIBS = { 'edgo.lua', 'mimgui_piemenu.lua' }
+local DEFAULT_LIBS = { 'edgo.lua', 'mimgui_piemenu.lua', 'arizona_crasher.lua', 'arizona_backup.lua' }
 local sync_libs
 local UPDATE_STATUS = {
 	patch     = { text = "Патч",                  color = "{00FF00}" },
@@ -31,111 +27,9 @@ local UPDATE_STATUS = {
 	hot_news  = { text = "Важная новость",        color = "{FFA500}" },
 }
 ------------------------------------------[ INIT CRASH INFO ]---------------------------------------
-local errors_handler_path = worked_dir .. '/.Arizona Helper Handler.lua'
-if not doesFileExist(errors_handler_path) then
-	local helper_prefix = '/.Arizona Helper '
-	local content = [[
--- DONT SEND ME THIS FILE, THIS IS NOT AN ERROR, BUT A SCRIPT TO DISPLAY THE ERROR IN DIALOG
--- НЕ ОТПРАВЛЯЙТЕ МНЕ ЭТОТ ФАЙЛ, ЭТО НЕ ОШИБКА, ЭТО СКРИПТ ДЛЯ ВЫВОДА ОШИБКИ ВАМ В ДИАЛОГЕ
-local lastErrorShown = 0
-local function fileExists(path)
-	local f = io.open(path, 'r')
-	if f then
-		f:close()
-		return true
-	end
-	return false
-end
-function getLog()
-	local worked_dir = getWorkingDirectory():gsub('\\','/')
-	local IS_MOBILE = MONET_VERSION ~= nil
-	local log_path = worked_dir .. (IS_MOBILE and '/logs/monetloader.log' or '/moonloader.log')
-	if not fileExists(log_path) then return 'Файл логов не найден:\n- ' .. log_path end
-	local file = io.open(log_path, 'r')
-	if not file then
-		return 'Не удалось открыть файл логов:\n- ' .. log_path
-	end
-	local lines = {}
-	local max_lines = 10000
-	for line in file:lines() do
-		table.insert(lines, line)
-		if #lines > max_lines then
-			table.remove(lines, 1)
-		end
-	end
-	file:close()
-	local start_index = 1
-	for i = #lines, 1, -1 do
-		if lines[i]:find('Инициализация скрипта', 1, true) then
-			start_index = i
-			break
-		end
-	end
-	local result = {}
-	for i = start_index, #lines do
-		local line = lines[i]
-		if line:find('Arizona&Rodina Helper', 1, true) then
-			if not (line:find('Script died') or line:find('%.lua%:') or line:find('Loaded successfully')) then
-				local clean = line:match('Arizona&Rodina Helper%: (.+)')
-				if clean then
-					table.insert(result, clean)
-				end
-			end
-		end
-	end
-	if #result == 0 then return 'Строки с Arizona&Rodina Helper не найдены.' end
-	local logText = table.concat(result, '\n')
-	if #logText > 2000 then logText = logText:sub(1, 2000) .. '\n... (лог обрезан)' end
-	return logText
-end
-function onSystemMessage(msg, type, script)
-	if script and script.name == 'Arizona&Rodina Helper' and msg and ((msg:find('stack traceback')) or (type == 3 and not msg:find('Script died due to an error'))) then
-		local currentTime = os.time()
-		if currentTime - lastErrorShown < 5 then
-			return
-		end
-		lastErrorShown = currentTime
-		local errorMessage = ('{ffffff}Произошла непредусмотренная ошибка в работе скрипта, из-за чего он был отключён!\n\n' ..
-		'{00FF00}Версия скрипта:{ffffff} ' .. script.version .. '\n' ..
-		'{00FF00}Время ошибки:{ffffff} ' .. os.date('%H:%M:%S %d.%m.%Y') .. '\n\n' ..
-		'Отправьте скриншот этого диалога в {ff9900}тех.поддержку (DS: max_rics){ffffff}.\n\n' ..
-		'Детали возникшей ошибки:\n{ff6666}' .. msg .. '{ffffff}\n\n' ..
-		'Полный лог работы скрипта: \n{66BB6A}' .. getLog())
-		
-		sampShowDialog(123123, '{009EFF}Arizona&Rodina Helper [' .. script.version .. ']', errorMessage, 'Закрыть диалог', '', 0)
-	end
-end]]
-	local file, errstr = io.open(errors_handler_path, 'w')
-	if file then
-		local content_size = #content
-		if content_size > 0 then
-			file:write(content)
-			file:close()
-			local old_handlers = {
-				'Crash Info.lua',
-				'Error Handler.lua',
-				'Errors Handler.lua',
-				'Crash Informer.lua',
-				'CrashInfo.lua',
-				'ErrorHandler.lua'
-			}
-			for _, filename in ipairs(old_handlers) do
-				local path = worked_dir .. '/' .. filename
-				if doesFileExist(path) then
-					os.remove(path)
-				end
-				path = worked_dir .. helper_prefix .. filename
-				if doesFileExist(path) then
-					os.remove(path)
-				end
-			end
-		else
-			file:close()
-			print('Предупреждение: содержимое обработчика ошибок пустое')
-		end
-	else
-		print('Не удалось создать файл для обработки ошибок, ошибка: ', errstr)
-	end
+local crasher_ok, crasher = pcall(require, 'arizona_crasher')
+if crasher_ok and type(crasher) == 'table' and type(crasher.install) == 'function' then
+	pcall(crasher.install, worked_dir)
 end
 --------------------------------------------[ CONNECT LIBS ]----------------------------------------
 print('Подключение библиотек...')
@@ -219,24 +113,25 @@ function win_sh_delete(path)
 	return shell32.SHFileOperationW(op) == 0 and op.fAnyOperationsAborted == 0
 end
 local effil = require('effil')
-local imgui = require('mimgui')
+local _imgui = require('mimgui')
+local imgui
 do
-	local _begin_child = imgui.BeginChild
-	imgui.BeginChild = function(...)
-		_begin_child(...)
-		return true
-	end
-end
-do
-	local _calc_text = imgui.CalcTextSize
-	imgui.CalcTextSize = function(text, ...)
-		if text == nil then text = '' elseif type(text) == 'number' then text = tostring(text) end
-		return _calc_text(text, ...)
-	end
-	local function wrap_label(name, idx)
-		local fn = imgui[name]
+	local wraps = {}
+	local function wrap_fn(name, prep)
+		local fn = _imgui[name]
 		if type(fn) ~= 'function' then return end
-		imgui[name] = function(...)
+		wraps[name] = function(...) return prep(fn, ...) end
+	end
+	wrap_fn('BeginChild', function(fn, ...)
+		fn(...)
+		return true
+	end)
+	wrap_fn('CalcTextSize', function(fn, text, ...)
+		if text == nil then text = '' elseif type(text) == 'number' then text = tostring(text) end
+		return fn(text, ...)
+	end)
+	local function label_prep(idx)
+		return function(fn, ...)
 			local n = select('#', ...)
 			if n == 0 then return end
 			local args = { ... }
@@ -245,17 +140,16 @@ do
 			return fn(unpack(args, 1, n))
 		end
 	end
-	wrap_label('Text', 1)
-	wrap_label('TextColored', 2)
-	wrap_label('TextDisabled', 1)
-	wrap_label('TextWrapped', 1)
-	wrap_label('TextUnformatted', 1)
-	wrap_label('Button', 1)
-	wrap_label('SmallButton', 1)
-	wrap_label('Selectable', 1)
-	wrap_label('MenuItem', 1)
-	wrap_label('BulletText', 1)
-	wrap_label('SetTooltip', 1)
+	for name, idx in pairs({ Text = 1, TextColored = 2, TextDisabled = 1, TextWrapped = 1, TextUnformatted = 1, Button = 1, SmallButton = 1, Selectable = 1, MenuItem = 1, BulletText = 1, SetTooltip = 1 }) do
+		wrap_fn(name, label_prep(idx))
+	end
+	imgui = setmetatable({}, {
+		__index = function(_, k)
+			local w = wraps[k]
+			if w then return w end
+			return _imgui[k]
+		end,
+	})
 end
 local fa = require('fAwesome6_solid')
 do
@@ -371,6 +265,35 @@ end
 --------------------------------------------[ JSON SETTINGS ]---------------------------------------
 local config_dir = worked_dir .. '/Arizona Helper'
 local settings = {}
+local backup_ok, backup_lib = pcall(require, 'arizona_backup')
+local function backups_enabled(category)
+	if settings == nil or settings.general == nil or settings.general.backup_enabled ~= true then return false end
+	local inc = settings.general.backup_include
+	if category and type(inc) == 'table' and inc[category] == false then return false end
+	return true
+end
+local function backup_file_for(path)
+	if backup_lib then return backup_lib.file_for(config_dir, path) end
+	return path .. '.bak'
+end
+local function guest_backup_for(base_file)
+	if backup_lib then return backup_lib.guest_file_for(config_dir, base_file) end
+	return ''
+end
+local function ensure_backup_dir(path)
+	if backup_lib then backup_lib.ensure(config_dir, path) end
+end
+local function copy_file(src, dst)
+	if backup_lib then return backup_lib.copy(src, dst) end
+	return false
+end
+local function create_helper_backup()
+	if not backups_enabled('helper') then return false end
+	local src = worked_dir .. '/Arizona Helper.lua'
+	if not doesFileExist(src) then return false end
+	ensure_backup_dir(config_dir .. '/Settings.json')
+	return copy_file(src, config_dir .. '/Backup/Arizona Helper.lua.bak')
+end
 local default_settings = {
 	general = {
 		version = thisScript().version,
@@ -396,6 +319,8 @@ local default_settings = {
 		aflip_domkrat_delay = 5,
 		auto_clicker = false,  	
 		updater = true,
+		backup_enabled = false,
+		backup_include = { settings = true, modules = true, helper = true },
 		armory_enable = false,
 		frp_radius = 5,
 		clicker_delay = 300,
@@ -654,26 +579,65 @@ end
 function save_settings()
     local saved_mode = settings.general.fraction_mode
     settings.general.fraction_mode = nil
+    local content = safe_encode_json(settings)
+    if saved_mode ~= nil then settings.general.fraction_mode = saved_mode end
+    if not content then
+        print('Не удалось сохранить настройки: ошибка кодировки JSON')
+        return
+    end
     local path = config_dir .. '/Settings.json'
-    local file, err = io.open(path, 'w')
-    if file then
-        local content = safe_encode_json(settings)
-        if content then
-            file:write(content)
-            file:close()
-            print('Настройки хелпера сохранены!')
-        else
-            print('Не удалось сохранить настройки: ошибка кодировки JSON')
-        end
-    else
+    local tmp = path .. '.tmp'
+    local file, err = io.open(tmp, 'w')
+    if not file then
         print('Не удалось сохранить настройки: ' .. tostring(err or 'Unknown'))
+        return
     end
-    if saved_mode ~= nil then
-        settings.general.fraction_mode = saved_mode
+    local wrote = file:write(content)
+    file:close()
+    if not wrote then
+        os.remove(tmp)
+        print('Не удалось записать настройки')
+        return
     end
+    local bak = nil
+    if backups_enabled('settings') then
+        ensure_backup_dir(path)
+        bak = backup_file_for(path)
+    end
+    if doesFileExist(path) then
+        if bak then
+            os.remove(bak)
+            if not os.rename(path, bak) then
+                local direct = io.open(path, 'w')
+                if direct then
+                    direct:write(content)
+                    direct:close()
+                    os.remove(tmp)
+                    print('Настройки хелпера сохранены (без резервной копии)')
+                    return
+                end
+                os.remove(tmp)
+                print('Не удалось создать резервную копию настроек')
+                return
+            end
+        else
+            os.remove(path)
+        end
+    end
+    if not os.rename(tmp, path) then
+        if bak and doesFileExist(bak) and not doesFileExist(path) then os.rename(bak, path) end
+        print('Не удалось заменить файл настроек (временный файл сохранён)')
+        return
+    end
+    print('Настройки хелпера сохранены!')
 end
 function load_settings()
     if not doesDirectoryExist(config_dir) then createDirectory(config_dir) end
+    if not doesFileExist(config_dir .. "/Settings.json") then
+        for _, p in ipairs({ config_dir .. "/Settings.json.tmp", backup_file_for(config_dir .. "/Settings.json"), config_dir .. "/Settings.json.bak" }) do
+            if doesFileExist(p) then os.rename(p, config_dir .. "/Settings.json"); break end
+        end
+    end
     if not doesFileExist(config_dir .. "/Settings.json") then
         load_default_settings()
         return
@@ -685,15 +649,34 @@ function load_settings()
     end
     local contents = file:read('*a')
     file:close()
-    if #contents == 0 then
-        load_default_settings()
-        return
-    end
-    local result, loaded = pcall(decodeJson, contents)
+    local result, loaded = false, nil
+    if #contents > 0 then result, loaded = pcall(decodeJson, contents) end
     if not result or type(loaded) ~= 'table' then
-        print('Ошибка загрузки Settings.json: невалидный JSON')
-        load_default_settings()
-        return
+        print('Ошибка загрузки Settings.json, пробую резервную копию')
+        local function read_cfg(p)
+            local f = io.open(p, 'r')
+            if not f then return nil end
+            local c = f:read('*a') or ''
+            f:close()
+            if c == '' then return nil end
+            local ok, d = pcall(decodeJson, c)
+            if ok and type(d) == 'table' then return d end
+            return nil
+        end
+        local alt = read_cfg(backup_file_for(config_dir .. '/Settings.json')) or read_cfg(config_dir .. '/Settings.json.bak')
+        if alt then
+            loaded = alt
+            print('Настройки восстановлены из резервной копии')
+            os.remove(config_dir .. '/Settings.json.corrupt')
+            os.rename(config_dir .. '/Settings.json', config_dir .. '/Settings.json.corrupt')
+        end
+        if type(loaded) ~= 'table' then
+            os.remove(config_dir .. '/Settings.json.corrupt')
+            os.rename(config_dir .. '/Settings.json', config_dir .. '/Settings.json.corrupt')
+            load_default_settings()
+            save_settings()
+            return
+        end
     end
     settings = loaded
     if settings.lc then
@@ -1093,14 +1076,14 @@ local modules = {
 					{cmd = 'zd', description = 'Привествие игрока', text = 'Здравствуйте, я {my_ru_nick} - {fraction_rank} {fraction_tag}&Чем я могу Вам помочь?', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
 					{cmd = 'go', description = 'Позвать игрока за собой', text = 'Хорошо {get_ru_nick({id})}, следуйте за мной.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
 					{cmd = 'expel', description = 'Выгнать игрока из здания',  text = 'Вы больше не можете здесь находится, я выгоняю вас из здания!&/me схватив человека ведёт к выходу из здания и закрывает за ним дверь&/expel {id} Н.П.Р.', arg = '{id}', enable = true, waiting = '2', bind = "{}", in_fastmenu = true},
-					{cmd = 'live_sobes', description = 'Собеседование', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Собеседование]: Доброго времени суток, уважаемые граждане Штата!&/news [Собеседование]: С Вами - Я, {fraction_rank} - {my_ru_nick}.&/news [Собеседование]: Давно мечтали изменить свою жизнь в лучшую сторону?&/news [Собеседование]: Поставить новые и не запланированные цели?&/news [Собеседование]: Спешу Вас обрадовать! Ведь именно сейчас ...&/news [Собеседование]: ... проходит собеседование в Радиоцентр {fraction_tag}!&/news [Собеседование]: Что нужно иметь для прохождения собеседования?&/news [Собеседование]: Критерии очень просты, при себе необходимо иметь: ...&/news [Собеседование]: ... Паспорт, мед. карту с отметкой Полностью здоров&/news [Собеседование]: Ведь именно у нас: Доброе и отзывчивое начальство ...&/news [Собеседование]: ... достойный карьерный рост и высокие зарплаты!&/news [Собеседование]: Заинтересовавшихся пройти собеседование ожидаем в ...&/news [Собеседование]: ... холле главного офиса {fraction_tag}.&/news [Собеседование]: А на этом наш эфир подходит к концу!&/news [Собеседование]: С Вами был - Я, {my_ru_nick}. До скорых встреч!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_mp1', description = 'Викторина "Столицы"', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну! Просьба не перебивать.&/news •°•°•°•° Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Викторина]: Добрый день, уважаемые радиослушатели!&/news [Викторина]: У микрофона - {my_ru_nick}!&/news [Викторина]: Сегодня мы проведём - Столицы.&/news [Викторина]: Суть викторины такова: Я говорю вам страну, А вы мне её столицу.&/news [Викторина]: Ответы присылать на номер студии, его вы можете найти...&/news [Викторина]: ...в своём телефоне, в разделе: Контакты.&/news [Викторина]: Призовой Фонд сегодня составляет целый 1 милион долларов!&/news [Викторина]: Ну что же, давайте начинать.&/news [Викторина]: Открывает сегодняшний марафон стран поистине прекрасное государство.&/news [Викторина]: Страна, которая подарила миру необычную поп культуру. И это...&/news [Викторина]: ...Республика Корея. Или как её называют еще - Южная Корея.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Правильный ответ - Сеул...&/news [Викторина]: ...густо населённый город с миллионом развлечений на любой вкус.&/news [Викторина]: Первый правильный ответ мы получили от гражданина...&{pause}&/news [Викторина]: Продолжаем. Следующее Государство известно во всём мире как страна футбола...&/news [Викторина]: ...и самбы - Бразилия.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Как бы абсурдно это не звучало, столица страны Бразилия - Бразилиа.&/news [Викторина]: Ответов было много... Но самым быстрым оказался гражданин...&{pause}&/news [Викторина]: Большую часть следующего государства занимают трудно проходимые Джунгли...&/news [Викторина]: Я говорю о Вьетнаме.&{pause}&/news [Викторина]: На студию поступил правильный ответ!&/news [Викторина]: Столицей Вьетнама является город Ханой.&/news [Викторина]: Правильный ответ нам дал гражданин...&{pause}&/news [Викторина]: Вы, уважаемый радиослушатель, и правда не прогуливали географию в школе.&/news [Викторина]: Именно в этой стране находится действующий вулкан 'Кракатау'.&/news [Викторина]: ...Индонезия.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: И... Правильный ответ... Джакарта.&/news [Викторина]: Город контрастов, в котором переплелись разные языки и культуры...&/news [Викторина]: ...богатство и бедность.&/news [Викторина]: Уверен с этим городом знаком наш слушатель под именем...&{pause}&/news [Викторина]: Ведь именно он и дал правильный ответ!&/news [Викторина]: Густые леса, скалистые острова, горнолыжные курорты. Это всё про...&/news [Викторина]: ...страну - Финляндия.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Правильным ответом является - Хельсинки! И этот ответ дал штата с именем...&{pause}&/news [Викторина]: Больше всего об этой стране знают лыжники и сноубордисты...&/news [Викторина]: ...Австрия.&/news [Викторина]: На студию поступил правильный ответ!&/news [Викторина]: Любой разговор об Австрии всегда сводится к ее столице, и не спроста.&/news [Викторина]: Ведь 'Вена' - крупнейший культурно-исторический центр Европы.&/news [Викторина]: Первым правильный ответ в студию прислал гражданин с именем...&{pause}&/news [Викторина]: И так, сейчас я озвучу победителя нашей викторины, вы готовы?&{pause}&/news [Викторина]: Просим победителя приехать к нам за наградой...&/news [Викторина]: На этом наша викторина окончена, спасибо всем вам за участие!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_mp2', description = 'Викторина "Математика"', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Викторина]: Добрый день, уважаемые радиослушатели!&/news [Викторина]: У микрофона - {my_ru_nick}!&/news [Викторина]: Сегодня мы проведём викторину - Математика.&/news [Викторина]: Суть викторины: Я говорю вам примеры, а вы мне ответы на них.&/news [Викторина]: В примерах могут использоваться такие операторы, как...&/news [Викторина]: ...сложение +, умножение *, вычитание -, деление /.&/news [Викторина]: Ответы присылать на номер студии, его вы можете найти...&/news [Викторина]: ...в своём телефоне, в разделе: Контакты.&/news [Викторина]: Призовой Фонд сегодня составляет аж целых 500.000$!&/news [Викторина]: Ну что же, давайте начинать.&/news [Викторина]: Первый пример...&/news [Викторина]: ... '3 + 3 * 3'.&{pause}&/news [Викторина]: Стоп! На студию поступил верный ответ.&/news [Викторина]: Правильный ответ - '12'.&/news [Викторина]: Верный ответ нам дал гражданин с именем ...&{pause}&/news [Викторина]: Мы только начинаем разгоняться...&/news [Викторина]: ... '66 - 44 + 1'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Корректным ответом является - '23'.&/news [Викторина]: Первый правильный ответ мы получили от граждана ...&{pause}&/news [Викторина]: Следующий пример...&/news [Викторина]: ... '35 + 75'.&/news [Викторина]: И... У нас есть корректный ответ!&/news [Викторина]: И так, правильный ответ '110', и мы получили этот ответ от гражданина ...&{pause}&/news [Викторина]: Без лишних слов, следующий пример...&/news [Викторина]: ... '25 - 28 + 1'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Не ожидали отрицательных чисел в ответе? Правильный ответ - '-2'.&/news [Викторина]: Этот ответ нам подарил граждинин с именем ...&{pause}&/news [Викторина]: Давайте добавим разнообразия. Я загадаю пример при помощи...&/news [Викторина]: ...римских чисел. Ответ должен быть в виде римского числа!&/news [Викторина]: ... 'X - IV'.&{pause}&/news [Викторина]: Стоп! На студию поступил правильный ответ!&/news [Викторина]: Корректным ответом является - 'VI'.&/news [Викторина]: Самым быстрым был граждинин ...&{pause}&/news [Викторина]: Опять римские числа.&/news [Викторина]: ... 'XV - VIII'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: 'VII' - верный ответ.&/news [Викторина]: Этот ответ нам подарил гражданин штата -&{pause}&/news [Викторина]: И... Последний пример с римскими числами на сегодня.&/news [Викторина]: ... 'XII - III'.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Верный ответ - 'IX'. А первый ответчик - гражданин ...&{pause}&/news [Викторина]: И так, сейчас я озвучу победителя нашей викторины, вы готовы?&{pause}&/news [Викторина]: Просим победителя приехать к нам за наградой...&/news [Викторина]: На этом наша викторина окончена, спасибо всем вам за участие!/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_weather1', description = 'Прогноз погоды (утренний дождь)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news Доброе утро, уважаемые радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news Сегодняшний день начался с пасмурной погоды и дождя.&/news Синоптики сообщают, что осадки продлятся до полудня, так что не забудьте взять зонт!&/news Ветер северо-западный, умеренный, но может усиливаться порывами до 15 м/c.&/news Температура воздуха +16°C, однако ощущается как +13°C.&/news Внимание водителям: дороги могут быть скользкими, соблюдайте дистанцию!&/news Ближе к обеду тучи начнут рассеиваться, а дождь прекратится.&/news А пока держитесь теплее и не забывайте наслаждаться свежестью после дождя!&/news На этом наш утренний прогноз погоды завершается.&/news С вами был {fraction_rank} - {my_ru_nick}.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '2', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_weather2', description = 'Прогноз погоды (дневной)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news Добрый день, дорогие радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news Сейчас самое время узнать, какая погода ждёт нас днём.&/news Температура воздуха в данный момент составляет +22°C, солнечно, но возможна переменная облачность.&/news Ветер южный, слабый, около 5 м/с, комфортные условия для прогулок.&/news Осадков не ожидается, но к вечеру возможны лёгкие порывы ветра.&/news Если планировали провести день на свежем воздухе - отличная возможность!&/news На этом наш дневной прогноз завершается.&/news С вами был {fraction_rank} - {my_ru_nick}. До скорых встреч!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_weather3', description = 'Прогноз погоды (вечерний торнадо)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news Добрый вечер, дорогие радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news И в нашем вечернем эфире речь пойдёт о прогнозе погоды.&/news Сейчас я вам зачитаю, что говорят нам наши синоптики...&/news В 21:52 предполагается песчаная буря, которая продлится всего несколько минут.&/news В связи с этим просим вас остаться дома и плотно закрыть окна и двери.&/news Также в районе Паломино Крит замечено торнадо.&/news Призываем Вас избегать поездок в этот район Штата.&/news И уже в 22:10 нас ожидает спокойная, ночная погода.&/news Но не стоит так сильно радоваться, ближе к ночи чередование спокойной погоды и песчаной бури продолжится.&/news С чем это связано - неизвестно! Но мы попытаемся уведомить Вас об изменениях как можно скорее.&/news А на этом наш эфир подходит к концу.&/news С вами был {fraction_rank} - {my_ru_nick}.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_int1', description = 'Интервью (начало)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну.&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/news [Интервью]: Здравствуйте, уважаемые радиослушатели!&/news [Интервью]: У микрофона - {my_ru_nick}!&/news [Интервью]: Сегодня у нас в гостях особый гость на интервью...&/news [Интервью]: Возможно многие из вас даже знают его, и так, наш гость это ...", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
-					{cmd = 'live_int2', description = 'Интервью (конец)', text = "/news [Интервью]: И наш эфир к сожалению подходит к концу.&/news [Префикс]: С вами был Я - {my_ru_nick}.&/news [Интервью]: До свидания, штат! Не переключайтесь!&/news •°•°•°•°• Музыкальная заставка радиостанции {fraction_tag} •°•°•°•°•&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_sobes', description = 'Собеседование', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news [Собеседование]: Доброго времени суток, уважаемые граждане Штата!&/news [Собеседование]: С Вами - Я, {fraction_rank} - {my_ru_nick}.&/news [Собеседование]: Давно мечтали изменить свою жизнь в лучшую сторону?&/news [Собеседование]: Поставить новые и не запланированные цели?&/news [Собеседование]: Спешу Вас обрадовать! Ведь именно сейчас ...&/news [Собеседование]: ... проходит собеседование в Радиоцентр {fraction_tag}!&/news [Собеседование]: Что нужно иметь для прохождения собеседования?&/news [Собеседование]: Критерии очень просты, при себе необходимо иметь: ...&/news [Собеседование]: ... Паспорт, мед. карту с отметкой Полностью здоров&/news [Собеседование]: Ведь именно у нас: Доброе и отзывчивое начальство ...&/news [Собеседование]: ... достойный карьерный рост и высокие зарплаты!&/news [Собеседование]: Заинтересовавшихся пройти собеседование ожидаем в ...&/news [Собеседование]: ... холле главного офиса {fraction_tag}.&/news [Собеседование]: А на этом наш эфир подходит к концу!&/news [Собеседование]: С Вами был - Я, {my_ru_nick}. До скорых встреч!&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_mp1', description = 'Викторина "Столицы"', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну! Просьба не перебивать.&/news -°-°-°-° Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news [Викторина]: Добрый день, уважаемые радиослушатели!&/news [Викторина]: У микрофона - {my_ru_nick}!&/news [Викторина]: Сегодня мы проведём - Столицы.&/news [Викторина]: Суть викторины такова: Я говорю вам страну, А вы мне её столицу.&/news [Викторина]: Ответы присылать на номер студии, его вы можете найти...&/news [Викторина]: ...в своём телефоне, в разделе: Контакты.&/news [Викторина]: Призовой Фонд сегодня составляет целый 1 милион долларов!&/news [Викторина]: Ну что же, давайте начинать.&/news [Викторина]: Открывает сегодняшний марафон стран поистине прекрасное государство.&/news [Викторина]: Страна, которая подарила миру необычную поп культуру. И это...&/news [Викторина]: ...Республика Корея. Или как её называют еще - Южная Корея.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Правильный ответ - Сеул...&/news [Викторина]: ...густо населённый город с миллионом развлечений на любой вкус.&/news [Викторина]: Первый правильный ответ мы получили от гражданина...&{pause}&/news [Викторина]: Продолжаем. Следующее Государство известно во всём мире как страна футбола...&/news [Викторина]: ...и самбы - Бразилия.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Как бы абсурдно это не звучало, столица страны Бразилия - Бразилиа.&/news [Викторина]: Ответов было много... Но самым быстрым оказался гражданин...&{pause}&/news [Викторина]: Большую часть следующего государства занимают трудно проходимые Джунгли...&/news [Викторина]: Я говорю о Вьетнаме.&{pause}&/news [Викторина]: На студию поступил правильный ответ!&/news [Викторина]: Столицей Вьетнама является город Ханой.&/news [Викторина]: Правильный ответ нам дал гражданин...&{pause}&/news [Викторина]: Вы, уважаемый радиослушатель, и правда не прогуливали географию в школе.&/news [Викторина]: Именно в этой стране находится действующий вулкан 'Кракатау'.&/news [Викторина]: ...Индонезия.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: И... Правильный ответ... Джакарта.&/news [Викторина]: Город контрастов, в котором переплелись разные языки и культуры...&/news [Викторина]: ...богатство и бедность.&/news [Викторина]: Уверен с этим городом знаком наш слушатель под именем...&{pause}&/news [Викторина]: Ведь именно он и дал правильный ответ!&/news [Викторина]: Густые леса, скалистые острова, горнолыжные курорты. Это всё про...&/news [Викторина]: ...страну - Финляндия.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Правильным ответом является - Хельсинки! И этот ответ дал штата с именем...&{pause}&/news [Викторина]: Больше всего об этой стране знают лыжники и сноубордисты...&/news [Викторина]: ...Австрия.&/news [Викторина]: На студию поступил правильный ответ!&/news [Викторина]: Любой разговор об Австрии всегда сводится к ее столице, и не спроста.&/news [Викторина]: Ведь 'Вена' - крупнейший культурно-исторический центр Европы.&/news [Викторина]: Первым правильный ответ в студию прислал гражданин с именем...&{pause}&/news [Викторина]: И так, сейчас я озвучу победителя нашей викторины, вы готовы?&{pause}&/news [Викторина]: Просим победителя приехать к нам за наградой...&/news [Викторина]: На этом наша викторина окончена, спасибо всем вам за участие!&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_mp2', description = 'Викторина "Математика"', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news [Викторина]: Добрый день, уважаемые радиослушатели!&/news [Викторина]: У микрофона - {my_ru_nick}!&/news [Викторина]: Сегодня мы проведём викторину - Математика.&/news [Викторина]: Суть викторины: Я говорю вам примеры, а вы мне ответы на них.&/news [Викторина]: В примерах могут использоваться такие операторы, как...&/news [Викторина]: ...сложение +, умножение *, вычитание -, деление /.&/news [Викторина]: Ответы присылать на номер студии, его вы можете найти...&/news [Викторина]: ...в своём телефоне, в разделе: Контакты.&/news [Викторина]: Призовой Фонд сегодня составляет аж целых 500.000$!&/news [Викторина]: Ну что же, давайте начинать.&/news [Викторина]: Первый пример...&/news [Викторина]: ... '3 + 3 * 3'.&{pause}&/news [Викторина]: Стоп! На студию поступил верный ответ.&/news [Викторина]: Правильный ответ - '12'.&/news [Викторина]: Верный ответ нам дал гражданин с именем ...&{pause}&/news [Викторина]: Мы только начинаем разгоняться...&/news [Викторина]: ... '66 - 44 + 1'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Корректным ответом является - '23'.&/news [Викторина]: Первый правильный ответ мы получили от граждана ...&{pause}&/news [Викторина]: Следующий пример...&/news [Викторина]: ... '35 + 75'.&/news [Викторина]: И... У нас есть корректный ответ!&/news [Викторина]: И так, правильный ответ '110', и мы получили этот ответ от гражданина ...&{pause}&/news [Викторина]: Без лишних слов, следующий пример...&/news [Викторина]: ... '25 - 28 + 1'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: Не ожидали отрицательных чисел в ответе? Правильный ответ - '-2'.&/news [Викторина]: Этот ответ нам подарил граждинин с именем ...&{pause}&/news [Викторина]: Давайте добавим разнообразия. Я загадаю пример при помощи...&/news [Викторина]: ...римских чисел. Ответ должен быть в виде римского числа!&/news [Викторина]: ... 'X - IV'.&{pause}&/news [Викторина]: Стоп! На студию поступил правильный ответ!&/news [Викторина]: Корректным ответом является - 'VI'.&/news [Викторина]: Самым быстрым был граждинин ...&{pause}&/news [Викторина]: Опять римские числа.&/news [Викторина]: ... 'XV - VIII'.&{pause}&/news [Викторина]: Стоп!&/news [Викторина]: 'VII' - верный ответ.&/news [Викторина]: Этот ответ нам подарил гражданин штата -&{pause}&/news [Викторина]: И... Последний пример с римскими числами на сегодня.&/news [Викторина]: ... 'XII - III'.&{pause}&/news [Викторина]: Стоп! Наша студия получила правильный ответ.&/news [Викторина]: Верный ответ - 'IX'. А первый ответчик - гражданин ...&{pause}&/news [Викторина]: И так, сейчас я озвучу победителя нашей викторины, вы готовы?&{pause}&/news [Викторина]: Просим победителя приехать к нам за наградой...&/news [Викторина]: На этом наша викторина окончена, спасибо всем вам за участие!/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_weather1', description = 'Прогноз погоды (утренний дождь)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news Доброе утро, уважаемые радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news Сегодняшний день начался с пасмурной погоды и дождя.&/news Синоптики сообщают, что осадки продлятся до полудня, так что не забудьте взять зонт!&/news Ветер северо-западный, умеренный, но может усиливаться порывами до 15 м/c.&/news Температура воздуха +16°C, однако ощущается как +13°C.&/news Внимание водителям: дороги могут быть скользкими, соблюдайте дистанцию!&/news Ближе к обеду тучи начнут рассеиваться, а дождь прекратится.&/news А пока держитесь теплее и не забывайте наслаждаться свежестью после дождя!&/news На этом наш утренний прогноз погоды завершается.&/news С вами был {fraction_rank} - {my_ru_nick}.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '2', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_weather2', description = 'Прогноз погоды (дневной)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news Добрый день, дорогие радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news Сейчас самое время узнать, какая погода ждёт нас днём.&/news Температура воздуха в данный момент составляет +22°C, солнечно, но возможна переменная облачность.&/news Ветер южный, слабый, около 5 м/с, комфортные условия для прогулок.&/news Осадков не ожидается, но к вечеру возможны лёгкие порывы ветра.&/news Если планировали провести день на свежем воздухе - отличная возможность!&/news На этом наш дневной прогноз завершается.&/news С вами был {fraction_rank} - {my_ru_nick}. До скорых встреч!&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_weather3', description = 'Прогноз погоды (вечерний торнадо)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю новостную волну.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news Добрый вечер, дорогие радиослушатели!&/news У микрофона {fraction_rank} - {my_ru_nick}.&/news И в нашем вечернем эфире речь пойдёт о прогнозе погоды.&/news Сейчас я вам зачитаю, что говорят нам наши синоптики...&/news В 21:52 предполагается песчаная буря, которая продлится всего несколько минут.&/news В связи с этим просим вас остаться дома и плотно закрыть окна и двери.&/news Также в районе Паломино Крит замечено торнадо.&/news Призываем Вас избегать поездок в этот район Штата.&/news И уже в 22:10 нас ожидает спокойная, ночная погода.&/news Но не стоит так сильно радоваться, ближе к ночи чередование спокойной погоды и песчаной бури продолжится.&/news С чем это связано - неизвестно! Но мы попытаемся уведомить Вас об изменениях как можно скорее.&/news А на этом наш эфир подходит к концу.&/news С вами был {fraction_rank} - {my_ru_nick}.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю новостную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_int1', description = 'Интервью (начало)', text = "/me нажимает на необходимые кнопки в аппаратуре, тем самым включает ее&/do Аппаратура включена и работает исправно.&/me проверяет на исправность аппаратуру и микрофон&/me берет наушники со столика и надевает их на свою голову&/todo Раз, раз, раз*стуча по микрофону.&/do Микрофон исправен и готов к работе.&/d [{fraction_tag}] - [СМИ]: Занимаю эфирную волну.&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/news [Интервью]: Здравствуйте, уважаемые радиослушатели!&/news [Интервью]: У микрофона - {my_ru_nick}!&/news [Интервью]: Сегодня у нас в гостях особый гость на интервью...&/news [Интервью]: Возможно многие из вас даже знают его, и так, наш гость это ...", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
+					{cmd = 'live_int2', description = 'Интервью (конец)', text = "/news [Интервью]: И наш эфир к сожалению подходит к концу.&/news [Префикс]: С вами был Я - {my_ru_nick}.&/news [Интервью]: До свидания, штат! Не переключайтесь!&/news -°-°-°-°- Музыкальная заставка радиостанции {fraction_tag} -°-°-°-°-&/d [{fraction_tag}] - [СМИ]: Освобождаю эфирную волну!&/me нажимает на необходимые клавиши и выходит из эфира, после чего отключает микрофон&/do Эфир окончен и микрофон отключен.&/me снимает с головы наушники и кладет их на место", arg = '', enable = true, waiting = '6', bind = "{}", in_fastmenu = false},
 				},
 				fd = {
 					{cmd = 'siren', description = 'Вкл/выкл мигалок в т/с', text = '{switchCarSiren}', arg = '', enable = true, waiting = '2', bind = "{}"},
@@ -1442,6 +1425,73 @@ for key, m in pairs(modules) do
 		m.base_file = m.path:match('([^/\\]+)$') or m.path
 	end
 end
+local function backup_account_dirs()
+	local dirs, folders = {}, {}
+	local list = (modules.accounts and modules.accounts.data and modules.accounts.data.list) or {}
+	for _, acc in ipairs(list) do
+		if acc.name and not acc.is_guest then
+			table.insert(dirs, account_dir_for(acc.name))
+			local folder = account_folder(acc.name)
+			table.insert(folders, folder)
+		end
+	end
+	return dirs, folders
+end
+local function backup_module_selected(key)
+	local ex = settings.general.backup_modules
+	if type(ex) == 'table' and ex[key] == false then return false end
+	return true
+end
+local function backup_module_list()
+	local keys = {}
+	for k, m in pairs(modules) do
+		if type(m) == 'table' and type(m.name) == 'string' then keys[#keys + 1] = k end
+	end
+	table.sort(keys, function(a, b) return tostring(modules[a].name) < tostring(modules[b].name) end)
+	return keys
+end
+local function backup_cfg()
+	local dirs = backup_account_dirs()
+	local exclude = {}
+	for k, m in pairs(modules) do
+		if type(m) == 'table' and m.base_file and not backup_module_selected(k) then exclude[m.base_file] = true end
+	end
+	return {
+		base = config_dir,
+		script_path = worked_dir .. '/Arizona Helper.lua',
+		settings_path = config_dir .. '/Settings.json',
+		modules = modules,
+		account_dirs = dirs,
+		exclude_files = exclude,
+		include = {
+			settings = backups_enabled('settings'),
+			modules = backups_enabled('modules'),
+			helper = backups_enabled('helper'),
+		},
+	}
+end
+local function backup_all_data()
+	if backup_lib then return backup_lib.backup_all(backup_cfg()) end
+	return 0
+end
+local function backup_missing_data()
+	if backup_lib then return backup_lib.backup_missing(backup_cfg()) end
+	return 0
+end
+local function backup_stats()
+	if backup_lib then
+		local cfg = backup_cfg()
+		cfg.include = { settings = true, modules = true, helper = true }
+		return backup_lib.stats(cfg)
+	end
+	return 0, 0
+end
+local function clear_backup_dir()
+	if backup_lib then
+		local _, folders = backup_account_dirs()
+		backup_lib.clear(config_dir, modules, folders)
+	end
+end
 local function migrate_custom_commands()
 	local m = modules.custom_commands
 	if not m or type(m.data) ~= 'table' then return false end
@@ -1672,14 +1722,62 @@ function save_module(key)
 	local module = modules[key]
 	if not module then print('Неизвестный модуль: ' .. tostring(key)) return false end
 
-	local content = safe_encode_json(module.data)
+	local data = module.data
+	if key == 'sobes' and type(data) == 'table' then
+		local copy = {}
+		for k, v in pairs(data) do
+			if k ~= 'sobes_builtin' then copy[k] = v end
+		end
+		for _, flag in ipairs({ 'cleared_questions', 'cleared_refusals', 'cleared_docs', 'cleared_about' }) do
+			if copy[flag] ~= true then copy[flag] = nil end
+		end
+		data = copy
+	end
+
+	local content = safe_encode_json(data)
 	if not content then print('Не удалось сохранить модуль "' .. module.name .. '" - ошибка кодировки JSON') return false end
 
-	local file, errstr = io.open(module.path, 'w')
+	local tmp = module.path .. '.tmp'
+	local file, errstr = io.open(tmp, 'w')
 	if not file then print('Не удалось сохранить модуль "' .. module.name .. '": ' .. tostring(errstr or 'Unknown')) return false end
-
-	file:write(content)
+	local wrote = file:write(content)
 	file:close()
+	if not wrote then
+		os.remove(tmp)
+		print('Не удалось записать модуль "' .. module.name .. '"')
+		return false
+	end
+
+	local bak = nil
+	if backups_enabled('modules') and backup_module_selected(key) then
+		ensure_backup_dir(module.path)
+		bak = backup_file_for(module.path)
+	end
+	if doesFileExist(module.path) then
+		if bak then
+			os.remove(bak)
+			if not os.rename(module.path, bak) then
+				local direct = io.open(module.path, 'w')
+				if direct then
+					direct:write(content)
+					direct:close()
+					os.remove(tmp)
+					print('Модуль "' .. module.name .. '" сохранён (без резервной копии)')
+					return true
+				end
+				os.remove(tmp)
+				print('Не удалось создать резервную копию модуля "' .. module.name .. '"')
+				return false
+			end
+		else
+			os.remove(module.path)
+		end
+	end
+	if not os.rename(tmp, module.path) then
+		if bak and doesFileExist(bak) and not doesFileExist(module.path) then os.rename(bak, module.path) end
+		print('Не удалось заменить файл модуля "' .. module.name .. '" (временный файл сохранён)')
+		return false
+	end
 
 	print('Модуль "' .. module.name .. '" сохранён')
 	return true
@@ -1749,10 +1847,30 @@ local function sync_all(def, loaded)
 	end
 	return loaded, changed
 end
+local function read_json_file(p)
+	local f = io.open(p, 'r')
+	if not f then return nil end
+	local c = f:read('*a') or ''
+	f:close()
+	if c == '' then return nil end
+	local ok, d = pcall(decodeJson, c)
+	if ok and type(d) == 'table' then return d end
+	return nil
+end
 function load_module(key)
 	local module = modules[key]
 	if not module then print('Неизвестный модуль: ' .. tostring(key)) return end
 
+	if not doesFileExist(module.path) then
+		local tmp = module.path .. '.tmp'
+		if doesFileExist(tmp) then
+			os.rename(tmp, module.path)
+		else
+			for _, p in ipairs({ backup_file_for(module.path), guest_backup_for(module.base_file), module.path .. '.bak' }) do
+				if doesFileExist(p) and copy_file(p, module.path) then break end
+			end
+		end
+	end
 	if not doesFileExist(module.path) then
 		module.__loaded = true
 		print('Модуль "' .. module.name .. '" инициализирован')
@@ -1761,15 +1879,48 @@ function load_module(key)
 	end
 
 	local file, errstr = io.open(module.path, 'r')
-	if not file then print('Не удалось открыть модуль "' .. module.name .. '": ' .. tostring(errstr or 'Unknown')) return end
+	if not file then
+		print('Не удалось открыть модуль "' .. module.name .. '": ' .. tostring(errstr or 'Unknown'))
+		local alt = read_json_file(backup_file_for(module.path)) or read_json_file(guest_backup_for(module.base_file)) or read_json_file(module.path .. '.bak')
+		if alt then
+			module.data = alt
+			module.__loaded = true
+			print('Модуль "' .. module.name .. '" восстановлен из резервной копии')
+			save_module(key)
+		else
+			module.__loaded = true
+		end
+		return
+	end
 
 	local contents = file:read('*a') file:close()
-	if #contents == 0 then print('Не удалось загрузить модуль "' .. module.name .. '" - файл пустой') return end
+	local ok, loaded = false, nil
+	if #contents > 0 then ok, loaded = pcall(decodeJson, contents) end
+	local recovered = false
+	if not ok or type(loaded) ~= 'table' then
+		local reason = (#contents == 0) and 'файл пустой' or 'ошибка чтения JSON'
+		print('Модуль "' .. module.name .. '": ' .. reason .. ', пробую восстановить')
+		loaded = read_json_file(backup_file_for(module.path)) or read_json_file(guest_backup_for(module.base_file)) or read_json_file(module.path .. '.bak')
+		if loaded then
+			print('Модуль "' .. module.name .. '" восстановлен из резервной копии')
+		else
+			loaded = {}
+			print('Модуль "' .. module.name .. '" сброшен к настройкам по умолчанию')
+		end
+		if doesFileExist(module.path) then
+			local bad = module.path .. '.corrupt'
+			os.remove(bad)
+			os.rename(module.path, bad)
+		end
+		recovered = true
+	end
 
-	local ok, loaded = pcall(decodeJson, contents)
-	if not ok or type(loaded) ~= 'table' then print('Не удалось загрузить модуль "' .. module.name .. '" - ошибка decode JSON') return end
-
+	if key == 'sobes' and type(module.data.sobes_builtin) == 'table' then
+		loaded.sobes_builtin = module.data.sobes_builtin
+	end
 	local changed = merge_defaults(module.data, loaded)
+	if recovered then changed = true end
+	if key == 'sobes' and contents:find('"sobes_builtin"', 1, true) then changed = true end
 
 	local synced, ch = sync_all(module.data, loaded)
 	loaded = synced
@@ -1805,15 +1956,6 @@ function load_module(key)
 	module.data = loaded
 	module.__loaded = true
 	if changed then
-		local src = io.open(module.path, 'r')
-		if src then
-			local old = src:read('*a') or ''
-			src:close()
-			if old ~= '' then
-				local bak = io.open(module.path .. '.bak', 'w')
-				if bak then bak:write(old); bak:close() end
-			end
-		end
 		save_module(key)
 		print('Модуль "' .. module.name .. '" обновлён под новую версию')
 	else
@@ -1940,6 +2082,7 @@ if cur_acc then
     end
 end
 if is_setup then load_modules() end
+if backups_enabled() then create_helper_backup() backup_missing_data() end
 if modules.crosshair and modules.crosshair.data then
     _G.__crosshair_font_nm = modules.crosshair.data.font_name or 'Arial'
     _G.__crosshair_font_sz = modules.crosshair.data.font_size or 15
@@ -2394,7 +2537,8 @@ local MODULE = {
 		version = "", url = "", info = "",
 		status = "", status_color = "{FFFFFF}", is_emergency = false,
 		downloading = false, download_start = nil,
-		download_file = ""
+		download_file = "", last_error = nil,
+		manual_url = "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Arizona%20Helper.lua"
 	},
 	Crosshair = {
 		Window = imgui.new.bool(),
@@ -6264,10 +6408,14 @@ local function compare_versions(v1, v2)
 end
 -------------------------------------------------[ UPDATE ]-------------------------------------
 local download_lock = false
+local function dbg(msg)
+	if MODULE.DEBUG then print('[DEBUG] ' .. tostring(msg)) end
+end
 local download_queue = {}
 local download_queue_worker_started = false
-local DOWNLOAD_TIMEOUT_SEC = 45
-local DOWNLOAD_STALL_SEC   = 20
+local download_gen = 0
+local DOWNLOAD_TIMEOUT_SEC = 120
+local DOWNLOAD_STALL_SEC   = 25
 local DOWNLOAD_ATTEMPTS    = 3
 local function dl_file_size(path)
 	local f = io.open(path, 'rb')
@@ -6275,6 +6423,13 @@ local function dl_file_size(path)
 	local size = f:seek('end') or 0
 	f:close()
 	return size
+end
+local function read_lib_version(path)
+	local f = io.open(path, 'r')
+	if not f then return nil end
+	local head = f:read(1024) or ''
+	f:close()
+	return head:match('LIB_VERSION%s*[:=]%s*([%w%.%-_]+)')
 end
 
 local function dl_remove(path)
@@ -6291,7 +6446,7 @@ local function start_download_queue_worker()
 			elseif #download_queue > 0 then
 				local job = table.remove(download_queue, 1)
 				if job then
-					print('Загрузка из очереди: ' .. tostring(job.path))
+					dbg('из очереди: ' .. tostring(job.path))
 					downloadFileFromUrlToPath(job.url, job.path, job.key, job.done)
 				end
 			else
@@ -6307,11 +6462,21 @@ local function reset_update_state()
 	MODULE.Update.download_start = nil
 	MODULE.Update.download_file = ''
 	MODULE.Update.auto_start_download = false
+	MODULE.Update.installing = false
+	MODULE.Update.helper_download = false
+	download_gen = download_gen + 1
 	download_lock = false
+end
+local function read_script_version(p)
+	local f = io.open(p, 'r')
+	if not f then return nil end
+	local head = f:read(8192) or ''
+	f:close()
+	return head:match("script_version%s*%(%s*[\"']([%d%.]+)[\"']%s*%)")
 end
 
 function MODULE.Update.start_install()
-	if MODULE.Update.downloading then return end
+	if MODULE.Update.downloading or MODULE.Update.installing then return end
 	MODULE.Update.print_update_messages(true)
 	MODULE.Update.start_download()
 end
@@ -6320,6 +6485,7 @@ local DOWNLOAD_HANDLERS = {
 	helper = function(new_path)
 		local old_path = worked_dir .. '/Arizona Helper.lua'
 		local bak_path = old_path .. '.bak'
+		local old_ver = tostring(thisScript().version or '0')
 		local ok, err = pcall(function()
 			dl_remove(bak_path)
 			if doesFileExist(old_path) then
@@ -6333,23 +6499,39 @@ local DOWNLOAD_HANDLERS = {
 		if not ok then
 			dl_remove(new_path)
 			reset_update_state()
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Не удалось установить обновление: ' .. tostring(err), message_color)
+			dbg('не удалось установить обновление: ' .. tostring(err))
 			return
 		end
-		reset_update_state()
+		local new_ver = read_script_version(old_path)
+		if new_ver and compare_versions(new_ver, old_ver) < 0 then
+			dl_remove(old_path)
+			if doesFileExist(bak_path) then os.rename(bak_path, old_path) end
+			reset_update_state()
+			dbg('загруженная версия ' .. tostring(new_ver) .. ' старше установленной, обновление отменено')
+			return
+		end
+		MODULE.Update.downloading = false
+		MODULE.Update.download_start = nil
+		MODULE.Update.download_file = ''
+		MODULE.Update.auto_start_download = false
+		MODULE.Update.installing = true
 		MODULE.Update.pending_reload = true
-		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Обновление установлено. Обновляю библиотеки...', message_color)
-		sync_libs(MODULE.Update.libs or DEFAULT_LIBS, false, function()
+		dbg('обновление установлено, обновляю библиотеки...')
+		sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, function()
 			if not MODULE.Update.pending_reload then return end
 			MODULE.Update.pending_reload = false
+			MODULE.Update.installing = false
+			MODULE.Update.helper_download = false
 			reload_script = true
 			pcall(function() thisScript():reload() end)
 		end)
 		lua_thread.create(function()
-			wait(20000)
+			wait(60000)
 			if MODULE.Update.pending_reload then
 				MODULE.Update.pending_reload = false
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки обновить не удалось, перезапускаю с текущими.', message_color)
+				MODULE.Update.installing = false
+				MODULE.Update.helper_download = false
+				dbg('библиотеки обновить не удалось, перезапуск с текущими')
 				reload_script = true
 				pcall(function() thisScript():reload() end)
 			end
@@ -6383,24 +6565,43 @@ local DOWNLOAD_HANDLERS = {
 		end
 	end,
 	lib = function(path)
-		print('[LIB] загружено: ' .. tostring(path))
+		dbg('загружено: ' .. tostring(path))
 		if MODULE.Update.pending_reload then
 			MODULE.Update.pending_reload = false
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки обновлены. Перезагрузка...', message_color)
+			dbg('библиотеки обновлены, перезагрузка...')
 			reload_script = true
 			pcall(function() thisScript():reload() end)
 		end
 	end,
 }
 
-local function download_once(url, path, attempt, done)
+local function download_once(url, path, attempt, key, done)
 	local part = path .. '.try' .. tostring(attempt)
 	dl_remove(part)
+	local channel = nil
 	local state = { finished = false }
 	local function finish(ok, info)
 		if state.finished then return end
 		state.finished = true
+		dbg((ok and 'OK ' or 'FAIL ') .. tostring(key) .. ' try=' .. tostring(attempt) .. ' ' .. tostring(ok and (dl_file_size(part) .. ' Б') or (info or '')))
 		done(ok, info, part)
+	end
+	local function start_http()
+		channel = 'http'
+		local launched, launch_err = pcall(downloadUrlToFile, url, part, function(_, status)
+			if state.finished then return end
+			if status == 6 then
+				finish(true)
+			elseif status == 4 then
+				finish(false, 'downloadUrlToFile вернул ошибку (status=4)')
+			end
+		end)
+		if not launched then
+			lua_thread.create(function()
+				wait(200)
+				finish(false, tostring(launch_err))
+			end)
+		end
 	end
 	if IS_MOBILE then
 		local ok, err = pcall(function()
@@ -6416,18 +6617,58 @@ local function download_once(url, path, attempt, done)
 		finish(ok, ok and nil or tostring(err))
 		return
 	end
-	local launched, launch_err = pcall(downloadUrlToFile, url, part, function(_, status)
-		if state.finished then return end
-		if status == 6 then finish(true) end
-	end)
-	if not launched then
-		lua_thread.create(function()
-			wait(200)
-			finish(false, tostring(launch_err))
+	if key ~= 'logo' and key ~= 'news_img' then
+		channel = 'async'
+		local requested = pcall(asyncHttpRequest, 'GET', url, { timeout = 120 }, function(resp)
+			if state.finished then return end
+			local body = resp and resp.text
+			if type(body) ~= 'string' or #body == 0 then
+				start_http()
+				return
+			end
+			local f, ferr = io.open(part, 'wb')
+			if not f then
+				finish(false, 'не удалось записать файл: ' .. tostring(ferr))
+				return
+			end
+			local ok_write = f:write(body)
+			f:close()
+			if not ok_write then
+				finish(false, 'ошибка записи файла')
+				return
+			end
+			finish(true)
+		end, function()
+			if state.finished then return end
+			channel = 'jsdelivr'
+			dbg('async ошибка, пробую зеркало')
+			local mirror = url:gsub('^https://raw%.githubusercontent%.com/([^/]+)/([^/]+)/main/', 'https://cdn.jsdelivr.net/gh/%1/%2@main/')
+			if mirror ~= url then
+				asyncHttpRequest('GET', mirror, { timeout = 120 }, function(resp)
+					if state.finished then return end
+					local body = resp and resp.text
+					if type(body) ~= 'string' or #body == 0 then start_http(); return end
+					local f, ferr = io.open(part, 'wb')
+					if not f then finish(false, 'не удалось записать файл: ' .. tostring(ferr)); return end
+					local ok_write = f:write(body)
+					f:close()
+					if not ok_write then finish(false, 'ошибка записи файла'); return end
+					finish(true)
+				end, function()
+					if state.finished then return end
+					dbg('зеркало недоступно, канал http')
+					start_http()
+				end)
+			else
+				start_http()
+			end
 		end)
+		if not requested then start_http() end
+	else
+		start_http()
 	end
 	lua_thread.create(function()
-		local started, last_size, last_change = os.clock(), 0, os.clock()
+		local started, last_size, last_change = os.clock(), dl_file_size(part), os.clock()
 		while not state.finished do
 			wait(500)
 			if state.finished then break end
@@ -6436,24 +6677,41 @@ local function download_once(url, path, attempt, done)
 				last_size, last_change = size, os.clock()
 			end
 			local now = os.clock()
-			if (now - started) > DOWNLOAD_TIMEOUT_SEC or (now - last_change) > DOWNLOAD_STALL_SEC then
+			local chan = channel
+			local wait_full = (chan == 'async' or chan == 'jsdelivr')
+			if not wait_full then
+				if size == 0 and (now - started) > 15 then
+					finish(false, 'сервер не отдал данные')
+					break
+				end
+				if size > 0 and (now - started) > 3 and (now - last_change) > 3 then
+					finish(true)
+					break
+				end
+				if (now - last_change) > DOWNLOAD_STALL_SEC then
+					finish(false, 'таймаут загрузки')
+					break
+				end
+			end
+			if (now - started) > DOWNLOAD_TIMEOUT_SEC then
 				finish(false, 'таймаут загрузки')
 			end
 		end
 	end)
 end
 
-local function download_with_retries(url, path, attempt, done)
+local function download_with_retries(url, path, attempt, key, done, max_attempts)
 	attempt = attempt or 1
-	download_once(url, path, attempt, function(ok, info, part)
+	if not max_attempts then max_attempts = (key == 'lib') and 2 or DOWNLOAD_ATTEMPTS end
+	download_once(url, path, attempt, key, function(ok, info, part)
 		if ok then
 			done(true, part)
 			return
 		end
-		if attempt < DOWNLOAD_ATTEMPTS then
+		if attempt < max_attempts then
 			lua_thread.create(function()
 				wait(1000 * attempt)
-				download_with_retries(url, path, attempt + 1, done)
+				download_with_retries(url, path, attempt + 1, key, done, max_attempts)
 			end)
 		else
 			dl_remove(part)
@@ -6492,6 +6750,14 @@ local function validate_download(part, path, key)
 				end
 			end
 		end
+		if key == 'lib' then
+			local name = path:match('[^/\\]+$')
+			local rv = MODULE.Update and MODULE.Update.lib_versions and name and MODULE.Update.lib_versions[name]
+			if rv then
+				local got = read_lib_version(part)
+				if tostring(got or '') ~= tostring(rv) then return false, 'версия библиотеки не совпадает' end
+			end
+		end
 	end
 	if key == 'logo' or key == 'news_img' then
 		local f = io.open(part, 'rb')
@@ -6528,34 +6794,46 @@ function downloadFileFromUrlToPath(url, path, file_key, on_done)
 		for _, job in ipairs(download_queue) do
 			if job.path == path then
 				job.done = on_done or job.done
+				job.url = url
+				job.key = key or job.key
 				return
 			end
 		end
 		table.insert(download_queue, {url = url, path = path, key = key, done = on_done})
-		print('Загрузка поставлена в очередь: ' .. tostring(path))
+		dbg('очередь: ' .. tostring(path))
 		start_download_queue_worker()
 		return
 	end
+	download_gen = download_gen + 1
+	local my_gen = download_gen
 	download_lock = true
 	local finished = false
 	local function finish(ok)
 		if finished then return end
 		finished = true
-		download_lock = false
 		if key and MODULE.SmartEdit and MODULE.SmartEdit.download_active then
 			MODULE.SmartEdit.download_active[key] = nil
 		end
+		if my_gen ~= download_gen then return end
+		if not ok and key == 'helper' and not MODULE.Update.last_error then
+			MODULE.Update.last_error = 'не удалось скачать обновление'
+		end
+		download_lock = false
 		if on_done then pcall(on_done, ok) end
 	end
 	local ok, err = pcall(function()
-		download_with_retries(url, path, 1, function(success, info)
+		download_with_retries(url, path, 1, key, function(success, info)
 			if not success then
 				if key == 'news_img' or key == 'logo' then
-					print('[DOWNLOAD] не удалось загрузить ' .. tostring(path) .. ': ' .. tostring(info))
+					dbg('не удалось загрузить ' .. tostring(path) .. ': ' .. tostring(info))
 				else
-					sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Не удалось скачать файл: ' .. tostring(info), message_color)
+					dbg('не удалось скачать файл: ' .. tostring(info))
 				end
-				if key == 'helper' then reset_update_state() end
+				if key == 'helper' then
+					MODULE.Update.last_error = tostring(info)
+					reset_update_state()
+					dbg('не удалось скачать обновление: ' .. tostring(info) .. ' | вручную: ' .. tostring(MODULE.Update.manual_url))
+				end
 				finish(false)
 				return
 			end
@@ -6564,16 +6842,16 @@ function downloadFileFromUrlToPath(url, path, file_key, on_done)
 			if not valid then
 				dl_remove(part)
 				if key == 'news_img' or key == 'logo' then
-					print('[DOWNLOAD] ' .. tostring(path) .. ' отклонён: ' .. tostring(verr))
+					dbg(tostring(path) .. ' отклонён: ' .. tostring(verr))
 				else
-					sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Загрузка отклонена: ' .. tostring(verr), message_color)
+					dbg('загрузка отклонена: ' .. tostring(verr))
 				end
 				if key == 'helper' then reset_update_state() end
 				finish(false)
 				return
 			end
 			if not replace_file(part, path) then
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Не удалось сохранить загруженный файл.', message_color)
+				dbg('не удалось сохранить загруженный файл')
 				if key == 'helper' then reset_update_state() end
 				finish(false)
 				return
@@ -6588,7 +6866,7 @@ function downloadFileFromUrlToPath(url, path, file_key, on_done)
 				local hok, herr = pcall(handler, path)
 				handler_ok = hok
 				if not hok then
-					print('[DOWNLOAD] обработчик "' .. tostring(key) .. '" упал: ' .. tostring(herr))
+					dbg('обработчик "' .. tostring(key) .. '" упал: ' .. tostring(herr))
 					if key == 'helper' then reset_update_state() end
 				end
 			end
@@ -6596,7 +6874,7 @@ function downloadFileFromUrlToPath(url, path, file_key, on_done)
 		end)
 	end)
 	if not ok then
-		print('[DOWNLOAD] сбой загрузки: ' .. tostring(err))
+		dbg('сбой загрузки: ' .. tostring(err))
 		if key == 'helper' then reset_update_state() end
 		finish(false)
 	end
@@ -6610,7 +6888,20 @@ function sync_libs(names, only_missing, on_done)
 	for _, name in ipairs(names) do
 		local file = tostring(name)
 		local path = lib_dir .. '/' .. file
-		if not only_missing or not doesFileExist(path) then
+		local need = (not only_missing) or not doesFileExist(path)
+		if only_missing and doesFileExist(path) then
+			local chunk = loadfile(path)
+			if not chunk then need = true end
+		end
+		local remote_ver = nil
+		if MODULE.Update and type(MODULE.Update.lib_versions) == 'table' then
+			remote_ver = MODULE.Update.lib_versions[file]
+		end
+		if remote_ver then
+			local local_ver = read_lib_version(path)
+			if tostring(local_ver or '') ~= tostring(remote_ver) then need = true end
+		end
+		if need then
 			table.insert(jobs, { url = LIBS_BASE .. file, path = path })
 		end
 	end
@@ -6666,24 +6957,27 @@ function MODULE.Update.print_update_messages(auto_install)
 	sampAddChatMessage(' ', message_color)
 end
 function MODULE.Update.start_download()
-	if MODULE.Update.downloading then return end
+	if MODULE.Update.downloading or MODULE.Update.installing then return end
 	local url = MODULE.Update.url
 	if not url or url == '' then
-		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Ошибка: URL обновления пустой.', message_color)
+		dbg('URL обновления пустой')
 		return
 	end
 	MODULE.Update.downloading = true
+	MODULE.Update.last_error = nil
+	MODULE.Update.helper_download = true
 	MODULE.Update.download_start = os.time()
 	MODULE.Update.download_file = 'helper'
-	sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Скачивание обновления...', message_color)
+	dbg('скачивание обновления...')
 	downloadFileFromUrlToPath(url, worked_dir .. '/Arizona Helper.lua.new', 'helper')
 	lua_thread.create(function()
 		local started = os.clock()
 		while MODULE.Update.downloading do
 			wait(1000)
-			if MODULE.Update.downloading and (os.clock() - started) > (DOWNLOAD_TIMEOUT_SEC * DOWNLOAD_ATTEMPTS + 30) then
+			if MODULE.Update.downloading and (os.clock() - started) > (DOWNLOAD_TIMEOUT_SEC * DOWNLOAD_ATTEMPTS + 60) then
 				reset_update_state()
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Загрузка обновления прервана по таймауту. Попробуйте позже.', message_color)
+				MODULE.Update.last_error = 'таймаут загрузки'
+				dbg('загрузка обновления прервана по таймауту | вручную: ' .. tostring(MODULE.Update.manual_url))
 				break
 			end
 		end
@@ -6794,15 +7088,14 @@ function load_news(manual)
 end
 function check_update(manual)
 	if MODULE.Update.downloading then
-		if manual then sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Дождитесь завершения скачивания обновления.', message_color) end
+		if manual then dbg('дождитесь завершения скачивания обновления') end
 		return
 	end
-	print('Проверка на наличие обновлений...')
-	if manual then sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Проверка обновлений...', message_color) end
+	if manual then dbg('проверка обновлений...') end
 	asyncHttpRequest("GET", UPDATE_JSON_URL, {timeout = 5}, function(response)
 		local ok, u = pcall(function() return decodeJson(response.text) end)
 		if not ok or type(u) ~= 'table' then
-			if manual then sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Ошибка проверки обновлений (не удалось обработать ответ).', message_color) end
+			if manual then dbg('ошибка проверки обновлений: не удалось обработать ответ') end
 			isUpdateChecked = true; return
 		end
 		local uUrl      = tostring(u.url or "")
@@ -6811,7 +7104,7 @@ function check_update(manual)
 		local betaVer   = tostring(u.beta_version or "")
 		local myVer     = thisScript().version
 		if stableVer == "" and betaVer == "" then
-			if manual then sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Сервер не вернул информацию о версиях.', message_color) end
+			if manual then dbg('сервер не вернул информацию о версиях') end
 			isUpdateChecked = true; return
 		end
 		local beta_closed = (u.beta_closed == true) or (betaVer ~= "" and stableVer ~= "" and compare_versions(stableVer, betaVer) >= 0)
@@ -6829,12 +7122,21 @@ function check_update(manual)
 		elseif type(libs) == 'string' and libs ~= '' then
 			MODULE.Update.libs = { libs }
 		end
+		local lv = u.lib_versions
+		if type(lv) == 'table' then
+			MODULE.Update.lib_versions = {}
+			for k, v in pairs(lv) do
+				if type(k) == 'string' and type(v) == 'string' then MODULE.Update.lib_versions[k] = v end
+			end
+		else
+			MODULE.Update.lib_versions = nil
+		end
 		if MODULE.Update.libs then sync_libs(MODULE.Update.libs, true) end
 		local function stable_status_info()
 			local key = tostring(u.stable_status or u.status or ""):lower()
 			return (UPDATE_STATUS[key] or { text = "Обновление", color = "{FFFFFF}" }), key
 		end
-		if beta_closed and settings.general.beta_tester == true and stableVer ~= "" and uUrl ~= "" and compare_versions(myVer, stableVer) ~= 0 then
+		if beta_closed and settings.general.beta_tester == true and stableVer ~= "" and uUrl ~= "" and compare_versions(myVer, stableVer) < 0 then
 			print('Бета-тест закрыт | предлагаю стабильную: ' .. stableVer)
 			MODULE.Update.is_need_update = true
 			MODULE.Update.url     = uUrl
@@ -6889,7 +7191,7 @@ function check_update(manual)
 		end
 		isUpdateChecked = true
 	end, function(err)
-		if manual then sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Ошибка проверки обновлений: ' .. tostring(err), message_color) end
+		if manual then dbg('ошибка проверки обновлений: ' .. tostring(err)) end
 		isUpdateChecked = true
 	end)
 end
@@ -10695,21 +10997,25 @@ imgui.OnFrame(
 								imgui.End()
 							end
 							imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
-							local sob_cfg_w = math.min(600 * settings.ui.dpi, sizeX - 40 * settings.ui.dpi)
-							local sob_cfg_h = math.min(425 * settings.ui.dpi, sizeY - 70 * settings.ui.dpi)
-							local sobes_cfg_list_h = math.max(90 * settings.ui.dpi, sob_cfg_h - 175 * settings.ui.dpi)
+							local dpi = settings.ui.dpi
+							local sob_cfg_w = math.min(600 * dpi, sizeX - 40 * dpi)
+							local sob_cfg_h = math.min(420 * dpi, sizeY - 70 * dpi)
 							imgui.SetNextWindowSize(imgui.ImVec2(sob_cfg_w, sob_cfg_h), imgui.Cond.Always)
 							if imgui.BeginPopupModal(fa.GEAR .. u8' Настройки /sob ' .. fa.GEAR .. '##cc_sobes_settings_popup', _, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar) then
 								change_dpi()
 								ensure_sobes_defaults()
 								local ed = MODULE.SobesEditor
 								if not ed then init_sobes_editor(); ed = MODULE.SobesEditor end
-								local dpi = settings.ui.dpi
 								local st = imgui.GetStyle()
-								local function render_list(kind)
+								local frame_h = imgui.GetFrameHeight()
+								local line_h = imgui.GetTextLineHeightWithSpacing()
+								local sep_h = 1 + st.ItemSpacing.y
+								local footer_h = sep_h + frame_h + sep_h + frame_h
+								local add_row_h = frame_h + st.ItemSpacing.y
+								local function render_list(kind, list_h)
 									if type(ed[kind]) ~= 'table' then ed[kind] = {} end
 									local rows = ed[kind]
-									if imgui.BeginChild('##sobes_list_' .. kind, imgui.ImVec2(-1, sobes_cfg_list_h), true) then
+									if imgui.BeginChild('##sobes_list_' .. kind, imgui.ImVec2(-1, list_h), true) then
 										if #rows == 0 then imgui.TextDisabled(u8'Список пуст') end
 										local remove_at = nil
 										local del_w = imgui.CalcTextSize(fa.CIRCLE_XMARK .. u8' Удалить').x + 2 * st.FramePadding.x + st.ItemSpacing.x
@@ -10737,24 +11043,30 @@ imgui.OnFrame(
 								imgui.Separator()
 								if imgui.BeginTabBar('##sobes_cfg_tabs') then
 									if imgui.BeginTabItem(fa.CIRCLE_QUESTION .. u8' Вопросы##sobes_tab_q') then
-										render_list('questions')
+										local list_h = math.max(90 * dpi, imgui.GetContentRegionAvail().y - footer_h - add_row_h)
+										render_list('questions', list_h)
 										imgui.EndTabItem()
 									end
 									if imgui.BeginTabItem(fa.CIRCLE_XMARK .. u8' Отказы##sobes_tab_r') then
-										render_list('refusals')
+										local list_h = math.max(90 * dpi, imgui.GetContentRegionAvail().y - footer_h - add_row_h)
+										render_list('refusals', list_h)
 										imgui.EndTabItem()
 									end
 									if imgui.BeginTabItem(fa.BOOKMARK .. u8' Основное##sobes_tab_m') then
 										if not ed.main then sobes_editor_reset_main() end
-										if imgui.BeginChild('##sobes_main_list', imgui.ImVec2(-1, sobes_cfg_list_h), true) then
+										local child_h = math.max(90 * dpi, imgui.GetContentRegionAvail().y - footer_h)
+										local inner_free = math.max(40 * dpi, child_h - 2 * line_h - sep_h - 2 * st.WindowPadding.y)
+										local docs_h = math.floor(inner_free * 0.65)
+										local about_h = inner_free - docs_h
+										if imgui.BeginChild('##sobes_main_list', imgui.ImVec2(-1, child_h), true) then
 											imgui.Text(fa.PASSPORT .. u8' Попросить документы:')
 											imgui.PushItemWidth(-1)
-											imgui.InputTextMultiline('##sobes_main_docs', ed.main.docs, 2048, imgui.ImVec2(-1, 150 * dpi))
+											imgui.InputTextMultiline('##sobes_main_docs', ed.main.docs, 2048, imgui.ImVec2(-1, docs_h))
 											imgui.PopItemWidth()
 											imgui.Separator()
 											imgui.Text(fa.COMMENTS .. u8' Расскажите о себе:')
 											imgui.PushItemWidth(-1)
-											imgui.InputTextMultiline('##sobes_main_about', ed.main.about, 2048, imgui.ImVec2(-1, 80 * dpi))
+											imgui.InputTextMultiline('##sobes_main_about', ed.main.about, 2048, imgui.ImVec2(-1, about_h))
 											imgui.PopItemWidth()
 										end
 										imgui.EndChild()
@@ -12097,6 +12409,7 @@ imgui.OnFrame(
 				local dpi = settings.ui.dpi
 				if not MODULE.Main.beta_input then MODULE.Main.beta_input = imgui.new.char[32]("")  end
 				if not MODULE.Main.updater_cb then MODULE.Main.updater_cb = imgui.new.bool(settings.general.updater ~= false)  end
+								if not MODULE.Main.backup_cb then MODULE.Main.backup_cb = imgui.new.bool(settings.general.backup_enabled == true) end
 				if not MODULE.Main.chat_prefix_input then  MODULE.Main.chat_prefix_input = imgui.new.char[64](u8(settings.ui.chat_prefix or 'Arizona Helper'))  end
 				if not MODULE.Main.scoreboard_cb then MODULE.Main.scoreboard_cb = imgui.new.bool(settings.general.scoreboard ~= false) end
 				if not MODULE.Main.custom_members_cb   then MODULE.Main.custom_members_cb   = imgui.new.bool(modules.members.data.custom_members ~= false) end
@@ -12119,6 +12432,7 @@ imgui.OnFrame(
 					{ icon = fa.USERS, 		 name = 'Кастомный members' },
 					{ icon = fa.TABLE_LIST,  name = 'Кастомный TAB' },
 					{ icon = fa.DOWNLOAD,    name = 'Обновления и бета' },
+					{ icon = fa.DATABASE,    name = 'Данные' },
 					{ icon = fa.HEADSET,     name = 'Поддержка' },
 				}
 				MODULE.Main.settings_section = MODULE.Main.settings_section or 1
@@ -12139,7 +12453,7 @@ imgui.OnFrame(
 						end
 					imgui.EndChild()
 					end
-					if imgui.Button((fa.USER_PLUS or fa.USER) .. u8' Сменить аккаунт', imgui.ImVec2(-1, btn_h)) then
+					if imgui.Button((fa.USER_PLUS or fa.USER) .. u8' Настроить аккаунт', imgui.ImVec2(-1, btn_h)) then
 						MODULE.Main.accounts_open = true
 					end
 					if imgui.IsItemHovered() then imgui.SetTooltip(u8'Управление аккаунтами хелпера') end
@@ -12853,6 +13167,156 @@ imgui.OnFrame(
 							imgui.PopTextWrapPos()
 						end
 					elseif sec == 7 then
+						imgui.CenterText(fa.DATABASE .. u8' Данные и резервные копии ' .. fa.DATABASE)
+						imgui.Separator()
+						if not backup_lib then
+							imgui.TextColored(imgui.ImVec4(1.0, 0.4, 0.4, 1.0), u8'Библиотека копий не загружена. Проверьте папку lib или подключите интернет.')
+							imgui.Separator()
+						end
+						if imgui.Checkbox(u8' Хранить резервные копии##set_backup_data', MODULE.Main.backup_cb) then
+							local was = settings.general.backup_enabled == true
+							settings.general.backup_enabled = MODULE.Main.backup_cb[0]
+							save_settings()
+							if settings.general.backup_enabled then
+								local inc = settings.general.backup_include or {}
+								if inc.settings == false and inc.modules == false and inc.helper == false then
+									settings.general.backup_include = { settings = true, modules = true, helper = true }
+								end
+								ensure_backup_dir(config_dir .. '/Settings.json')
+								local cur = modules.accounts and modules.accounts.data and modules.accounts.data.current
+								local cur_dir = account_dir_for(cur or '')
+								ensure_backup_dir(cur_dir .. '/Player.json')
+								create_helper_backup()
+								backup_all_data()
+								print('Резервные копии включены')
+							elseif was then
+								clear_backup_dir()
+								print('Резервные копии отключены, папка Backup удалена')
+							end
+						end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8'Копии настроек, данных модулей и файла хелпера. Хранятся в папке Backup, для каждого аккаунта отдельно.') end
+						imgui.Spacing()
+						imgui.TextWrapped(u8'Резервные копии помогают восстановить данные, если файл настроек или модуля повреждён. По умолчанию выключены, чтобы не занимать место.')
+						imgui.Spacing()
+						imgui.TextDisabled(u8'Копии создаются автоматически при сохранении данных.')
+						imgui.Separator()
+						if imgui.Button(fa.FLOPPY_DISK .. u8' Создать копию сейчас##backup_now', imgui.ImVec2(-1, 25 * dpi)) then
+							if backups_enabled() then
+								local n = backup_all_data()
+								sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Создано резервных копий: ' .. tostring(n), message_color)
+							else
+								sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Сначала включите резервные копии (галочка выше).', message_color)
+							end
+						end
+						imgui.Separator()
+						local bcount, bsize = backup_stats()
+						if bcount > 0 then
+							imgui.Text(fa.DATABASE .. u8' Файлов в копиях: ' .. tostring(bcount))
+							imgui.SameLine()
+							imgui.TextDisabled(u8'(' .. string.format('%.1f', (bsize or 0) / 1024) .. u8' КБ)')
+						else
+							imgui.TextDisabled(fa.DATABASE .. u8' Копий пока нет')
+						end
+						if imgui.Button(fa.LIST .. u8' Что сохранять в копиях##backup_pick_btn', imgui.ImVec2(-1, 24 * dpi)) then
+							MODULE.Main.backup_pick_open = true
+						end
+						if MODULE.Main.backup_pick_open then
+							MODULE.Main.backup_pick_open = false
+							local inc = settings.general.backup_include or {}
+							MODULE.Main.binc_settings = MODULE.Main.binc_settings or imgui.new.bool(true)
+							MODULE.Main.binc_modules = MODULE.Main.binc_modules or imgui.new.bool(true)
+							MODULE.Main.binc_helper = MODULE.Main.binc_helper or imgui.new.bool(true)
+							MODULE.Main.binc_settings[0] = inc.settings ~= false
+							MODULE.Main.binc_modules[0] = inc.modules ~= false
+							MODULE.Main.binc_helper[0] = inc.helper ~= false
+							local keys = backup_module_list()
+							MODULE.Main.backup_pick_keys = keys
+							MODULE.Main.binc_mod = {}
+							local ex = settings.general.backup_modules or {}
+							for _, k in ipairs(keys) do
+								MODULE.Main.binc_mod[k] = imgui.new.bool(ex[k] ~= false)
+							end
+							imgui.OpenPopup(u8'Что сохранять в копиях##backup_pick')
+						end
+						imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+						if imgui.BeginPopupModal(u8'Что сохранять в копиях##backup_pick', nil, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.AlwaysAutoResize) then
+							imgui.Checkbox(u8'Настройки##binc_s', MODULE.Main.binc_settings)
+							imgui.Checkbox(u8'Файл хелпера##binc_h', MODULE.Main.binc_helper)
+							imgui.Checkbox(u8'Данные модулей##binc_m', MODULE.Main.binc_modules)
+							local mods_on = MODULE.Main.binc_modules[0]
+							local gray = imgui.ImVec4(0.5, 0.5, 0.5, 0.6)
+							if not mods_on then
+								imgui.PushStyleColor(imgui.Col.Text, gray)
+								imgui.PushStyleColor(imgui.Col.Button, gray)
+							end
+							if imgui.Button(u8'Все##binc_all', imgui.ImVec2(120 * dpi, 22 * dpi)) then
+								if mods_on then
+									for _, k in ipairs(MODULE.Main.backup_pick_keys or {}) do
+										if MODULE.Main.binc_mod[k] then MODULE.Main.binc_mod[k][0] = true end
+									end
+								end
+							end
+							if not mods_on and imgui.IsItemHovered() then imgui.SetTooltip(u8'Сначала включите «Данные модулей».') end
+							imgui.SameLine()
+							if imgui.Button(u8'Ничего##binc_none', imgui.ImVec2(120 * dpi, 22 * dpi)) then
+								if mods_on then
+									for _, k in ipairs(MODULE.Main.backup_pick_keys or {}) do
+										if MODULE.Main.binc_mod[k] then MODULE.Main.binc_mod[k][0] = false end
+									end
+								end
+							end
+							if not mods_on and imgui.IsItemHovered() then imgui.SetTooltip(u8'Сначала включите «Данные модулей».') end
+							if not mods_on then imgui.PopStyleColor(2) end
+							if imgui.BeginChild('##binc_mods', imgui.ImVec2(420 * dpi, 190 * dpi), true) then
+								for _, k in ipairs(MODULE.Main.backup_pick_keys or {}) do
+									local m = modules[k]
+									if m and MODULE.Main.binc_mod[k] then
+										local cb = MODULE.Main.binc_mod[k]
+										local before = cb[0]
+										if not mods_on then
+											imgui.PushStyleColor(imgui.Col.Text, gray)
+											imgui.PushStyleColor(imgui.Col.CheckMark, gray)
+										end
+										imgui.Checkbox(u8(tostring(m.name)) .. '##binc_m_' .. k, cb)
+										if not mods_on then
+											cb[0] = before
+											imgui.PopStyleColor(2)
+											if imgui.IsItemHovered() then imgui.SetTooltip(u8'Сначала включите «Данные модулей».') end
+										end
+									end
+								end
+							end
+							imgui.EndChild()
+							imgui.Separator()
+							if imgui.Button(u8'Готово##binc_ok', imgui.ImVec2(-1, 24 * dpi)) then
+								local use_s = MODULE.Main.binc_settings[0]
+								local use_m = MODULE.Main.binc_modules[0]
+								local use_h = MODULE.Main.binc_helper[0]
+								settings.general.backup_include = { settings = use_s, modules = use_m, helper = use_h }
+								if use_s or use_m or use_h then
+									local ex2 = {}
+									for _, k in ipairs(MODULE.Main.backup_pick_keys or {}) do
+										if MODULE.Main.binc_mod[k] and MODULE.Main.binc_mod[k][0] == false then ex2[k] = false end
+									end
+									settings.general.backup_modules = next(ex2) and ex2 or nil
+									if settings.general.backup_enabled ~= true then
+										settings.general.backup_enabled = true
+										if MODULE.Main.backup_cb then MODULE.Main.backup_cb[0] = true end
+										create_helper_backup()
+										backup_all_data()
+									end
+								else
+									settings.general.backup_enabled = false
+									settings.general.backup_modules = nil
+									if MODULE.Main.backup_cb then MODULE.Main.backup_cb[0] = false end
+									clear_backup_dir()
+								end
+								save_settings()
+								imgui.CloseCurrentPopup()
+							end
+							imgui.EndPopup()
+						end
+					elseif sec == 8 then
 						imgui.CenterText(fa.HEADSET .. u8' Поддержка и ссылки ' .. fa.HEADSET)
 						imgui.Separator()
 						imgui.Columns(2, '##support_cols', false)
@@ -18462,6 +18926,13 @@ imgui.OnFrame(
 			if imgui.Button(u8' Позже', imgui.ImVec2(imgui.GetMiddleButtonX(2), 30 * dpi)) then
 				imgui.CloseCurrentPopup()
 			end
+			if MODULE.Update.last_error and not MODULE.Update.downloading then
+				imgui.Separator()
+				imgui.TextWrapped(u8('Последняя ошибка: ' .. tostring(MODULE.Update.last_error)))
+				if imgui.Button(fa.DOWNLOAD .. u8' Скачать вручную##upd_manual', imgui.ImVec2(-1, 24 * dpi)) then
+					pcall(openLink, MODULE.Update.manual_url)
+				end
+			end
 			imgui.EndPopup()
 		else
 			MODULE.Update.popup_opened = false
@@ -19020,14 +19491,14 @@ if not IS_MOBILE then
 end
 --------------------------------------------[ Terminate ]------------------------------------------
 function onScriptTerminate(script, game_quit)
-	if script == thisScript() then
-		if not game_quit and not reload_script then
-			if MODULE.InfraredVision then setInfraredVision(false) end
-			if MODULE.NightVision then setNightVision(false) end
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Произошла неизвестная ошибка, хелпер приостановил свою работу!', message_color)
-			if not IS_MOBILE then
-				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Используйте ' .. message_color_hex .. 'CTRL {ffffff}+ ' .. message_color_hex .. 'R {ffffff}чтобы перезапустить хелпер.', message_color)
-			end
-		end
-	end
+	if script ~= thisScript() then return end
+	pcall(function()
+		if game_quit or reload_script then return end
+		if MODULE.InfraredVision then pcall(setInfraredVision, false) end
+		if MODULE.NightVision then pcall(setNightVision, false) end
+		local msg1 = '[' .. tostring(CHAT_PREFIX or '') .. '] {ffffff}Произошла неизвестная ошибка, хелпер приостановил свою работу!'
+		local msg2 = '[' .. tostring(CHAT_PREFIX or '') .. '] {ffffff}Используйте ' .. tostring(message_color_hex or '') .. 'CTRL {ffffff}+ ' .. tostring(message_color_hex or '') .. 'R {ffffff}чтобы перезапустить хелпер.'
+		pcall(sampAddChatMessage, msg1, message_color)
+		if not IS_MOBILE then pcall(sampAddChatMessage, msg2, message_color) end
+	end)
 end
