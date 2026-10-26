@@ -19,6 +19,7 @@ local RES_BASE = REPO_RAW .. '/Resourse/'
 local VEHICLES_BASE = REPO_RAW .. '/SmartVEH/Vehicles'
 local DEFAULT_LIBS = { 'edgo.lua', 'mimgui_piemenu.lua', 'arizona_crasher.lua', 'arizona_backup.lua' }
 local sync_libs
+local UPDATE_RELOAD_PENDING = false
 local UPDATE_STATUS = {
 	patch     = { text = "Патч",                  color = "{00FF00}" },
 	global    = { text = "Глобальное обновление", color = "{3399FF}" },
@@ -4148,6 +4149,11 @@ local function sobes_say(text)
 end
 --------------------------------------------[ Functions ]---------------------------------------
 function main()
+	if UPDATE_RELOAD_PENDING then
+		UPDATE_RELOAD_PENDING = false
+		pcall(function() thisScript():reload() end)
+		return
+	end
 	if settings.general.piemenu and pie_ok then MODULE.PieMenu.Window[0] = true end
 	do
 		local ok, edgo_setup = pcall(require, 'edgo')
@@ -6523,7 +6529,7 @@ local DOWNLOAD_HANDLERS = {
 			MODULE.Update.installing = false
 			MODULE.Update.helper_download = false
 			reload_script = true
-			pcall(function() thisScript():reload() end)
+UPDATE_RELOAD_PENDING = true
 		end)
 		lua_thread.create(function()
 			wait(60000)
@@ -6533,7 +6539,7 @@ local DOWNLOAD_HANDLERS = {
 				MODULE.Update.helper_download = false
 				dbg('библиотеки обновить не удалось, перезапуск с текущими')
 				reload_script = true
-				pcall(function() thisScript():reload() end)
+UPDATE_RELOAD_PENDING = true
 			end
 		end)
 	end,
@@ -6566,12 +6572,6 @@ local DOWNLOAD_HANDLERS = {
 	end,
 	lib = function(path)
 		dbg('загружено: ' .. tostring(path))
-		if MODULE.Update.pending_reload then
-			MODULE.Update.pending_reload = false
-			dbg('библиотеки обновлены, перезагрузка...')
-			reload_script = true
-			pcall(function() thisScript():reload() end)
-		end
 	end,
 }
 
