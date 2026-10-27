@@ -1,4 +1,4 @@
--- LIB_VERSION: 1.0
+-- LIB_VERSION: 1.2
 local M = {}
 
 local HANDLER = [==[
@@ -43,7 +43,9 @@ local function restoreHelper()
 							local cd = cf:read('*a')
 							cf:close()
 							if cd and cd ~= '' then
-								local co = io.open(helper .. '.corrupt', 'wb')
+								local corruptDir = base .. '/Arizona Helper/Backup'
+								if not doesDirectoryExist(corruptDir) then createDirectory(corruptDir) end
+								local co = io.open(corruptDir .. '/Arizona Helper.lua.corrupt', 'wb')
 								if co then co:write(cd); co:close() end
 							end
 						end
@@ -105,18 +107,20 @@ function getLog()
 end
 function onSystemMessage(msg, type, script)
 	pcall(function()
-	if script and script.name == 'Arizona&Rodina Helper' and msg and ((msg:find('stack traceback')) or (type == 3 and not msg:find('Script died due to an error'))) then
+	if script and script.name == 'Arizona&Rodina Helper' and msg and (msg:find('stack traceback') or msg:find('Script died due to an error')) then
 		local currentTime = os.time()
 		if currentTime - lastErrorShown < 5 then
 			return
 		end
 		lastErrorShown = currentTime
+		local short_msg = tostring(msg):sub(1, 1200)
+		local short_log = tostring(getLog() or ''):sub(-2500)
 		local errorMessage = ('{ffffff}Произошла непредусмотренная ошибка в работе скрипта, из-за чего он был отключён!\n\n' ..
-		'{00FF00}Версия скрипта:{ffffff} ' .. script.version .. '\n' ..
+		'{00FF00}Версия скрипта:{ffffff} ' .. tostring(script.version) .. '\n' ..
 		'{00FF00}Время ошибки:{ffffff} ' .. os.date('%H:%M:%S %d.%m.%Y') .. '\n\n' ..
 		'Отправьте скриншот этого диалога в {ff9900}тех.поддержку (DS: max_rics){ffffff}.\n\n' ..
-		'Детали возникшей ошибки:\n{ff6666}' .. msg .. '{ffffff}\n\n' ..
-		'Полный лог работы скрипта: \n{66BB6A}' .. getLog())
+		'Детали возникшей ошибки:\n{ff6666}' .. short_msg .. '{ffffff}\n\n' ..
+		'Последние строки лога: \n{66BB6A}' .. short_log)
 		
 		sampShowDialog(123123, '{009EFF}Arizona&Rodina Helper [' .. script.version .. ']', errorMessage, 'Закрыть диалог', '', 0)
 	end
@@ -126,10 +130,16 @@ end
 
 function M.install(worked_dir)
 	local path = worked_dir .. '/.Arizona Helper Handler.lua'
-	local f = io.open(path, 'w')
+	local tmp = path .. '.tmp'
+	local f = io.open(tmp, 'w')
 	if not f then return false end
 	f:write(HANDLER)
 	f:close()
+	os.remove(path)
+	if not os.rename(tmp, path) then
+		os.remove(tmp)
+		return false
+	end
 	local old = {
 		'Crash Info.lua',
 		'Error Handler.lua',
