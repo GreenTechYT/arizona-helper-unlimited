@@ -88,12 +88,12 @@
 ## 📸 Скриншоты
 
 <div align="center">
-  <img src="https://i.imgur.com/OQ51SMf.png" alt="Главное меню" width="420"/>
-  <img src="https://i.imgur.com/PgwHMiS.png" alt="Команды и RP отыгровки" width="420"/>
-  <img src="https://i.imgur.com/vxhPQmR.png" alt="Функции" width="420"/>
-  <img src="https://i.imgur.com/2YwD5fL.png" alt="Заметки" width="420"/>
-  <img src="https://i.imgur.com/oFthllB.png" alt="Новости" width="420"/>
-  <img src="https://i.imgur.com/850jowx.png" alt="Настройки" width="420"/>
+  <img src="https://i.imgur.com/cEWq0c7.png" alt="Главное меню" width="420"/>
+  <img src="https://i.imgur.com/7YL8b4B.png" alt="Команды и RP отыгровки" width="420"/>
+  <img src="https://i.imgur.com/USMcKAf.png" alt="Функции" width="420"/>
+  <img src="https://i.imgur.com/IUEDps3.png" alt="Заметки" width="420"/>
+  <img src="https://i.imgur.com/KzYVWYb.png" alt="Новости" width="420"/>
+  <img src="https://i.imgur.com/Hb2XM2W.png" alt="Настройки" width="420"/>
   <img src="https://i.imgur.com/ZFtcI4B.png" alt="ЭБГО Online" width="420"/>
   <img src="https://i.imgur.com/EAhTPKp.png" alt="ЭБГО Offline" width="420"/>
 </div>
