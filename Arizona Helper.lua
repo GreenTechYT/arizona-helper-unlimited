@@ -269,6 +269,7 @@ end
 local config_dir = worked_dir .. '/Arizona Helper'
 local settings = {}
 local backup_ok, backup_lib = pcall(require, 'arizona_backup')
+if not backup_ok or type(backup_lib) ~= 'table' then backup_lib = nil end
 local function backups_enabled(category)
 	if settings == nil or settings.general == nil or settings.general.backup_enabled ~= true then return false end
 	local inc = settings.general.backup_include
