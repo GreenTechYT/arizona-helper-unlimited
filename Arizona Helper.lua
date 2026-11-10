@@ -4868,6 +4868,10 @@ function welcome_message()
 		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Для завершения загрузки хелпера войдите на сервер.', message_color)
 		repeat wait(0) until sampIsLocalPlayerSpawned()
 	end
+	if MODULE.Network and type(MODULE.Network.fetch_crowns) == 'function' then
+		MODULE.Network.last_fetch_crowns = 0
+		MODULE.Network.fetch_crowns()
+	end
 	sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Загрузка хелпера успешно завершена!', message_color)
 	show_notify('info', 'Arizona Helper', "Загрузка хелпера успешно завершена!", 3000)
 	print('Полная загрузка хелпера успешно завершена!')
@@ -9926,10 +9930,14 @@ addEventHandler('onSendPacket', function(id, bs, priority, reliability, ordering
                 print(info)
                 sampAddChatMessage(info, message_color)
             end
-            if settings.general.scoreboard and packettype == 66 and subtype == 56 then
-                MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
-                return false
-            end
+			if settings.general.scoreboard and packettype == 66 and subtype == 56 then
+				MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+				if MODULE.Scoreboard.Window[0] and MODULE.Network and type(MODULE.Network.fetch_crowns) == 'function' then
+					MODULE.Network.last_fetch_crowns = 0
+					MODULE.Network.fetch_crowns()
+				end
+				return false
+			end
         end
     else
         local ok_str, strlen, str = pcall(function() local l = raknetBitStreamReadInt16(bs) return l, raknetBitStreamReadString(bs, l) end)
@@ -21870,6 +21878,10 @@ if not IS_MOBILE then
 		if msg == 0x100 and settings.general.scoreboard then
 			if wparam == VK_TAB and not isKeyDown(VK_TAB) then
 				MODULE.Scoreboard.Window[0] = not MODULE.Scoreboard.Window[0]
+				if MODULE.Scoreboard.Window[0] and MODULE.Network and type(MODULE.Network.fetch_crowns) == 'function' then
+					MODULE.Network.last_fetch_crowns = 0
+					MODULE.Network.fetch_crowns()
+				end
 				consume_safe()
 			end
 		end
