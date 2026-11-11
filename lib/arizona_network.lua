@@ -1,6 +1,6 @@
--- LIB_VERSION: 1.0
+-- LIB_VERSION: 1.1
 local M = {}
-M.version = '1.0'
+M.version = '1.1'
 M.ctx = nil
 M.base_url = ''
 M.default_url = 'https://my-helper-api.greentechyt-helper.workers.dev'
@@ -12,11 +12,8 @@ M.users = {}
 M.crown_users = {}
 M.admin_users = {}
 M.all_users = {}
-M.user_since = {}
 M.show_users = false
 M.chat_open = false
-M.chat_transport = false
-M.last_ui_request = 0
 M.network_thread_started = false
 M.disabled = false
 M.messages = {}
@@ -33,7 +30,6 @@ M.last_error = ''
 M.auto_scroll = true
 M.window = nil
 M.input = nil
-M.input_sent = false
 M.admin_panel = nil
 M.admin_panel_want_open = false
 M.admin_confirm = nil
@@ -53,12 +49,10 @@ M.user_devices = {}
 M.user_fractions = {}
 M.online_any = {}
 M.last_heartbeat_at = 0
-M.ignore_incoming_until = 0
 M.last_cleared_at = ''
 M.last_fetch_users = 0
 M.last_fetch_crowns = 0
 M.last_poll = 0
-M.last_poll_system = 0
 M.last_group_mention_at = 0
 M.MENTION_COOLDOWN = 120
 M.last_send_at = 0
@@ -70,9 +64,9 @@ M.CROWNS_INTERVAL = 180
 M.backoff_until = 0
 M.backoff_sec = 30
 M.show_avatars = true
+M.chat_crowns = true
 M.input_gen = 0
 M.notices = {}
-M.notified_ids = {}
 M.MAX_INPUT_LINES = 2
 M.network_tasks = {}
 
@@ -131,7 +125,8 @@ local function is_utf8_string(text)
     return true
 end
 local su8
-
+local function trim(text) return (tostring(text or ''):gsub('^%s+', ''):gsub('%s+$', '')) end
+local function utf8_cut(s, n) s = tostring(s) if #s <= n then return s end local cut = s:sub(1, n) return cut:gsub('[\128-\191]+$', '') end
 function M.to_utf8(text)
     local value = tostring(text or '')
     if value == '' or is_utf8_string(value) then return value end
@@ -155,21 +150,84 @@ local function ru_system_text(t)
     return original
 end
 local function notice(text, kind)
+    local final_text = M.to_utf8(tostring(text))
     M.notices = M.notices or {}
     local now = os.time()
     for _, n in ipairs(M.notices) do
-        if n.text == text then
+        if n.text == final_text then
             n.until_ts = now + 6
             return
         end
     end
-    table.insert(M.notices, { text = text, kind = kind or 'warn', until_ts = now + 6 })
+    table.insert(M.notices, { text = final_text, kind = kind or 'warn', until_ts = now + 6 })
     while #M.notices > 3 do table.remove(M.notices, 1) end
 end
 
 local REACT_ICONS = { 'HEART', 'THUMBS_UP', 'THUMBS_DOWN', 'FACE_LAUGH', 'FIRE', 'STAR' }
 local AVATAR_ICONS = { 'FACE_SMILE', 'FACE_GRIN', 'STAR', 'CROWN', 'HEART', 'FIRE', 'ROCKET', 'SKULL', 'GHOST', 'TROPHY' }
-local function draw_glyph_outlined(dl, x, y, txt, col_u32, outline)
+M.user_avatars = M.user_avatars or {}
+local AVATAR_ICON_SET = {}
+for _, k in ipairs(AVATAR_ICONS) do AVATAR_ICON_SET[k] = true end
+
+local function clamp255(v)
+    v = tonumber(v) or 0
+    if v < 0 then v = 0 elseif v > 255 then v = 255 end
+    return math.floor(v + 0.5)
+end
+
+local function norm_color3(v)
+    if type(v) == 'table' then
+        if v[1] == nil then return nil end
+        return { clamp255(v[1]), clamp255(v[2]), clamp255(v[3]) }
+    end
+    local r, g, b = tostring(v or ''):match('^%s*(%d+)%s*,%s*(%d+)%s*,%s*(%d+)%s*$')
+    if not r then return nil end
+    return { clamp255(r), clamp255(g), clamp255(b) }
+end
+
+local function norm_avatar(mode, icon, bg, fg, outline)
+    local m = (tostring(mode or '') == 'icon') and 'icon' or 'letters'
+    local ic = tostring(icon or '')
+    if not AVATAR_ICON_SET[ic] then ic = 'FACE_SMILE' end
+    local o = tonumber(outline) or 0
+    o = math.max(0, math.min(3, math.floor(o)))
+    return m, ic, norm_color3(bg), norm_color3(fg), o
+end
+
+local function avatar_sig_of(mode, icon, bg, fg, outline)
+    return table.concat({
+        tostring(mode), tostring(icon),
+        bg and table.concat(bg, ',') or '',
+        fg and table.concat(fg, ',') or '',
+        tostring(outline)
+    }, '|')
+end
+
+function M.my_avatar()
+    return norm_avatar(M.avatar_mode, M.avatar_icon, M.avatar_bg, M.avatar_fg, M.avatar_outline)
+end
+
+local function store_user_avatar(nick, item)
+    if type(nick) ~= 'string' or nick == '' or type(item) ~= 'table' then return end
+    if item.avatar_mode == nil and item.avatar_icon == nil and item.avatar_bg == nil then return end
+    local m, ic, bg, fg, o = norm_avatar(item.avatar_mode, item.avatar_icon, item.avatar_bg, item.avatar_fg, item.avatar_outline)
+    M.user_avatars[nick] = { mode = m, icon = ic, bg = bg, fg = fg, outline = o }
+end
+
+local function resolve_other_avatar(sender, message)
+    local has_msg = type(message) == 'table' and (
+        message.avatar_mode ~= nil or message.avatar_icon ~= nil or
+        (message.avatar_bg ~= nil and message.avatar_bg ~= '')
+    )
+    if has_msg then
+        return norm_avatar(message.avatar_mode, message.avatar_icon, message.avatar_bg, message.avatar_fg, message.avatar_outline)
+    end
+    local ua = M.user_avatars[sender]
+    if ua then return ua.mode, ua.icon, ua.bg, ua.fg, ua.outline end
+    return 'letters', 'FACE_SMILE', nil, nil, 0
+end
+
+local function draw_glyph_outlined(imgui, dl, x, y, txt, col_u32, outline)
     if outline and outline > 0 then
         local oc = imgui.GetColorU32Vec4(imgui.ImVec4(0, 0, 0, 0.85))
         for ox = -outline, outline do
@@ -180,106 +238,106 @@ local function draw_glyph_outlined(dl, x, y, txt, col_u32, outline)
     end
     dl:AddText(imgui.ImVec2(x, y), col_u32, txt)
 end
+
 local http
 function M.apply_reactions(map)
-if type(map) ~= 'table' then return end
-M.msg_reactions = M.msg_reactions or {}
-for mid, icons in pairs(map) do
-if type(icons) ~= 'table' then
-M.msg_reactions[tonumber(mid) or mid] = nil
-else
-local out = {}
-for icon, data in pairs(icons) do
-if type(data) == 'table' then
-out[icon] = { n = tonumber(data.n or data.count) or 0, mine = data.mine == true or data.mine == 1 }
-elseif type(data) == 'number' then
-out[icon] = { n = data, mine = false }
-end
-end
-M.msg_reactions[tonumber(mid) or mid] = out
-end
-end
+    if type(map) ~= 'table' then return end
+    M.msg_reactions = M.msg_reactions or {}
+    for mid, icons in pairs(map) do
+        if type(icons) ~= 'table' then
+            M.msg_reactions[tonumber(mid) or mid] = nil
+        else
+            local out = {}
+        for icon, data in pairs(icons) do
+            if type(data) == 'table' then
+                out[icon] = { n = tonumber(data.n or data.count) or 0, mine = data.mine == true or data.mine == 1 }
+            elseif type(data) == 'number' then
+                out[icon] = { n = data, mine = false }
+            end
+        end
+        M.msg_reactions[tonumber(mid) or mid] = out
+        end
+    end
 end
 
 function M.toggle_reaction(id, icon, server)
-local mid = tonumber(id) or 0
-if mid <= 0 or not M.enabled then return end
-M.msg_reactions = M.msg_reactions or {}
-local srv = tonumber(server) or tonumber(M.get_server()) or 1
-http('POST', '/messages/reactions', { message_id = mid, server = srv, icon = tostring(icon or '') }, function(data)
-if type(data) == 'table' and data.ok == true then
-M.msg_reactions[mid] = data.reactions or {}
-elseif type(data) == 'table' and data.error then
-notice('Не удалось поставить реакцию: ' .. (SERVER_ERRORS[tostring(data.error)] or ru_system_text(data.error)), 'err')
-end
-end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
+    local mid = tonumber(id) or 0
+    if mid <= 0 or not M.enabled then return end
+    local srv = tonumber(server) or tonumber(M.get_server()) or 1
+    http('POST', '/messages/reactions', { message_id = mid, server = srv, icon = tostring(icon or '') }, function(data)
+        if type(data) == 'table' and data.ok == true then
+            M.apply_reactions({ [mid] = data.reactions })
+        elseif type(data) == 'table' and data.error then
+            notice('Не удалось поставить реакцию: ' .. (SERVER_ERRORS[tostring(data.error)] or ru_system_text(data.error)), 'err')
+        end
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
 end
 
 function M.report_message(msg)
-if type(msg) ~= 'table' then return end
-local payload = {
-kind = 'message', message_id = tonumber(msg.id) or 0, server = tonumber(msg.server) or tonumber(M.get_server()) or 1,
-sender = tostring(msg.sender or ''), text = tostring(msg.text or ''),
-problem = 'Жалоба на сообщение в мессенджере', actions = '',
-version = ctx().version or '1.8.0', channel = (ctx().settings and ctx().settings.general and ctx().settings.general.beta_tester) and 'beta' or 'stable'
-}
-M.send_report(payload, function(ok)
-if ok then notice('Жалоба отправлена модератору', 'ok') else notice('Не удалось отправить жалобу', 'err') end
-end)
+    if type(msg) ~= 'table' then return end
+    local payload = {
+    kind = 'message', message_id = tonumber(msg.id) or 0, server = tonumber(msg.server) or tonumber(M.get_server()) or 1,
+    sender = tostring(msg.sender or ''), text = tostring(msg.text or ''),
+    problem = 'Жалоба на сообщение в мессенджере', actions = '',
+    version = ctx().version or '1.8.0', channel = (ctx().settings and ctx().settings.general and ctx().settings.general.beta_tester) and 'beta' or 'stable'
+    }
+    M.send_report(payload, function(ok)
+    if ok then notice('Жалоба отправлена модератору', 'ok') else notice('Не удалось отправить жалобу', 'err') end
+    end)
 end
 
 function M.send_report(payload, callback)
-if type(payload) ~= 'table' then return false end
-payload.kind = payload.kind == 'message' and 'message' or 'support'
-payload.server = tonumber(payload.server) or tonumber(M.get_home_server()) or 1
-payload.version = payload.version or ctx().version or '1.8.0'
-payload.channel = payload.channel or ((ctx().settings and ctx().settings.general and ctx().settings.general.beta_tester) and 'beta' or 'stable')
-http('POST', '/reports', payload, function(data)
-local ok = type(data) == 'table' and data.ok == true
-if type(callback) == 'function' then pcall(callback, ok, data) end
-end, function(err)
-M.last_error = tostring(err or '')
-if type(callback) == 'function' then pcall(callback, false, { error = tostring(err or '') }) end
-end, M.session_headers(), true)
-return true
+    if type(payload) ~= 'table' then return false end
+    payload.kind = payload.kind == 'message' and 'message' or 'support'
+    payload.server = tonumber(payload.server) or tonumber(M.get_home_server()) or 1
+    payload.version = payload.version or ctx().version or '1.8.0'
+    payload.channel = payload.channel or ((ctx().settings and ctx().settings.general and ctx().settings.general.beta_tester) and 'beta' or 'stable')
+    http('POST', '/reports', payload, function(data)
+    local ok = type(data) == 'table' and data.ok == true
+    if type(callback) == 'function' then pcall(callback, ok, data) end
+    end, function(err)
+    M.last_error = tostring(err or '')
+    if type(callback) == 'function' then pcall(callback, false, { error = tostring(err or '') }) end
+    end, M.session_headers(), true)
+    return true
 end
 
 function M.fetch_reports(callback)
-if not M.enabled then return false end
-http('GET', '/reports?mine=1', nil, function(data)
-if type(callback) == 'function' then pcall(callback, type(data) == 'table' and data.reports or {}) end
-end, function(err) M.last_error = tostring(err or '') end, M.session_headers())
-return true
+    if not M.enabled then return false end
+    http('GET', '/reports?mine=1', nil, function(data)
+    if type(callback) == 'function' then pcall(callback, type(data) == 'table' and data.reports or {}) end
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers())
+    return true
 end
 
 function M.fetch_admin_reports(callback)
-http('GET', '/admin/reports', nil, function(data)
-if type(callback) == 'function' then pcall(callback, type(data) == 'table' and data.reports or {}) end
-end, function(err) M.last_error = tostring(err or '') end, M.session_headers())
-return true
+    http('GET', '/admin/reports', nil, function(data)
+    if type(callback) == 'function' then pcall(callback, type(data) == 'table' and data.reports or {}) end
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers())
+    return true
 end
 
 function M.set_report_status(id, status, callback)
-http('POST', '/admin/reports/status', { id = tonumber(id) or 0, status = tostring(status or 'new') }, function(data)
-if type(callback) == 'function' then pcall(callback, type(data) == 'table' and data.ok == true, data) end
-end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
+    http('POST', '/admin/reports/status', { id = tonumber(id) or 0, status = tostring(status or 'new') }, function(data)
+    if type(callback) == 'function' then pcall(callback, type(data) == 'table' and data.ok == true, data) end
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
 end
 
 function M.set_pin(id, pinned)
-local mid = tonumber(id) or 0
-if mid <= 0 then return false end
-local srv = 1
-for _, m in ipairs(M.messages) do if m.id == mid then srv = tonumber(m.server) or 1; break end end
-http('POST', '/messages/pin', { message_id = mid, server = srv, pinned = pinned ~= false }, function(data)
-if type(data) == 'table' and data.ok == true then
-if data.pinned then
-M.pinned = { id = data.pinned.id, sender = data.pinned.sender, text = M.to_utf8(tostring(data.pinned.text or '')), timestamp = data.pinned.timestamp, server = srv }
-else M.pinned = nil end
-else
-notice('Не удалось изменить закрепление', 'err')
-end
-end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
-return true
+    local mid = tonumber(id) or 0
+    if mid <= 0 then return false end
+    local srv = tonumber(M.get_server()) or 1
+    for _, m in ipairs(M.messages) do if m.id == mid then srv = tonumber(m.server) or srv; break end end
+    http('POST', '/messages/pin', { message_id = mid, server = srv, pinned = pinned ~= false }, function(data)
+    if type(data) == 'table' and data.ok == true then
+    if data.pinned then
+        M.pinned = { id = data.pinned.id, sender = data.pinned.sender, text = M.to_utf8(tostring(data.pinned.text or '')), timestamp = data.pinned.timestamp, server = srv }
+        else M.pinned = nil end
+    else
+        notice('Не удалось изменить закрепление', 'err')
+    end
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
+    return true
 end
 M.pinned = nil
 M.avatar_mode = M.avatar_mode or 'letters'
@@ -343,7 +401,7 @@ local function insert_to_input(utf8_text)
     if not M.input then M.input = imgui.new.char[4096]('') end
     local current = ffi.string(M.input, 4096):match("^[^%z]*") or ""
     local addition = (current ~= '' and not current:match('%s$') and ' ' or '') .. utf8_text .. ' '
-    local new_text = (current .. addition):sub(1, 4000)
+    local new_text = utf8_cut(current .. addition, 4000)
     ffi.fill(M.input, 4096, 0)
     ffi.copy(M.input, new_text)
     M.input_gen = (M.input_gen or 0) + 1
@@ -376,9 +434,12 @@ local function utf8_deep(value, seen)
     return out
 end
 
-local function encode_json(data)
+local function encode_json(data, pretty)
     data = utf8_deep(data)
-
+    if pretty and dkjson_ok and dkjson and type(dkjson.encode) == 'function' then
+        local ok, text = pcall(dkjson.encode, data, { indent = true })
+        if ok and type(text) == 'string' then return text end
+    end
     if type(ctx().encodeJson) == 'function' then
         local ok, text = pcall(ctx().encodeJson, data)
         if ok and type(text) == 'string' then return text end
@@ -400,28 +461,30 @@ local function read_config()
     return decode_json(text) or {}
 end
 
-function M.save_config()
+function M.save_config(force)
     if M.ctx == nil then return end
+    local m, i, b, f, o = M.my_avatar()
+    local sig = avatar_sig_of(m, i, b, f, o)
+    if M._avatar_sig ~= nil and M._avatar_sig ~= sig then M._avatar_dirty = true end
+    M._avatar_sig = sig
+
+    local now = os.time()
+    if not force and M._cfg_last_write and now - M._cfg_last_write < 2 then return end
+    M._cfg_last_write = now
+
     local data = {
-        enabled = M.enabled == true, url = M.base_url, server = M.server, hwid = M.hwid,
-        chat_crowns = M.chat_crowns == true, last_id = M.last_id or 0,
+        server = M.server, hwid = M.hwid,
+        chat_crowns = M.chat_crowns ~= false, last_id = M.last_id or 0,
         last_system_id = M.last_system_id or 0, hide_system = M.hide_system == true,
         show_avatars = M.show_avatars ~= false, last_cleared_at = M.last_cleared_at or '',
-        avatar_mode = M.avatar_mode or 'letters', avatar_icon = M.avatar_icon or 'FACE_SMILE',
-        avatar_outline = M.avatar_outline or 1, avatar_bg = M.avatar_bg, avatar_fg = M.avatar_fg
+        avatar_mode = m, avatar_icon = i, avatar_outline = o, avatar_bg = b, avatar_fg = f
     }
     local path = config_path()
     if path == '/HelperNetwork.json' then return end
     local file = io.open(path, 'w')
     if not file then return end
-    file:write(encode_json(data))
+    file:write(encode_json(data, true))
     file:close()
-    local avatar_sig = tostring(M.avatar_mode or '') .. '|' .. tostring(M.avatar_icon or '') .. '|' .. tostring(table.concat(M.avatar_bg or {}, ',')) .. '|' .. tostring(table.concat(M.avatar_fg or {}, ',')) .. '|' .. tostring(M.avatar_outline or 0)
-    if M._avatar_sig ~= nil and M._avatar_sig ~= avatar_sig and M.enabled and type(M.heartbeat) == 'function' and os.time() - (M.last_avatar_heartbeat or 0) >= 30 then
-        M.last_avatar_heartbeat = os.time()
-        pcall(M.heartbeat)
-    end
-    M._avatar_sig = avatar_sig
 end
 
 local function make_hwid()
@@ -534,8 +597,8 @@ local function sync_http(method, path, body, extra_headers)
         return { type = 'err', err = 'pcall_failed' }
     end
     
-    local timeout = os.clock() + 10
-    while not done and M.running and os.clock() < timeout do
+    local timeout = os.time() + 12
+    while not done and M.running and os.time() < timeout do
         wait(0)
     end
     
@@ -552,6 +615,11 @@ end
 
 http = function(method, path, body, on_ok, on_error, extra_headers, priority)
     if not M.enabled or M.base_url == '' then return false end
+    if #M.network_tasks >= 64 then
+        for i = #M.network_tasks, 1, -1 do
+            if not M.network_tasks[i].priority then table.remove(M.network_tasks, i); break end
+        end
+    end    
     table.insert(M.network_tasks, {
         method = method, path = path, body = body,
         on_ok = on_ok, on_error = on_error, headers = extra_headers,
@@ -569,11 +637,6 @@ local function parse_iso_time(value)
     return stamp + offset
 end
 
-function M.remaining_seconds(value)
-    local stamp = tonumber(value) or parse_iso_time(value)
-    return math.max(0, stamp - os.time())
-end
-
 function M.format_remaining(seconds)
     local value = math.max(0, math.floor(tonumber(seconds) or 0))
     local str
@@ -581,18 +644,6 @@ function M.format_remaining(seconds)
     elseif value >= 3600 then str = math.floor(value / 3600) .. ' ч ' .. math.floor((value % 3600) / 60) .. ' мин'
     else str = math.floor(value / 60) .. ' мин ' .. (value % 60) .. ' сек' end
     return tostring(ctx().u8 and ctx().u8(str) or str)
-end
-
-function M.is_banned_user(nick)
-    local value = tostring(nick or '')
-    if value == '' then return false end
-    if value == M.get_nick() and M.my_banned then return true end
-    return M.banned_users[value] == true or (M.ban_until[value] or 0) > os.time()
-end
-
-function M.is_muted_user(nick)
-    local value = tostring(nick or '')
-    return (M.mute_until[value] or 0) > os.time()
 end
 
 function M.fetch_users()
@@ -603,7 +654,6 @@ function M.fetch_users()
     http('GET', '/users?server=' .. tostring(M.get_server()), nil, function(data)
         if type(data) ~= 'table' then return end
         M.users, M.crown_users, M.admin_users = {}, {}, {}
-        M.all_users = {}
         for _, item in ipairs(data.users or {}) do
             local nick = type(item) == 'table' and item.nick or item
             if type(nick) == 'string' then
@@ -616,7 +666,7 @@ function M.fetch_users()
                 local user_frac = M.to_utf8(type(item) == 'table' and tostring(item.fraction_tag or item.mode or '') or '')
                 if user_dev ~= '' then M.user_devices[nick] = user_dev end
                 if user_frac ~= '' then M.user_fractions[nick] = user_frac end
-                if since ~= '' then M.user_since[nick] = since end
+                store_user_avatar(nick, item)
                 M.crown_users[nick] = true
                 local banned_flag = type(item) == 'table' and (item.banned == 1 or item.banned == true) or false
                 local mute_until = type(item) == 'table' and tostring(item.mute_until or '') or ''
@@ -627,10 +677,20 @@ function M.fetch_users()
                 if is_admin_user then M.admin_users[nick] = true end
                 if online then
                     M.users[nick] = true
-                    table.insert(M.all_users, { nick = nick, first_seen = since, last_seen = type(item) == 'table' and tostring(item.last_seen or '') or '', online = true, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac })
+                    local found = false
+                    for _, u in ipairs(M.all_users) do
+                        if u.nick == nick then
+                            u.online, u.admin, u.server, u.device, u.fraction = true, is_admin_user, user_srv, user_dev, user_frac
+                            found = true; break
+                        end
+                    end
+                    if not found then
+                        table.insert(M.all_users, { nick = nick, first_seen = since, last_seen = type(item) == 'table' and tostring(item.last_seen or '') or '', online = true, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac })
+                    end 
                 end
             end
         end
+        M._users_rev = (M._users_rev or 0) + 1
         if ctx().module and ctx().module.HelperUsers then ctx().module.HelperUsers.list = M.users end
     end, function(err) M.last_error = tostring(err or '') end)
 end
@@ -642,12 +702,13 @@ function M.fetch_crowns()
     
     http('GET', '/crowns?server=' .. tostring(M.get_server()), nil, function(data)
         if type(data) ~= 'table' then return end
-        M.crown_users, M.admin_users = {}, {}
+        local crowns, admins = {}, {}
         for _, item in ipairs(data.users or {}) do
             local nick = type(item) == 'table' and item.nick or nil
             if type(nick) == 'string' then
-                M.crown_users[nick] = true
-                if item.admin == 1 or item.admin == true then M.admin_users[nick] = true end
+                crowns[nick] = true
+                store_user_avatar(nick, item)
+                if item.admin == 1 or item.admin == true then admins[nick] = true end
                 if item.banned == 1 or item.banned == true then M.banned_users[nick] = true else M.banned_users[nick] = nil end
                 M.mute_until[nick] = item.mute_until and parse_iso_time(item.mute_until) or 0
                 M.ban_until[nick] = item.ban_until and parse_iso_time(item.ban_until) or 0
@@ -658,6 +719,8 @@ function M.fetch_crowns()
                 if frac_tag ~= '' then M.user_fractions[nick] = frac_tag end
             end
         end
+        M.crown_users, M.admin_users = crowns, admins
+        M._users_rev = (M._users_rev or 0) + 1
     end, function(err) M.last_error = tostring(err or '') end)
 end
 
@@ -668,6 +731,7 @@ function M.fetch_user_directory(silent)
         M.all_users, M.online_any = {}, {}
         for _, item in ipairs(data.users or {}) do
             if type(item) == 'table' and type(item.nick) == 'string' then
+                store_user_avatar(item.nick, item)
                 local is_admin_user = (item.admin == 1 or item.admin == true)
                 local is_online = (item.online == 1 or item.online == true)
                 local user_srv = norm_server(item.home or item.server)
@@ -678,21 +742,18 @@ function M.fetch_user_directory(silent)
                 if user_frac ~= '' then M.user_fractions[item.nick] = user_frac end
                 if is_online then M.online_any[item.nick] = true end
                 table.insert(M.all_users, { nick = item.nick, first_seen = tostring(item.first_seen or ''), last_seen = tostring(item.last_seen or ''), online = is_online, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac })
-                if item.first_seen then M.user_since[item.nick] = tostring(item.first_seen) end
                 if is_admin_user then M.admin_users[item.nick] = true end
             end
         end
-        M.last_dir_ok = os.time()
+        M._users_rev = (M._users_rev or 0) + 1
         if not silent then M.show_users = true end
     end, function(err)
         M.last_error = tostring(err or '')
-        M.next_dir_try = os.time() + 15
     end)
     return true
 end
 
 function M.add_system(data)
-    if M.ignore_incoming_until and os.clock() < M.ignore_incoming_until then return end
     if type(data) ~= 'table' then return end
     local nick = M.get_nick()
     local target = tostring(data.target or '')
@@ -799,11 +860,12 @@ function M.heartbeat()
     http('POST', '/heartbeat', {
         nick = nick,
         hwid = M.hwid,
-        avatar_mode = M.avatar_mode or 'letters',
-        avatar_icon = M.avatar_icon or 'FACE_SMILE',
-        avatar_bg = M.avatar_bg and table.concat(M.avatar_bg, ',') or '',
-        avatar_fg = M.avatar_fg and table.concat(M.avatar_fg, ',') or '',
-        avatar_outline = M.avatar_outline or 0,
+        avatar_mode = (function() local m, i, b, f, o = M.my_avatar()
+            M._av_m, M._av_i, M._av_b, M._av_f, M._av_o = m, i, b, f, o return m end)(),
+        avatar_icon = M._av_i,
+        avatar_bg = M._av_b and table.concat(M._av_b, ',') or '',
+        avatar_fg = M._av_f and table.concat(M._av_f, ',') or '',
+        avatar_outline = M._av_o,
         server = M.get_home_server(),
         home = M.get_home_server(),
         lobby = M.get_server(),
@@ -834,19 +896,16 @@ function M.heartbeat()
     end, function(err) M.online = false; M.last_error = tostring(err or '') end, nil, heartbeat_priority)
 end
 
-local function trim(text) return (tostring(text or ''):gsub('^%s+', ''):gsub('%s+$', '')) end
-
 function M.session_headers()
     if M.session == '' then return nil end
     return { ['X-Session'] = M.session }
 end
 
 local function add_message(message)
-    if M.ignore_incoming_until and os.clock() < M.ignore_incoming_until then return end
     if M.my_banned or type(message) ~= 'table' then return end
     local id = tonumber(message.id) or 0
     if id > 0 and id <= M.last_id then return end
-    local item = { id = id, server = tonumber(message.server) or 1, sender = tostring(message.sender or ''), text = M.to_utf8(tostring(message.text or '')), timestamp = tostring(message.timestamp or ''), home = norm_server(message.home), avatar_mode = tostring(message.avatar_mode or 'letters'), avatar_icon = tostring(message.avatar_icon or 'FACE_SMILE'), avatar_bg = tostring(message.avatar_bg or ''), avatar_fg = tostring(message.avatar_fg or ''), avatar_outline = tonumber(message.avatar_outline) or 0 }
+    local item = { id = id, server = tonumber(message.server) or 1, sender = tostring(message.sender or ''), text = M.to_utf8(tostring(message.text or '')), timestamp = tostring(message.timestamp or ''), home = norm_server(message.home), avatar_mode = message.avatar_mode ~= nil and tostring(message.avatar_mode) or nil, avatar_icon = message.avatar_icon ~= nil and tostring(message.avatar_icon) or nil, avatar_bg = message.avatar_bg ~= nil and tostring(message.avatar_bg) or nil, avatar_fg = message.avatar_fg ~= nil and tostring(message.avatar_fg) or nil, avatar_outline = message.avatar_outline ~= nil and tonumber(message.avatar_outline) or nil }
     if item.text == '' then return end
     table.insert(M.messages, item)
     local my_nick = M.get_nick()
@@ -921,9 +980,6 @@ function M.ingest(list)
     for _, message in ipairs(list) do add_message(message) end
 end
 
-function M.poll_system()
-end
-
 function M.poll(force)
     if not M.enabled or M.my_banned then return end
     if M.polling and not force then return end
@@ -932,7 +988,7 @@ function M.poll(force)
     M.last_poll = os.time()
     M.polling = true
     local view_server = tonumber(M.get_server()) or 1
-    http('GET', '/sync?server=' .. tostring(view_server)
+    M._poll_queued = http('GET', '/sync?server=' .. tostring(view_server)
         .. '&after_id=' .. tostring(M.last_id)
         .. '&system_after=' .. tostring(M.last_system_id), nil, function(data)
         M.polling = false
@@ -986,6 +1042,7 @@ function M.poll(force)
         M.polling = false
         M.last_error = tostring(err or '')
     end, M.session_headers(), force)
+    if not M._poll_queued then M.polling = false end
 end
 
 
@@ -994,7 +1051,6 @@ function M.rate_backoff()
     M.backoff_sec = math.min(300, math.max(30, (M.backoff_sec or 30) * 2))
     M.backoff_until = now + M.backoff_sec
     M.last_poll = now + M.backoff_sec
-    M.last_poll_system = now + M.backoff_sec
     M.last_fetch_users = now + M.backoff_sec
 end
 
@@ -1004,7 +1060,7 @@ local function restore_input(text)
     local cur = ffi.string(M.input, 4096):match("^[^%z]*") or ""
     if cur ~= '' then return end
     ffi.fill(M.input, 4096, 0)
-    ffi.copy(M.input, tostring(text):sub(1, 4000))
+    ffi.copy(M.input, utf8_cut(text, 4000))
     M.input_gen = (M.input_gen or 0) + 1
 end
 
@@ -1012,7 +1068,7 @@ function M.send(text)
     local raw_in = trim(text)
     local message = apply_rp_format(raw_in)
     if message == '' then return false end
-    if #message > 2000 then message = message:sub(1, 2000) end
+    if #message > 2000 then message = utf8_cut(message, 2000) end
     local nick = M.get_nick()
     if nick == '' then return false end
     
@@ -1069,14 +1125,16 @@ function M.send(text)
                 add_message(data.message)
             elseif type(data) == 'table' and data.error == 'unauthorized' and n < 2 then
                 M.heartbeat()
-                table.insert(M.network_tasks, { delay = 2, action = function() attempt(n + 1) end })
+                table.insert(M.network_tasks, { due_at = os.time() + 2, action = function() attempt(n + 1) end })
             elseif type(data) == 'table' and (data.error == 'storage_unavailable' or data.error == 'database_unavailable') and n < 3 then
-                table.insert(M.network_tasks, { delay = 3, action = function() attempt(n + 1) end })
+                table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() attempt(n + 1) end })
             elseif type(data) == 'table' and (data.error == 'rate_limit' or data.error == 'too_many_messages' or data.error == 'flood' or data.error == 'too_fast') and n < 3 then
                 M.rate_backoff()
-                table.insert(M.network_tasks, { delay = 3, action = function() attempt(n + 1) end })
+                table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() attempt(n + 1) end })
             elseif type(data) == 'table' and data.error then
-                notice('Сервер отклонил сообщение: ' .. (SERVER_ERRORS[tostring(data.error)] or ru_system_text(data.error)), 'err')
+                local err_msg = SERVER_ERRORS[tostring(data.error)]
+                if err_msg then err_msg = su8(err_msg) else err_msg = ru_system_text(data.error) end
+                notice(su8('Сервер отклонил сообщение: ') .. M.to_utf8(err_msg), 'err')
                 restore_input(raw_in)
             end
         end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
@@ -1088,19 +1146,20 @@ end
 function M.start_network_thread()
     if M.network_thread_started then return end
     M.network_thread_started = true
-    
     lua_thread.create(function()
         while M.running do
-            if #M.network_tasks > 0 then
-                local task_index = 1
-                for i, queued in ipairs(M.network_tasks) do
-                    if queued.priority then task_index = i; break end
+            local now = os.time()
+            local idx = nil
+            for i, t in ipairs(M.network_tasks) do
+                if (t.due_at or 0) <= now then
+                    if t.priority then idx = i; break end
+                    if not idx then idx = i end
                 end
-                local task = table.remove(M.network_tasks, task_index)
-                
-                if task.delay then
-                    wait(task.delay * 1000)
-                    if type(task.action) == 'function' then pcall(task.action) end
+            end
+            if idx then
+                local task = table.remove(M.network_tasks, idx)
+                if type(task.action) == 'function' then
+                    pcall(task.action)
                 else
                     local result = sync_http(task.method, task.path, task.body, task.headers)
                     if result.type == 'ok' then
@@ -1114,9 +1173,6 @@ function M.start_network_thread()
             end
         end
     end)
-end
-
-function M.start_for_ui()
 end
 
 function M.start_loop()
@@ -1134,7 +1190,11 @@ function M.start_loop()
         while M.running do
             wait(1000)
             local now = os.time()
-
+            if M._avatar_dirty and now - (M.last_avatar_heartbeat or 0) >= 2 then
+                M._avatar_dirty = false
+                M.last_avatar_heartbeat = now
+                M.heartbeat()
+            end
             if M.chat_open then
                 if now - last_save >= 30 then
                     M.save_config()
@@ -1146,6 +1206,7 @@ function M.start_loop()
                 end
                 if now - last_users >= M.USERS_INTERVAL then
                     M.fetch_user_directory(true)
+                    M.fetch_users()
                     last_users = now
                 end
 
@@ -1183,6 +1244,10 @@ function M.stop()
     M.running, M.started, M.loop_started, M.chat_open, M.network_thread_started = false, false, false, false, false
     M.users, M.all_users, M.messages, M.system_messages, M.online_any = {}, {}, {}, {}, {}
     M.network_tasks = {}
+    M.polling, M.pending_initial_sync = false, false
+    M.msg_reactions, M.pinned = {}, nil
+    M._users_rev = (M._users_rev or 0) + 1
+    M.save_config(true)
 end
 
 function M.admin_request(method, path, body, headers, on_ok, on_error)
@@ -1210,24 +1275,60 @@ function M.is_user(nick)
     return M.crown_users[clean] == true or M.users[clean] == true or M.admin_users[clean] == true
 end
 
-function M.decorate_nick(nick)
-    if not M.is_user(nick) then return nick end
-    local icon = (ctx().fa and ctx().fa.CROWN) or ''
-    if icon == '' then return nick end
-    return icon .. ' ' .. tostring(nick)
-end
-
-function M.decorate_chat(text)
-    if not M.chat_crowns or type(text) ~= 'string' then return text end
-    local icon = (ctx().fa and ctx().fa.CROWN) or ''
-    if icon == '' then return text end
-    local result = text
-    for nick in pairs(M.users) do
-        if type(nick) == 'string' and nick ~= '' and result:find(nick, 1, true) then
-            result = result:gsub(nick, function() return icon .. ' ' .. nick end)
+local crown_set_cache, crown_set_rev = nil, -1
+local function get_crown_set()
+    local rev = M._users_rev or 0
+    if crown_set_cache and crown_set_rev == rev then return crown_set_cache end
+    local gold = M.chat_nick_color or '{FFD700}'
+    local set = {}
+    for nick in pairs(M.crown_users) do
+        if type(nick) == 'string' and nick ~= '' then
+            set[nick] = (M.admin_users[nick] == true) and '{FF4444}' or gold
         end
     end
-    return result
+    for nick in pairs(M.users) do
+        if type(nick) == 'string' and nick ~= '' and set[nick] == nil then
+            set[nick] = (M.admin_users[nick] == true) and '{FF4444}' or gold
+        end
+    end
+    crown_set_cache, crown_set_rev = set, rev
+    return set
+end
+
+local function chat_color_to_hex(color)
+    local n = tonumber(color)
+    if not n then return '{FFFFFF}' end
+    n = math.floor(n)
+    if n < 0 then n = n + 4294967296 end
+    return string.format('{%06X}', math.floor(n / 256) % 16777216)
+end
+
+function M.decorate_chat(text, color)
+    if not M.chat_crowns or type(text) ~= 'string' or text == '' then return text end
+    local set = get_crown_set()
+    if next(set) == nil then return text end
+
+    local base = chat_color_to_hex(color)
+    local out, pos, cur = {}, 1, base
+    while true do
+        local s, e, code = text:find('({%x+})', pos)
+        local stop = s and (s - 1) or #text
+        local seg = text:sub(pos, stop)
+        if seg ~= '' then
+            local restore = cur
+            seg = seg:gsub('[%w_]+', function(tok)
+                local c = set[tok]
+                if c then return c .. tok .. restore end
+                return nil
+            end)
+            out[#out + 1] = seg
+        end
+        if not s then break end
+        out[#out + 1] = code
+        cur = code
+        pos = e + 1
+    end
+    return table.concat(out)
 end
 
 function M.toggle()
@@ -1236,7 +1337,6 @@ function M.toggle()
     M.window[0] = not M.window[0]
     M.chat_open = M.window[0] == true
     if M.chat_open then
-        M.chat_transport = true
         M.start_loop()
         if M.session == '' then
             M.pending_initial_sync = true
@@ -1293,7 +1393,7 @@ function M.insert_mention(nick)
     if not M.input then M.input = imgui.new.char[4096]('') end
     local current = ffi.string(M.input, 4096):match("^[^%z]*") or ""
     local addition = (current ~= '' and not current:match('%s$') and ' ' or '') .. '@' .. M.to_utf8(nick) .. ' '
-    local text = (current .. addition):sub(1, 4000)
+    local text = utf8_cut(current .. addition, 4000)
     ffi.fill(M.input, 4096, 0)
     ffi.copy(M.input, text)
     M.input_gen = (M.input_gen or 0) + 1
@@ -1314,22 +1414,6 @@ function M.draw(player)
     local fa = c.fa or {}
     local u8 = c.u8
     local function T(s) return (u8 and u8(s)) or s end
-    local function glyph_outlined_widget(x, y, txt, fg, outline)
-        local out = math.min(tonumber(outline) or 0, 2)
-        if out > 0 then
-            local oc = imgui.ImVec4(0, 0, 0, 0.85)
-            for ox = -out, out do
-                for oy = -out, out do
-                    if ox ~= 0 or oy ~= 0 then
-                        imgui.SetCursorScreenPos(imgui.ImVec2(x + ox, y + oy))
-                        imgui.TextColored(oc, txt)
-                    end
-                end
-            end
-        end
-        imgui.SetCursorScreenPos(imgui.ImVec2(x, y))
-        imgui.TextColored(fg, txt)
-    end
     local dpi = (c.settings and c.settings.ui and c.settings.ui.dpi) or 1.0
     local st = imgui.GetStyle()
     local light = ((c.settings or {}).ui or {}).theme == 2
@@ -1517,6 +1601,15 @@ function M.draw(player)
             end
         end
         section(fa.PALETTE or '', T('Внешний вид'))
+        if not M.chat_crowns_cb then M.chat_crowns_cb = imgui.new.bool(M.chat_crowns ~= false) end
+        M.chat_crowns_cb[0] = (M.chat_crowns ~= false)
+        row_label(fa.PALETTE or fa.CROWN or '', T('Золотые ники в чате'))
+        right_x(row_h)
+        if imgui.Checkbox('##chat_crowns', M.chat_crowns_cb) then
+            M.chat_crowns = M.chat_crowns_cb[0]
+            M.save_config(true)
+        end
+        if imgui.IsItemHovered() then imgui.SetTooltip(T('Помечает ники пользователей хелпера в игровом чате')) end
         if not M.show_avatars_cb then M.show_avatars_cb = imgui.new.bool(M.show_avatars ~= false) end
         row_label(fa.COMMENTS or '', T('Пузыри и аватары'))
         right_x(row_h)
@@ -1560,7 +1653,8 @@ function M.draw(player)
                 pcall(function()
                     pdl:AddCircleFilled(imgui.ImVec2(pv_x + pv_d * 0.5, pv_y + pv_d * 0.5), pv_d * 0.5, imgui.GetColorU32Vec4(pv_bg), 24)
                 end)
-                glyph_outlined_widget(pv_x + pv_d * 0.5 - imgui.CalcTextSize(pv_g).x * 0.5, pv_y + pv_d * 0.5 - imgui.GetTextLineHeight() * 0.5, pv_g, pv_fg, M.avatar_outline or 0)
+                local pv_gw = imgui.CalcTextSize(pv_g).x
+                draw_glyph_outlined(imgui, pdl, pv_x + pv_d * 0.5 - pv_gw * 0.5, pv_y + pv_d * 0.5 - imgui.GetTextLineHeight() * 0.5, pv_g, imgui.GetColorU32Vec4(pv_fg), math.min(tonumber(M.avatar_outline) or 0, 2))
                 local cap = T('Пример: так ваш аватар выглядит в чате')
                 imgui.SetCursorScreenPos(imgui.ImVec2(g0.x + (pw - imgui.CalcTextSize(cap).x) * 0.5, g0.y + math.max(grid_h, pv_d) + 4 * dpi))
                 imgui.TextColored(muted, cap)
@@ -1713,13 +1807,6 @@ function M.draw(player)
                 return out
             end
 
-            local function parse_avatar_color(value)
-                if type(value) == 'table' then return { tonumber(value[1]) or 0, tonumber(value[2]) or 0, tonumber(value[3]) or 0 } end
-                local r, g, b = tostring(value or ''):match('(%d+),(%d+),(%d+)')
-                if r then return { tonumber(r), tonumber(g), tonumber(b) } end
-                return nil
-            end
-
             local function initials_of(nick)
                 M._initials_cache = M._initials_cache or {}
                 local initials_key = tostring(nick or '')
@@ -1781,17 +1868,17 @@ function M.draw(player)
                         end
                         local av_bg, av_fg, av_glyph, av_out
                         if is_mine then
-                            av_bg = M.avatar_bg and imgui.ImVec4(M.avatar_bg[1] / 255, M.avatar_bg[2] / 255, M.avatar_bg[3] / 255, 1) or accent
-                            av_fg = M.avatar_fg and imgui.ImVec4(M.avatar_fg[1] / 255, M.avatar_fg[2] / 255, M.avatar_fg[3] / 255, 1) or imgui.ImVec4(1, 1, 1, 1)
-                            av_glyph = (M.avatar_mode == 'icon' and (fa[M.avatar_icon or ''] or nil)) or initials_of(sender)
-                            av_out = M.avatar_outline or 0
+                            local mm, mi, mb, mf, mo = M.my_avatar()
+                            av_bg = mb and imgui.ImVec4(mb[1] / 255, mb[2] / 255, mb[3] / 255, 1) or accent
+                            av_fg = mf and imgui.ImVec4(mf[1] / 255, mf[2] / 255, mf[3] / 255, 1) or imgui.ImVec4(1, 1, 1, 1)
+                            av_glyph = (mm == 'icon' and (fa[mi] or nil)) or initials_of(sender)
+                            av_out = mo
                         else
-                            local mbg = parse_avatar_color(message.avatar_bg)
-                            local mfg = parse_avatar_color(message.avatar_fg)
-                            av_bg = mbg and imgui.ImVec4(mbg[1] / 255, mbg[2] / 255, mbg[3] / 255, 1) or sender_col
-                            av_fg = mfg and imgui.ImVec4(mfg[1] / 255, mfg[2] / 255, mfg[3] / 255, 1) or imgui.ImVec4(1, 1, 1, 1)
-                            av_glyph = (message.avatar_mode == 'icon' and (fa[message.avatar_icon or ''] or nil)) or initials_of(sender)
-                            av_out = tonumber(message.avatar_outline) or 0
+                            local am, ai, ab, af, ao = resolve_other_avatar(sender, message)
+                            av_bg = ab and imgui.ImVec4(ab[1] / 255, ab[2] / 255, ab[3] / 255, 1) or sender_col
+                            av_fg = af and imgui.ImVec4(af[1] / 255, af[2] / 255, af[3] / 255, 1) or imgui.ImVec4(1, 1, 1, 1)
+                            av_glyph = (am == 'icon' and (fa[ai] or nil)) or initials_of(sender)
+                            av_out = ao
                         end
                         local av_cx = cwp.x + ax
                         local av_cy = y0 + bubble_h * 0.5
@@ -1799,7 +1886,7 @@ function M.draw(player)
                             dl_child:AddCircleFilled(imgui.ImVec2(av_cx, av_cy), av_d * 0.5, imgui.GetColorU32Vec4(av_bg), 20)
                         end)
                         local gw = imgui.CalcTextSize(av_glyph).x
-                        glyph_outlined_widget(av_cx - gw * 0.5, av_cy - line_h * 0.5, av_glyph, av_fg, av_out)
+                        draw_glyph_outlined(imgui, dl_child, av_cx - gw * 0.5, av_cy - line_h * 0.5, av_glyph, imgui.GetColorU32Vec4(av_fg), av_out)
                         if is_mine then
                             imgui.SetCursorScreenPos(imgui.ImVec2(cwp.x + ax - av_d * 0.5, y0 + bubble_h * 0.5 - av_d * 0.5))
                             imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0, 0, 0, 0))
@@ -2073,7 +2160,7 @@ function M.draw(player)
         local ny = wp.y + ws.y - dynamic_input_h - st.ItemSpacing.y * 2 - 6 * dpi
         for i = #M.notices, 1, -1 do
             local n = M.notices[i]
-            local ntxt = (fa.TRIANGLE_EXCLAMATION or '!') .. ' ' .. T(n.text)
+            local ntxt = (fa.TRIANGLE_EXCLAMATION or '!') .. ' ' .. n.text
             local nw = imgui.CalcTextSize(ntxt).x
             ny = ny - nline - 6 * dpi
             local col = n.kind == 'err' and red or yellow
@@ -2174,15 +2261,6 @@ function M.draw(player)
     imgui.End()
 end
 
-function M.refresh_session()
-    if M.session ~= '' and os.time() - (M.last_heartbeat_at or 0) < M.HEARTBEAT_INTERVAL then return end
-    local delay = math.max(0, (M.last_heartbeat_at or 0) + 5 - os.time())
-    lua_thread.create(function()
-        if delay > 0 then wait(delay * 1000) end
-        M.heartbeat()
-    end)
-end
-
 function M.return_home()
     M.set_server(0)
 end
@@ -2192,9 +2270,10 @@ function M.set_server(value)
     local is_reset = (str_val == '0' or str_val == '')
     if is_reset then
         M.admin_lobby = nil; M.messages = {}; M.system_messages = {}; M.last_id = 0; M.last_system_id = 0
-M.session = ''
-M.pending_initial_sync = true
-M.heartbeat()
+        M.session = ''
+        M.pending_initial_sync = true
+        M.msg_reactions, M.pinned = {}, nil
+        M.heartbeat()
         return
     end
     if not is_cross and not M.is_admin() then M.print('Другие серверы доступны только администраторам.'); return end
@@ -2202,15 +2281,17 @@ M.heartbeat()
     if not is_cross and (server_num < 1 or server_num > 1000) then return end
     local server_label = is_cross and '00' or (server_num < 10 and string.format('0%d', server_num) or tostring(server_num))
     M.admin_lobby = server_label; M.messages = {}; M.system_messages = {}; M.last_id = 0; M.last_system_id = 0
-M.session = ''
-M.pending_initial_sync = true
-M.heartbeat()
+    M.session = ''
+    M.pending_initial_sync = true
+    M.msg_reactions, M.pinned = {}, nil
+    M.heartbeat()
 end
 
 function M.print(text)
     if type(sampAddChatMessage) == 'function' then
         local prefix = tostring(ctx().chat_prefix or 'Arizona Helper')
-        pcall(sampAddChatMessage, '[' .. prefix .. '] {ffffff}' .. tostring(text), ctx().message_color or 40703)
+        local safe_text = to_clip(tostring(text))
+        pcall(sampAddChatMessage, '[' .. prefix .. '] {ffffff}' .. safe_text, ctx().message_color or 40703)
     end
 end
 
@@ -2230,7 +2311,7 @@ function M.init(opts)
     M.last_cleared_at = tostring(config.last_cleared_at or '')
     M.hide_system = config.hide_system == true
     M.show_avatars = config.show_avatars ~= false
-    M.chat_crowns = config.chat_crowns == true
+    M.chat_crowns = config.chat_crowns ~= false
     M.avatar_mode = config.avatar_mode or 'letters'
     M.avatar_icon = config.avatar_icon or 'FACE_SMILE'
     M.avatar_outline = tonumber(config.avatar_outline) or 1
@@ -2244,7 +2325,6 @@ function M.init(opts)
         M.window = ctx().imgui.new.bool(false)
         M.input = ctx().imgui.new.char[4096]('')
         M.admin_mute_buf = ffi.new("int[1]", 15)
-        M.server_pick_buf = ffi.new("int[1]", 1)
         ctx().imgui.OnFrame(function() return M.window and M.window[0] end, function(player) M.draw(player) end)
     end
     if type(ctx().module) == 'table' then
