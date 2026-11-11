@@ -1028,10 +1028,22 @@ local modules = {
 				'to',
 			},
 			dep_quick_replies = {
-				{ name = 'На связи',          text = 'На связи.' },
-				{ name = 'От кого помехи?',   text = 'От кого помехи?' },
-				{ name = 'Проверка ЧС',       text = 'Могу заехать на вашу ВЧ для проверки на ЧС?' },
-				{ name = 'От меня',           text = 'Помехи...' },
+				{ name = 'На связи',           text = 'На связи.' },
+				{ name = 'Принято',            text = '10-4, информация принята.' },
+				{ name = 'От кого помехи?',    text = 'От кого помехи?' },
+				{ name = 'Помехи от меня',     text = 'Помехи...' },
+				{ name = 'Повторите',          text = 'Вас плохо слышно, повторите информацию.' },
+				{ name = 'Занимаю частоту',    text = 'Занимаю вашу частоту, прошу не перебивать.' },
+				{ name = 'Освобождаю частоту', text = 'Освобождаю вашу частоту, спасибо за сотрудничество.' },
+				{ name = 'Прошу принять инфо', text = 'Прошу принять информацию.' },
+				{ name = 'Передаю инфо',       text = 'Передаю информацию, прошу подтвердить приём.' },
+				{ name = 'Проверка ЧС',        text = 'Могу заехать на вашу ВЧ для проверки на ЧС?' },
+				{ name = 'Прошу медиков',      text = 'Прошу бригаду медиков на место происшествия.' },
+				{ name = 'Прошу подкрепление', text = 'Прошу подкрепление на место происшествия.' },
+				{ name = 'Прошу сопровождение',text = 'Прошу сопровождение до места происшествия.' },
+				{ name = 'На месте',           text = 'Мы на месте, начинаем работу.' },
+				{ name = 'Отбой',              text = 'Отбой, ситуация урегулирована.' },
+				{ name = 'Спасибо',            text = 'Спасибо за сотрудничество, хорошего дежурства.' },
 			},
 		}
 	},
@@ -4573,17 +4585,17 @@ end
 					last = MODULE.Wanted.updwanteds.last_time
 				end
 				local elapsed = os.time() - last
-				if elapsed >= period then
+				if elapsed >= (period - max_lvl) then
 					MODULE.Wanted.checker = true
 					MODULE.Wanted.new = {}
 					MODULE.Wanted.scan_cancel = false
-					MODULE.Wanted.updwanteds.last_time = os.time()
 					for i = max_lvl, 1, -1 do
 						if MODULE.Wanted.scan_cancel then break end
 						sampSendChat('/wanted ' .. i)
 						wait(1000)
 					end
 					MODULE.Wanted.checker = false
+					MODULE.Wanted.updwanteds.last_time = os.time()
 					if not MODULE.Wanted.scan_cancel then
 						MODULE.Wanted.all = MODULE.Wanted.new
 						if #MODULE.Wanted.new == 0 then
@@ -5478,13 +5490,12 @@ end
             end
         end
         if is_custom_cmd_enabled('wanteds') then sampRegisterChatCommand(get_custom_cmd('wanteds'), CUSTOM_CMD_HANDLERS.wanteds) end
-
-        CUSTOM_CMD_HANDLERS.patrool = function(arg)
-            MODULE.Patrool.Window[0] = not MODULE.Patrool.Window[0]
+    end
+	if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
+		CUSTOM_CMD_HANDLERS.patrool = function(arg)
+		MODULE.Patrool.Window[0] = not MODULE.Patrool.Window[0]
         end
         if is_custom_cmd_enabled('patrool') then sampRegisterChatCommand(get_custom_cmd('patrool'), CUSTOM_CMD_HANDLERS.patrool) end
-    end
-    if not (isMode('ghetto') or isMode('mafia') or isMode('judge')) then
         CUSTOM_CMD_HANDLERS.post = function(arg)
             if not MODULE.Binder.state.isActive then
                 MODULE.Post.Window[0] = not MODULE.Post.Window[0]
@@ -5765,6 +5776,33 @@ end
 function ol_center(col, txt, outline)
     imgui.SetCursorPosX((imgui.GetColumnOffset() + imgui.GetColumnWidth() * 0.5) - imgui.CalcTextSize(txt).x * 0.5)
     ol_text(col, txt, outline)
+end
+
+local function ol_text_wrapped(col, txt, max_w)
+    if type(txt) ~= 'string' then txt = tostring(txt) end
+    if txt == '' then return end
+    if not max_w or max_w < 50 then max_w = imgui.GetContentRegionAvail().x end
+    for raw_line in txt:gmatch('[^\n]+') do
+        local cur = ''
+        for word in raw_line:gmatch('%S+') do
+            local test = (cur == '') and word or (cur .. ' ' .. word)
+            if imgui.CalcTextSize(test).x <= max_w then
+                cur = test
+            else
+                if cur ~= '' then
+                    ol_text(col, cur)
+                end
+                while #word > 1 and imgui.CalcTextSize(word).x > max_w do
+                    local cut = #word
+                    while cut > 1 and imgui.CalcTextSize(word:sub(1, cut)).x > max_w do cut = cut - 1 end
+                    ol_text(col, word:sub(1, cut))
+                    word = word:sub(cut + 1)
+                end
+                cur = word
+            end
+        end
+        if cur ~= '' then ol_text(col, cur) end
+    end
 end
 
 function su8(v)
@@ -6155,28 +6193,24 @@ local function virtual_render(cache, query, auto_state, is_news)
             elseif st == 'heading' then
                 imgui.Spacing()
                 imgui.Separator()
-                imgui.PushStyleColor(imgui.Col.Text, accent)
-                if is_hit then render_highlighted_line(content, lq, lw) else imgui.TextWrapped(cache.u8[i]) end
-                imgui.PopStyleColor()
+                if is_hit then render_highlighted_line(content, lq, lw) else ol_text_wrapped(accent, cache.u8[i], wrap_w) end
             elseif st == 'quote' then
                 imgui.Spacing()
-                imgui.PushStyleColor(imgui.Col.Text, accent)
                 imgui.Indent(14 * dpi)
-                if is_hit then render_highlighted_line(content, lq, lw) else imgui.TextWrapped(cache.u8[i]) end
+                if is_hit then render_highlighted_line(content, lq, lw) else ol_text_wrapped(accent, cache.u8[i], wrap_w) end
                 imgui.Unindent(14 * dpi)
-                imgui.PopStyleColor()
                 imgui.Spacing()
             elseif st == 'bullet' then
                 imgui.Indent(14 * dpi)
                 imgui.Bullet()
                 imgui.SameLine()
-                if is_hit then render_highlighted_line(content, lq, lw) else imgui.TextWrapped(cache.u8[i]) end
+                if is_hit then render_highlighted_line(content, lq, lw) else ol_text_wrapped(nil, cache.u8[i], wrap_w) end
                 imgui.Unindent(14 * dpi)
             else
-                if is_hit then render_highlighted_line(content, lq, lw) else imgui.TextWrapped(cache.u8[i]) end
+                if is_hit then render_highlighted_line(content, lq, lw) else ol_text_wrapped(nil, cache.u8[i], wrap_w) end
             end
         else
-            if is_hit then render_highlighted_line(content, lq, lw) else imgui.TextWrapped(cache.u8[i]) end
+            if is_hit then render_highlighted_line(content, lq, lw) else ol_text_wrapped(nil, cache.u8[i], wrap_w) end
         end
         local actual = imgui.GetCursorPosY() - y0
         if actual > 0 and math.abs(actual - (cache.heights[i] or 0)) > 0.5 then
@@ -8450,17 +8484,53 @@ function sampev.onSendGiveDamage(playerId, damage, weapon, bodypart)
 		print('[GiveDamage] ID ' .. playerId .. " | Damage " .. damage .. " | Weapon " .. weapon .. " | Body " .. bodypart)
 	end
 end
+MODULE.Mentions = MODULE.Mentions or {}
+local function mention_my_id()
+	local ok, id = pcall(function() return select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)) end)
+	id = ok and tonumber(id) or nil
+	if id and id >= 0 then return id end
+	return tonumber(MODULE.MOBILE_PLAYER_ID) or -1
+end
+local function mention_my_nick()
+	local tag = MODULE.Binder and MODULE.Binder.tag
+	local n = (tag and type(tag.my_nick) == 'function') and tostring(tag.my_nick() or '') or ''
+	n = n:gsub('%[.+%]', ''):gsub('^%s+', ''):gsub('%s+$', '')
+	if n == '' then
+		n = tostring((modules.player and modules.player.data and modules.player.data.nick) or '')
+	end
+	return n
+end
+function MODULE.Mentions.expand(text)
+	if type(text) ~= 'string' or not text:find('@', 1, true) then return text end
+	local my_id = mention_my_id()
+	local my_nick = mention_my_nick()
+	return (text:gsub('@(%d+)%f[%W]', function(id)
+		local pid = tonumber(id)
+		if not pid then return '@' .. id end
+		if pid == my_id and my_nick ~= '' then
+			return '@' .. my_nick
+		end
+		if sampIsPlayerConnected(pid) then
+			local nick = sampGetPlayerNickname(pid)
+			if nick and nick ~= '' then return '@' .. nick end
+		end
+		return '@' .. id
+	end))
+end
+local function mention_hit(text)
+	local low = ' ' .. tostring(text):gsub('{%x%x%x%x%x%x}', ''):lower()
+	if low:find('%W@all%f[%W]') then return 'all' end
+	local nick = mention_my_nick():lower()
+	if nick ~= '' then
+		local esc = (nick:gsub('%p', '%%%p'))
+		if low:find('%W@' .. esc .. '%f[%W]') then return 'nick' end
+	end
+	local id = mention_my_id()
+	if id >= 0 and low:find('%W@' .. id .. '%f[%W]') then return 'id' end
+	return nil
+end
 function sampev.onServerMessage(color, text)
 	if not terms_gate then return end
-	if MODULE.Network and MODULE.Network.chat_crowns and not MODULE.Network.chat_decorating then
-		local marked = MODULE.Network.decorate_chat(text)
-		if marked ~= text then
-			MODULE.Network.chat_decorating = true
-			sampAddChatMessage(marked, color)
-			MODULE.Network.chat_decorating = false
-			return false
-		end
-	end
 	if MODULE.DEBUG then
 		sampAddChatMessage('[ServerMessage] {ffffff}Color ' .. color .. " | Text " .. text, message_color)
 	end
@@ -8575,7 +8645,8 @@ function sampev.onServerMessage(color, text)
 		local officer = clean:match('([%w_]+_%w+) очистил розыск')
 			or clean:match('([%w_]+_%w+) снял розыск')
 		local target, tid = clean:match('розыск ([%w_]+_%w+)%[(%d+)%]')
-		if officer and officer ~= MODULE.Binder.tag.my_nick() then
+		local my = tostring(MODULE.Binder.tag.my_nick() or ''):gsub('%[.+%]', '')
+		if officer and officer ~= my then
 			MODULE.Edgo.last_unsu = { officer = officer, target = target,
 				tid = tid and tonumber(tid) or nil, time = os.time() }
 				show_notify('warning', 'Снятие розыска',
@@ -8672,26 +8743,45 @@ function sampev.onServerMessage(color, text)
 		end
 	end
 
-	if settings.general.ping and MODULE.Binder.tag.my_nick() ~= '' and text:find('@' .. MODULE.Binder.tag.my_nick(), 1, true) then
-		MODULE.PingNotify = MODULE.PingNotify or {}
-		local clean = text:gsub('{%x%x%x%x%x%x}', '')
-		local who = clean:match('^%s*([^:%|]+)[:%|]') or 'Неизвестный'
-		local msg = clean:match('[:%|]%s*(.+)$') or clean
-		local key = 'ping|' .. who .. '|' .. msg:sub(1, 90)
-		if not MODULE.PingNotify[key] then
-			MODULE.PingNotify[key] = os.time()
-			sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Вас упомянул ' .. who .. ': ' .. msg:sub(1, 90), message_color)
-			play_sound()
-		end
-		for k, v in pairs(MODULE.PingNotify) do
-			if os.time() - v > 300 then MODULE.PingNotify[k] = nil end
+	if settings.general.ping then
+		local hit = mention_hit(text)
+		if hit then
+			MODULE.PingNotify = MODULE.PingNotify or {}
+			local clean = text:gsub('{%x%x%x%x%x%x}', '')
+			local who, who_id = clean:match('([A-Za-z0-9_]+)%[(%d+)%]')
+			if not who then
+				who = clean:match('^%s*([^:%|]+)[:%|]') or 'Неизвестный'
+				who = who:gsub('%s*говорит%s*$', ''):gsub('%s*кричит%s*$', '')
+				who = who:gsub('^%s+', ''):gsub('%s+$', '')
+			end
+			local msg = clean:match('[:%|]%s*(.+)$') or clean
+			if settings.general.mention_id_to_nick ~= false then msg = MODULE.Mentions.expand(msg) end
+			local my_id = mention_my_id()
+			local mine = (who_id and tonumber(who_id) == my_id) or (who == mention_my_nick())
+			if not mine then
+				local key = 'ping|' .. who .. '|' .. msg:sub(1, 90)
+				if not MODULE.PingNotify[key] then
+					MODULE.PingNotify[key] = os.time()
+					local notif = settings.notifications or {}
+					if notif.chat_mention ~= false then
+						local tag = (hit == 'all') and ' {FFD700}[@all]{ffffff}' or ''
+						sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Вас упомянул ' .. who .. tag .. ': ' .. msg:sub(1, 90), message_color)
+						play_sound()
+					end
+				end
+			end
+			for k, v in pairs(MODULE.PingNotify) do
+				if os.time() - v > 300 then MODULE.PingNotify[k] = nil end
+			end
 		end
 	end
 
 	if modules.player.data.fraction_rank_number >= 9 and not isMode('fbi') then
 		if settings.general.auto_uninvite then
 			local function auto_uninvite_handler(tag, name, playerID, message)
-				if not message:find("отправьте (.+) +++ чтобы уволится ПСЖ!") and not message:find("Сотрудник (.+) был уволен по причине") and message:rupper():find("ПСЖ") or message:rupper():find("УВОЛЬТЕ") or message:rupper():find("УВАЛ") then
+				local up = message:rupper()
+				local is_sys = message:find("отправьте (.+) +++ чтобы уволится ПСЖ!") or message:find("Сотрудник (.+) был уволен по причине")
+				if not is_sys and (up:find("ПСЖ") or up:find("УВОЛЬТЕ") or up:find("УВАЛ")) then
 					MODULE.LeadTools.auto_uninvite.msg3 = MODULE.LeadTools.auto_uninvite.msg2
 					MODULE.LeadTools.auto_uninvite.msg2 = MODULE.LeadTools.auto_uninvite.msg1
 					MODULE.LeadTools.auto_uninvite.msg1 = text
@@ -8718,7 +8808,8 @@ function sampev.onServerMessage(color, text)
 			elseif text:find("(.+) заглушил%(а%) игрока (.+) на 1 минут. Причина: ПСЖ") and MODULE.LeadTools.checker then
 				local text2 = text:gsub('{......}', '')
 				local DATA = text2:match("(.+) заглушил")
-				local Name = DATA:match(" ([A-Za-z0-9_]+)%[")
+				local Name = DATA and DATA:match(" ([A-Za-z0-9_]+)%[") or nil
+				if not Name then return end
 				local MyName = sampGetPlayerNickname(select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)))
 				if Name == MyName then
 					sampAddChatMessage('[' .. CHAT_PREFIX .. ' | Ассистент] {ffffff}Увольняю игрока ' .. sampGetPlayerNickname(MODULE.LeadTools.auto_uninvite.player_id) .. '!', message_color)
@@ -8793,7 +8884,7 @@ function sampev.onServerMessage(color, text)
 						:gsub('{p}', is_f and "а" or "")
 						:gsub('{g}', is_f and "ла" or "ёл")
 						:gsub('{r}', is_f and "ась" or "ся")
-					local d = (settings.mj.rp_delay or {})[t.key]
+					local d = tonumber((settings.mj.rp_delay or {})[t.key]) or 0
 					lua_thread.create(function()
 						if d > 0 then wait(d) end
 						sampSendChat(line)
@@ -9009,6 +9100,17 @@ function sampev.onServerMessage(color, text)
 		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}111 Баланс | 60 Время | 911 МЮ | 912 МЗ | 913 Такси | 914 Мехи | 8828 Банк | 997 Дома', message_color)
 		return false
 	end
+	local visual = text
+	if MODULE.Network and MODULE.Network.chat_crowns and type(MODULE.Network.decorate_chat) == 'function' then
+		local ok, res = pcall(MODULE.Network.decorate_chat, text, color)
+		if ok and type(res) == 'string' then visual = res end
+	end
+	if settings.general.mention_id_to_nick ~= false then
+		visual = MODULE.Mentions.expand(visual)
+	end
+	if visual ~= text then
+		return { color, visual }
+	end
 end
 function sampev.onSendChat(text)
 	if not terms_gate then return end
@@ -9020,6 +9122,7 @@ function sampev.onSendChat(text)
 	if ignore[text] then
 		return {text}
 	end
+	text = MODULE.Mentions.expand(text)
 	if settings.general.rp_chat then
 		text = text:sub(1, 1):rupper()..text:sub(2, #text) 
 		if not text:find('(.+)%.') and not text:find('(.+)%!') and not text:find('(.+)%?') then
@@ -9027,7 +9130,8 @@ function sampev.onSendChat(text)
 		end
 	end
 	if settings.general.accent_enable then
-		text = modules.player.data.accent .. ' ' .. text 
+		local acc = tostring((modules.player and modules.player.data and modules.player.data.accent) or '')
+		if acc ~= '' then text = acc .. ' ' .. text end
 	end
 	return {text}
 end
@@ -9043,21 +9147,18 @@ function sampev.onSendCommand(text)
 		return false
 	end
 	local RP_CHAT_COMMANDS = {'/g', '/vr', '/fam', '/al', '/s', '/b', '/n', '/r', '/rb', '/f', '/fb', '/j', '/jb', '/m', '/do', '/gd'}
-	if settings.general.rp_chat then
-		for _, cmd in ipairs(RP_CHAT_COMMANDS) do
-			local cmd_text = text:match('^' .. cmd .. '%s+(.+)$')
-			if cmd_text then
-				cmd_text = cmd_text:gsub('^%s+', '')
+	for _, cmd in ipairs(RP_CHAT_COMMANDS) do
+		local cmd_text = text:match('^' .. cmd .. '%s+(.+)$')
+		if cmd_text then
+			cmd_text = MODULE.Mentions.expand((cmd_text:gsub('^%s+', '')))
+			if settings.general.rp_chat then
 				cmd_text = cmd_text:sub(1, 1):rupper() .. cmd_text:sub(2)
-				if not cmd_text:match('[%.%!%?]$') then
-					cmd_text = cmd_text .. '.'
-				end
-				text = cmd .. ' ' .. cmd_text
-				break
+				if not cmd_text:match('[%.%!%?]$') then cmd_text = cmd_text .. '.' end
 			end
+			return { cmd .. ' ' .. cmd_text }
 		end
-		return {text}
 	end
+	if settings.general.rp_chat then return {text} end
 end
 function sampev.onShowDialog(dialogid, style, title, button1, button2, text)
 	if not terms_gate then return end
@@ -10209,14 +10310,21 @@ local function dep_quick_replies_editor()
 			imgui.TextDisabled(u8'Добавьте свой через кнопку "Добавить".')
 		else
 			if imgui.BeginChild('##quick_replies_list', imgui.ImVec2(470 * dpi, 250 * dpi), true) then
+				local max_x = imgui.GetWindowContentRegionMax().x
+				local btns_w = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + imgui.CalcTextSize(fa.TRASH_CAN).x + 4 * st.FramePadding.x + st.ItemSpacing.x
+				local row_w = math.max(120 * dpi, max_x - btns_w - st.ItemSpacing.x)
 				for i, reply in ipairs(replies) do
-					imgui.Text(u8(reply.name))
+					local name_u8, name_tr = fit_u8(reply.name, math.max(60 * dpi, row_w * 0.35))
+					local name_w = imgui.CalcTextSize(name_u8).x
+					local dash_w = imgui.CalcTextSize(' - ').x
+					local text_u8, text_tr = fit_u8(reply.text, math.max(40 * dpi, row_w - name_w - dash_w))
+					imgui.Text(name_u8)
+					if name_tr and imgui.IsItemHovered() then imgui.SetTooltip(u8(reply.name)) end
 					imgui.SameLine()
-					imgui.TextDisabled('- ' .. u8(reply.text))
+					imgui.TextDisabled(' - ' .. text_u8)
+					if text_tr and imgui.IsItemHovered() then imgui.SetTooltip(u8(reply.text)) end
 					imgui.SameLine()
-					local btns_w = imgui.CalcTextSize(fa.PEN_TO_SQUARE).x + imgui.CalcTextSize(fa.TRASH_CAN).x + 4 * st.FramePadding.x + st.ItemSpacing.x
-					local max_x = imgui.GetWindowContentRegionMax().x
-					if imgui.GetCursorPosX() + btns_w < max_x then imgui.SetCursorPosX(max_x - btns_w) end
+					imgui.SetCursorPosX(max_x - btns_w)
 					if imgui.SmallButton(fa.PEN_TO_SQUARE .. '##qr_edit_' .. i) then
 						imgui.StrCopy(MODULE.Departament.quick_reply_name, u8(reply.name))
 						imgui.StrCopy(MODULE.Departament.quick_reply, u8(reply.text))
@@ -11182,7 +11290,7 @@ imgui.OnFrame(
 								if show and (item.key == 'lm' or item.key == 'spcar' or item.key == 'fcleaner') and rank_number < 9 then show = false end
 								if show and (item.key == 'members' or item.key == 'dep' or item.key == 'sob') and isMode('none') then show = false end
 								if show and item.key == 'post' and not (isMode('police') or isMode('fbi') or isMode('army') or isMode('prison')) then show = false end
-								if show and item.key == 'patrool' and not (isMode('police') or isMode('fbi') or isMode('army')) then show = false end
+								if show and item.key == 'patrool' and not (isMode('police') or isMode('fbi') or isMode('army') or isMode('prison')) then show = false end
 								if show and item.key == 'edgo' and not (isMode('police') or isMode('fbi') or isMode('prison') or isMode('army')) then show = false end
 								if show and (item.key == 'forensic' or item.key == 'sum' or item.key == 'tsm' or item.key == 'afind' or item.key == 'wanted' or item.key == 'wanteds') and not (isMode('police') or isMode('fbi')) then show = false end
 								if show and item.key == 'pum' and not isMode('prison') then show = false end
@@ -13388,15 +13496,21 @@ imgui.OnFrame(
 									any_shown = true
 									local hex = n.status_color or '{FFFFFF}'
 									local r, g, b = hex:match('{?(%x%x)(%x%x)(%x%x)}?')
+									local col_vec = nil
 									if r and g and b then
-										imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, 1))
+										col_vec = imgui.ImVec4(tonumber(r, 16) / 255, tonumber(g, 16) / 255, tonumber(b, 16) / 255, 1)
 									end
 									local label = (n.title ~= '' and n.title) or (n.status_text or 'Новость')
 									local lu, ltr = fit_u8(label, math.max(40 * dpi, imgui.GetContentRegionAvail().x - 2 * st.ItemSpacing.x))
+									imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0,0,0,0))
 									if imgui.Selectable(lu .. '##news_sel_' .. i, sel == i) then
 										MODULE.News.selected = i
 										sel = i; sel_news = n
 									end
+									imgui.PopStyleColor()
+									local item_min = imgui.GetItemRectMin()
+									imgui.SetCursorScreenPos(imgui.ImVec2(item_min.x + st.FramePadding.x, item_min.y + st.FramePadding.y))
+									ol_text(col_vec, lu, true)
 									if imgui.IsItemHovered() then
 										local tmeta = {}
 										if n.date and n.date ~= '' then tmeta[#tmeta + 1] = n.date end
@@ -13405,7 +13519,6 @@ imgui.OnFrame(
 										if #tmeta > 0 then tip = tip .. '\n' .. table.concat(tmeta, '  |  ') end
 										imgui.SetTooltip(u8(tip))
 									end
-									if r and g and b then imgui.PopStyleColor() end
 								end
 							end
 							if not any_shown then
@@ -13444,9 +13557,10 @@ imgui.OnFrame(
 						local status_w = imgui.CalcTextSize(status_u).x + st.ItemSpacing.x
 						local title_full = (n.title ~= '' and n.title) or 'Без названия'
 						local tu, ttr = fit_u8(title_full, math.max(40 * dpi, imgui.GetContentRegionAvail().x - status_w - 2 * st.ItemSpacing.x))
-						imgui.TextColored(col, status_u)
+						ol_text(col, status_u, true)
 						imgui.SameLine()
-						imgui.Text(tu)
+						local title_col = (settings.ui.theme == 2) and imgui.ImVec4(0.1, 0.1, 0.1, 1) or imgui.ImVec4(0.9, 0.9, 0.9, 1)
+						ol_text(title_col, tu)
 						if ttr and imgui.IsItemHovered() then imgui.SetTooltip(u8(title_full)) end
 						local meta = {}
 						if n.date and n.date ~= '' then meta[#meta + 1] = u8(n.date) end
@@ -13466,7 +13580,7 @@ imgui.OnFrame(
 							local new_vote = (vote == 'like') and 'none' or 'like'
 							set_news_like(n, new_vote)
 						end
-						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Лайков: ' .. tostring(counts.likes) .. '  |  Дизлайков: ' .. tostring(counts.dislikes))) end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Лайков: ' .. tostring(counts.likes))) end
 						if vote == 'like' then imgui.PopStyleColor() end
 						imgui.SameLine()
 						if vote == 'dislike' then imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(0.9, 0.2, 0.2, 1)) end
@@ -13474,7 +13588,7 @@ imgui.OnFrame(
 							local new_vote = (vote == 'dislike') and 'none' or 'dislike'
 							set_news_like(n, new_vote)
 						end
-						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Лайков: ' .. tostring(counts.likes) .. '  |  Дизлайков: ' .. tostring(counts.dislikes))) end
+						if imgui.IsItemHovered() then imgui.SetTooltip(u8('Дизлайков: ' .. tostring(counts.dislikes))) end
 						if vote == 'dislike' then imgui.PopStyleColor() end
 						imgui.Separator()
 						if n.image and n.image ~= '' then
@@ -13634,7 +13748,16 @@ imgui.OnFrame(
 						imgui.NextColumn()
 						imgui.Text(fa.CIRCLE_INFO .. su8' Версия: ' .. su8(thisScript().version))
 						imgui.SameLine()
-						imgui.TextDisabled(su8(' (' .. (settings.general.beta_tester and 'Бета' or 'Стабильный') .. ')'))
+						local myVer = tostring(thisScript().version)
+						local stableV = MODULE.Update.stable_version or ''
+						local betaV = MODULE.Update.beta_version or ''
+						local is_actual_beta = false
+						if settings.general.beta_tester == true and betaV ~= '' then
+							if compare_versions(myVer, betaV) <= 0 and (stableV == '' or compare_versions(myVer, stableV) > 0) then
+								is_actual_beta = true
+							end
+						end
+						imgui.TextDisabled(su8(' (' .. (is_actual_beta and 'Бета' or 'Стабильная') .. ')'))
 						imgui.Columns(1)
 						imgui.Separator()
 						imgui.PushTextWrapPos(imgui.GetCursorPosX() + imgui.GetContentRegionAvail().x)
@@ -13729,7 +13852,7 @@ imgui.OnFrame(
 						end
 						imgui.Text(fa.FONT .. su8' Толщина обводки текста:')
 						imgui.PushItemWidth(-1)
-						if imgui.SliderInt('##slider_outline_thickness', MODULE.Main.slider.outline_thickness, 0, 30) then
+						if imgui.SliderInt('##slider_outline_thickness', MODULE.Main.slider.outline_thickness, 0, 20) then
 							settings.ui.outline_thickness = MODULE.Main.slider.outline_thickness[0]
 							save_settings()
 						end
@@ -14230,17 +14353,22 @@ imgui.OnFrame(
 						if not MODULE.UpdateInfo.loaded and not MODULE.UpdateInfo.loading then
 							load_update_info()
 						end
-						local is_beta_ui = (settings.general.beta_tester == true)
 						local info = MODULE.UpdateInfo.data
 						local stableVer = (info and tostring(info.stable_version or info.version or '')) or (MODULE.Update.stable_version or '')
 						local betaVer = (info and tostring(info.beta_version or '')) or (MODULE.Update.beta_version or '')
-						local closed = (MODULE.Update.beta_closed == true) or (info ~= nil and info.beta_closed == true)
-							or (stableVer ~= '' and betaVer ~= '' and compare_versions(stableVer, betaVer) >= 0)
+						local myVer = tostring(thisScript().version)
+						local is_real_beta = false
+						if settings.general.beta_tester == true and betaVer ~= '' then
+							if compare_versions(myVer, betaVer) <= 0 and (stableVer == '' or compare_versions(myVer, stableVer) > 0) then
+								is_real_beta = true
+							end
+						end
+						local closed = (MODULE.Update.beta_closed == true) or (info ~= nil and info.beta_closed == true) or (stableVer ~= '' and betaVer ~= '' and compare_versions(stableVer, betaVer) >= 0)
 						imgui.CenterText(fa.DOWNLOAD .. su8' Обновления и бета-тестирование ' .. fa.DOWNLOAD)
 						imgui.Separator()
 						imgui.Text(fa.CIRCLE_INFO .. su8' Текущая версия: ' .. su8(thisScript().version))
 						imgui.SameLine()
-						imgui.Text(fa.CODE .. su8' | Канал: ' .. (is_beta_ui and su8'Бета' or su8'Стабильный'))
+						imgui.Text(fa.CODE .. su8' | Канал: ' .. (is_real_beta and su8'Бета' or su8'Стабильный'))
 						imgui.Text(fa.SHIELD .. su8' Стабильная: ' .. su8(stableVer ~= '' and stableVer or '-'))
 						if info then
 							local stInfo = UPDATE_STATUS[tostring(info.stable_status or ''):lower()]
@@ -14289,12 +14417,12 @@ imgui.OnFrame(
 								imgui.NewLine()
 								imgui.CenterTextDisabled(su8('Не удалось загрузить информацию: ') .. tostring(MODULE.UpdateInfo.error))
 							elseif info then
-								local head = is_beta_ui
+								local head = is_real_beta
 									and su8'Что нового в бете (' .. su8(betaVer) .. '):'
 									or su8'Что нового в стабильной (' .. su8(stableVer) .. '):'
 								imgui.Text(fa.FILE_LINES .. ' ' .. head)
 								imgui.Separator()
-								local text = is_beta_ui and tostring(info.beta_info or '') or tostring(info.stable_info or '')
+								local text = is_real_beta and tostring(info.beta_info or '') or tostring(info.stable_info or info.info or '')
 								if text == '' then
 									imgui.CenterTextDisabled(su8'Описания изменений нет.')
 								else
@@ -14639,6 +14767,7 @@ imgui.OnFrame(
 						imgui.TextWrapped(su8'Выберите, какие сообщения хелпер будет писать в чат. Отключение не влияет на работу функций и звуковые оповещения.')
 						imgui.Separator()
 						settings.notifications = settings.notifications or {}
+						if settings.notifications.chat_mention == nil then settings.notifications.chat_mention = true end
 						MODULE.Main.notif_cb = MODULE.Main.notif_cb or {}
 						local function ncb(key, label, tip)
 							local cb = MODULE.Main.notif_cb[key]
@@ -14732,7 +14861,8 @@ imgui.OnFrame(
 						ncb('auto_features', 'Авто-фичи', 'Домкрат и другие автоматические действия.')
 						ncb('auto_mask', 'Авто-маска', 'Сообщение о надевании новой маски.')
 						ncb('docs', 'Авто-документы', 'Принятие документов и RP-проверка игрока.')
-						ncb('messenger_mention', ' Упоминания в мессенджере', 'Звук и сообщение, когда вас упоминают через @ в мессенджере.')
+						ncb('chat_mention', 'Упоминания в чате игры', 'Сообщение в чат, когда вас упоминают через @ник, @ID или @all в игровом чате.')
+						ncb('messenger_mention', 'Упоминания в мессенджере', 'Звук и сообщение, когда вас упоминают через @ в мессенджере.')
 						imgui.Columns(1)
 						imgui.Separator()
 						if imgui.Button(fa.FLOPPY_DISK .. su8' Сохранить настройки уведомлений', imgui.ImVec2(-1, 25 * dpi)) then
@@ -15774,17 +15904,21 @@ function render_assist_item(name, description, tbl, key, isDangerous, func)
     imgui.Columns(3)
     local enabled = tbl[key]
     local u8_name = su8(name)
+    local light = (settings.ui.theme == 2)
+    local dis_col = imgui.GetStyle().Colors[imgui.Col.TextDisabled]
+    local text_col = imgui.GetStyle().Colors[imgui.Col.Text] 
+    
     if enabled then
         if isDangerous then 
-            imgui.CenterColumnColorText(imgui.ImVec4(0.93, 0.79, 0.15, 1.0), fa.TRIANGLE_EXCLAMATION .. ' ' .. u8_name)
-        else 
-            imgui.CenterColumnText(u8_name) 
+            ol_center(imgui.ImVec4(0.93, 0.79, 0.15, 1.0), fa.TRIANGLE_EXCLAMATION .. ' ' .. u8_name, light)
+        else
+            ol_center(text_col, u8_name, true) 
         end
     else
         if isDangerous then 
-            imgui.CenterColumnColorText(imgui.ImVec4(0.55, 0.45, 0.08, 1.0), fa.TRIANGLE_EXCLAMATION .. ' ' .. u8_name)
+            ol_center(imgui.ImVec4(0.55, 0.45, 0.08, 1.0), fa.TRIANGLE_EXCLAMATION .. ' ' .. u8_name, light)
         else 
-            imgui.CenterColumnTextDisabled(u8_name) 
+            ol_center(dis_col, u8_name, light)
         end
     end
     imgui.NextColumn()
@@ -17192,6 +17326,21 @@ function render_fractions_functions()
         imgui.EndPopup()
     end
 end
+--------------------------------------------[ MEMBERS ]----------------------------------------------
+MODULE._net_ui_ts = MODULE._net_ui_ts or {}
+local function network_ui_tick(key, period)
+	if settings.general.disable_device_data then return end
+	local net = MODULE.Network
+	if type(net) ~= 'table' or type(net.fetch_crowns) ~= 'function' then return end
+	local now = os.time()
+	if now - (MODULE._net_ui_ts[key] or 0) < (period or 60) then return end
+	MODULE._net_ui_ts[key] = now
+	pcall(net.fetch_crowns)
+end
+local function clean_member_nick(nick)
+	local n = tostring(nick or ''):gsub('^%s+', ''):gsub('%s+$', '')
+	return n:match('^%[[^%]]*%]%s*(.+)$') or n
+end
 local MEMBERS_SORTS = {
 	{ name = u8'По рангу',     key = function(v) return tonumber(v.rank_number) or 0 end },
 	{ name = u8'По нику',      key = function(v) return (v.nick or ''):rlower() end },
@@ -17201,10 +17350,6 @@ if (not isMode('none')) then
 imgui.OnFrame(
 	function() return MODULE.Members.Window[0] end,
 	function(player)
-	local function clean_member_nick(nick)
-		local n = (nick or ''):gsub('^%s+', ''):gsub('%s+$', '')
-		return n:match('^%[[^%]]*%]%s*(.+)$') or n
-	end
 	local md = modules.members.data
 	if not MODULE.MembersUI then
 		MODULE.MembersUI = {
@@ -17264,7 +17409,7 @@ imgui.OnFrame(
 	imgui.SetNextWindowPos(imgui.ImVec2(sizeX / 2, sizeY / 2), imgui.Cond.FirstUseEver, imgui.ImVec2(0.5, 0.5))
 	local title = u8(tostring(MODULE.Members.info.fraction or '')) .. u8('. В сети ' .. n .. ' сотрудников')
 	imgui.Begin(getHelperIcon() .. " " .. title .. " " .. getHelperIcon() .. '##members_window', MODULE.Members.Window, win_flags)
-	if MODULE.Network and type(MODULE.Network.start_for_ui) == 'function' then pcall(MODULE.Network.start_for_ui) end
+	network_ui_tick('members')
 	change_dpi()
 	if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
 		MODULE.Members.Window[0] = false
@@ -17301,29 +17446,29 @@ imgui.OnFrame(
 		local off_c = md.off_duty_color or {255, 59, 59}
 		local on_c = md.on_duty_color or {255, 255, 255}
 		
-		local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
-		local my_nick = modules.player.data.nick or ''
+		local my_id = tonumber((select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)))) or -1
+		local my_nick = (modules.player.data and modules.player.data.nick) or ''
 		if my_nick == '' and my_id >= 0 then my_nick = sampGetPlayerNickname(my_id) or '' end
 		
-		for i, v in ipairs(list) do
-			local is_self = (tonumber(v.id) == my_id) or (my_nick ~= '' and v.nick == my_nick)
+		for _, v in ipairs(list) do
+			local clean_nick = clean_member_nick(v.nick)
+			local is_self = (tonumber(v.id) == my_id) or (my_nick ~= '' and clean_nick == my_nick)
 			imgui.Separator()
 			imgui.Columns(4)
 			local afk_sec = tonumber(v.afk) or 0
+			local row_col
 			if not v.working then
-				imgui_RGBA = imgui.ImVec4(off_c[1] / 255, off_c[2] / 255, off_c[3] / 255, 1)
+				row_col = imgui.ImVec4(off_c[1] / 255, off_c[2] / 255, off_c[3] / 255, 1)
 			elseif afk_sec >= thr then
-				imgui_RGBA = imgui.ImVec4(over_c[1] / 255, over_c[2] / 255, over_c[3] / 255, 1)
+				row_col = imgui.ImVec4(over_c[1] / 255, over_c[2] / 255, over_c[3] / 255, 1)
 			elseif afk_sec >= thr / 2 then
-				imgui_RGBA = imgui.ImVec4(warn_c[1] / 255, warn_c[2] / 255, warn_c[3] / 255, 1)
-			elseif on_c then
-				imgui_RGBA = imgui.ImVec4(on_c[1] / 255, on_c[2] / 255, on_c[3] / 255, 1)
+				row_col = imgui.ImVec4(warn_c[1] / 255, warn_c[2] / 255, warn_c[3] / 255, 1)
 			else
-				imgui_RGBA = (settings.ui.theme ~= 2) and imgui.ImVec4(1, 1, 1, 1) or imgui.ImVec4(0, 0, 0, 1)
+				row_col = imgui.ImVec4(on_c[1] / 255, on_c[2] / 255, on_c[3] / 255, 1)
 			end
-			local member_banned = type(MODULE.Network) == 'table' and type(MODULE.Network.is_banned_user) == 'function' and MODULE.Network.is_banned_user(clean_member_nick(v.nick))
-			if member_banned then imgui_RGBA = imgui.ImVec4(1.0, 0.25, 0.25, 1.0) end
-			local helper_crown = (not settings.general.disable_device_data and type(MODULE.Network) == 'table' and type(MODULE.Network.is_user) == 'function' and MODULE.Network.is_user(clean_member_nick(v.nick)))
+			local member_banned = type(MODULE.Network) == 'table' and type(MODULE.Network.is_banned_user) == 'function' and MODULE.Network.is_banned_user(clean_nick)
+			if member_banned then row_col = imgui.ImVec4(1.0, 0.25, 0.25, 1.0) end
+			local helper_crown = (not settings.general.disable_device_data and type(MODULE.Network) == 'table' and type(MODULE.Network.is_user) == 'function' and MODULE.Network.is_user(clean_nick))
 			
 			local text = u8(v.nick) .. ' [' .. v.id .. ']'
 			if afk_sec > 0 then
@@ -17339,7 +17484,7 @@ imgui.OnFrame(
 				ol_text(member_banned and imgui.ImVec4(1.0, 0.25, 0.25, 1.0) or imgui.ImVec4(1.0, 0.78, 0.2, 1.0), fa.CROWN, true)
 				imgui.SameLine(0, 4 * dpi)
 			end
-			ol_text(imgui_RGBA, text, true)
+			ol_text(row_col, text, true)
 			if (imgui.IsItemClicked() and modules.player.data.fraction_rank_number >= 9) then
 				show_leader_fast_menu(v.id); MODULE.Members.Window[0] = false
 			end
@@ -17351,7 +17496,7 @@ imgui.OnFrame(
 				elseif warns == 1 then imgui.CenterColumnColorText(imgui.ImVec4(1, 1, 0.231, 1), tostring(warns) .. '/3')
 				else imgui.CenterColumnColorText(imgui.ImVec4(1, 0.231, 0.231, 1), tostring(warns) .. '/3') end
 			imgui.NextColumn()
-			local custom = (md.custom_info or {})[clean_member_nick(v.nick)]
+			local custom = (md.custom_info or {})[clean_nick]
 			local ctxt, ccol = nil, nil
 			if type(custom) == 'table' then ctxt, ccol = custom.txt, custom.col
 			elseif type(custom) == 'string' then ctxt = custom end
@@ -17375,7 +17520,7 @@ imgui.OnFrame(
 					if imgui.IsItemHovered() then imgui.SetTooltip(u8('Кастомная пометка недоступна')) end
 				else
 					if imgui.IsItemClicked() and not is_self then
-						MU.info_edit_nick = clean_member_nick(v.nick)
+						MU.info_edit_nick = clean_nick
 						imgui.StrCopy(MU.info_buf, u8(ctxt or ''))
 						MU.info_col[0], MU.info_col[1], MU.info_col[2] = nr / 255, ng / 255, nb / 255
 						MU.info_open = true
@@ -17385,7 +17530,7 @@ imgui.OnFrame(
 			else
 				imgui.CenterColumnText(u8'-')
 				if imgui.IsItemClicked() and not is_self then
-					MU.info_edit_nick = clean_member_nick(v.nick)
+					MU.info_edit_nick = clean_nick
 					imgui.StrCopy(MU.info_buf, u8'')
 					MU.info_col[0], MU.info_col[1], MU.info_col[2] = 0.2, 0.8, 1
 					MU.info_open = true
@@ -17480,7 +17625,6 @@ imgui.OnFrame(
 			if value == nil then return default end
 			return value
 		end
-		if kind ~= 'leaders' and kind ~= 'zams' then kind = 'leaders' end
 		local list = {}
 		for _, row in ipairs(MODULE.OrgLists.all[kind] or {}) do table.insert(list, row) end
 		if #list == 0 then
@@ -17519,7 +17663,7 @@ imgui.OnFrame(
 			title = u8('Заместители онлайн. В сети ' .. n .. ' замов')
 		end
 		imgui.Begin(getHelperIcon() .. u8(' ') .. title .. u8(' ') .. getHelperIcon() .. '##orglist_window', MODULE.OrgLists.Window, win_flags)
-		if MODULE.Network and type(MODULE.Network.start_for_ui) == 'function' then pcall(MODULE.Network.start_for_ui) end
+		network_ui_tick('orglists')
 		change_dpi()
 		
 		if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() then
@@ -17615,7 +17759,6 @@ imgui.OnFrame(
 				end
 				local is_self = (tonumber(v.id) == my_id) or (clean_nick == myNickClean)
 				local crown_show = is_self or is_network_user
-				local is_me = is_self
 				local crown_banned = false
 				if type(MODULE.Network) == 'table' and type(MODULE.Network.is_banned_user) == 'function' then
 					local ok_ban, is_ban = pcall(MODULE.Network.is_banned_user, clean_nick)
@@ -17675,7 +17818,7 @@ imgui.OnFrame(
 				ol_center(afk_col, u8(afk_display), true)
 				imgui.Columns(1)
 				local y1 = imgui.GetCursorScreenPos().y
-				if is_me and modules.scoreboard.data.self_row_bg ~= false then
+				if is_self and modules.scoreboard.data.self_row_bg ~= false then
 					bg_queue[#bg_queue + 1] = { y0, y1, imgui.GetColorU32Vec4((settings.ui.theme == 2) and imgui.ImVec4(0.16, 0.42, 0.80, 0.15) or imgui.ImVec4(0.30, 0.80, 1.00, 0.15)) }
 				elseif setting('zebra_stripes', true) ~= false and row_idx % 2 == 0 then
 					bg_queue[#bg_queue + 1] = { y0, y1, zebra32 }
@@ -17904,7 +18047,7 @@ if not (isMode('ghetto') or isMode('mafia')) then
 		return modules.departament.data.dep_quick_replies
 	end
 	local function saveQuickReplies() save_module('departament') end
-	imgui.OnFrame(
+imgui.OnFrame(
 		function() return MODULE.Departament.Window[0] end,
 		function(player)
 			local dpi = settings.ui.dpi
@@ -17973,7 +18116,7 @@ if not (isMode('ghetto') or isMode('mafia')) then
 											next_x = nil
 										end
 									end
-								imgui.EndChild()
+									imgui.EndChild()
 								end
 								if is_custom then
 									imgui.Separator()
@@ -18020,7 +18163,6 @@ if not (isMode('ghetto') or isMode('mafia')) then
 					MODULE.Departament.popup_pos_applied[applied_key] = false
 				end
 			end
-
 			local function createFrequencyPopup()
 				settings.windows_pos.dep_fm_menu = settings.windows_pos.dep_fm_menu
 					or { x = sizeX / 2 - 270, y = sizeY / 2 - 120 }
@@ -18143,6 +18285,7 @@ if not (isMode('ghetto') or isMode('mafia')) then
 			settings.windows_pos.dep_menu = settings.windows_pos.dep_menu or { x = sizeX / 2 - 250, y = sizeY / 2 - 160 }
 			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.dep_menu.x, settings.windows_pos.dep_menu.y), imgui.Cond.FirstUseEver)
 			imgui.SetNextWindowSize(imgui.ImVec2(WIN_W, 0), imgui.Cond.Always)
+			
 			imgui.Begin(fa.WALKIE_TALKIE .. u8" Рация департамента " .. fa.WALKIE_TALKIE, MODULE.Departament.Window,
 				imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoScrollbar)
 			change_dpi()
@@ -18154,52 +18297,74 @@ if not (isMode('ghetto') or isMode('mafia')) then
 			if isKeyJustPressed(27) and not IS_MOBILE and not sampIsChatInputActive() and not sampIsDialogActive() and not any_dep_popup then
 				MODULE.Departament.Window[0] = false
 			end
+			imgui.Columns(3, '##dep_main_cols', false)
+			imgui.TextDisabled(u8('Ваш тег:'))
+			imgui.PushItemWidth(-1)
+			if imgui.InputText('##MODULE.Departament.tag1', MODULE.Departament.tag1, 32) then
+				modules.departament.data.dep_tag1 = u8:decode(ffi.string(MODULE.Departament.tag1))
+				save_module('departament')
+			end
+			imgui.PopItemWidth()
+			if imgui.Button(fa.TAG .. u8(' Выбрать##1'), imgui.ImVec2(-1, 25 * dpi)) then
+				imgui.OpenPopup(fa.TAG .. u8' Теги организаций##1')
+			end
+			createTagPopup('1', MODULE.Departament.tag1, 'dep_tag1')
+			imgui.NextColumn()
+			imgui.TextDisabled(u8('Частота рации:'))
+			imgui.PushItemWidth(-1)
+			if imgui.InputText('##MODULE.Departament.fm', MODULE.Departament.fm, 32) then
+				modules.departament.data.dep_fm = u8:decode(ffi.string(MODULE.Departament.fm))
+				save_module('departament')
+			end
+			imgui.PopItemWidth()
+			if imgui.Button(fa.WALKIE_TALKIE .. u8(' Выбрать##fm1'), imgui.ImVec2(-1, 25 * dpi)) then
+				imgui.OpenPopup(fa.WALKIE_TALKIE .. u8' Частота для использования рации /d')
+			end
+			createFrequencyPopup()
+			imgui.NextColumn()
+			imgui.TextDisabled(u8('Тег получателя:'))
+			imgui.PushItemWidth(-1)
+			if imgui.InputText('##MODULE.Departament.tag2', MODULE.Departament.tag2, 32) then
+				modules.departament.data.dep_tag2 = u8:decode(ffi.string(MODULE.Departament.tag2))
+				save_module('departament')
+			end
+			imgui.PopItemWidth()
+			if imgui.Button(fa.TAG .. u8(' Выбрать##2'), imgui.ImVec2(-1, 25 * dpi)) then
+				imgui.OpenPopup(fa.TAG .. u8' Теги организаций##2')
+			end
+			createTagPopup('2', MODULE.Departament.tag2, 'dep_tag2')
+			imgui.Columns(1)
+			imgui.Spacing()
+			imgui.Separator()
+			imgui.Spacing()
+			imgui.TextDisabled(u8('Текст сообщения:'))
+			local send_w = 100 * dpi
+			imgui.PushItemWidth(imgui.GetContentRegionAvail().x - send_w - st.ItemSpacing.x)
+			imgui.InputText(u8'##dep_input_text', MODULE.Departament.text, 256)
+			imgui.PopItemWidth()
+			imgui.SameLine()
+			imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.2, 0.6, 0.2, 1.0))
+			imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(0.3, 0.7, 0.3, 1.0))
+			imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.1, 0.5, 0.1, 1.0))
+			if imgui.Button(fa.PAPER_PLANE .. u8' Отправить', imgui.ImVec2(send_w, 0)) then
+				local strip = not modules.departament.data.show_brackets
+				local t1 = strip and u8:decode(ffi.string(MODULE.Departament.tag1)):gsub("[%[%]]", "") or u8:decode(ffi.string(MODULE.Departament.tag1))
+				local t2 = strip and u8:decode(ffi.string(MODULE.Departament.tag2)):gsub("[%[%]]", "") or u8:decode(ffi.string(MODULE.Departament.tag2))
+				local f  = u8:decode(ffi.string(MODULE.Departament.fm))
+				local txt = u8:decode(ffi.string(MODULE.Departament.text))
+				local parts = {}
+				if t1 ~= "" then table.insert(parts, t1) end
+				if f ~= "" then table.insert(parts, f) end
+				if t2 ~= "" then table.insert(parts, t2) end
+				if txt ~= "" then table.insert(parts, txt) end
+				sampSendChat('/d ' .. table.concat(parts, ' '))
+			end
+			imgui.PopStyleColor(3)
+			imgui.Spacing()
+			local preview_y = imgui.GetCursorPosY()
+			local preview_rect_min = imgui.GetCursorScreenPos()
+			local preview_h = imgui.GetTextLineHeight() + 10 * dpi		
 			do
-				imgui.Columns(3)
-				imgui.CenterColumnText(u8('Ваш тег:'))
-				imgui.PushItemWidth(155 * dpi)
-				if imgui.InputText('##MODULE.Departament.tag1', MODULE.Departament.tag1, 32) then
-					modules.departament.data.dep_tag1 = u8:decode(ffi.string(MODULE.Departament.tag1))
-					save_module('departament')
-				end
-				if imgui.CenterColumnButton(u8('Выбрать тег##1')) then
-					imgui.OpenPopup(fa.TAG .. u8' Теги организаций##1')
-				end
-				createTagPopup('1', MODULE.Departament.tag1, 'dep_tag1')
-				imgui.NextColumn()
-				imgui.CenterColumnText(u8('Частота рации:'))
-				imgui.PushItemWidth(155 * dpi)
-				if imgui.InputText('##MODULE.Departament.fm', MODULE.Departament.fm, 32) then
-					modules.departament.data.dep_fm = u8:decode(ffi.string(MODULE.Departament.fm))
-					save_module('departament')
-				end
-				if imgui.CenterColumnButton(u8('Выбрать частоту##1')) then
-					imgui.OpenPopup(fa.WALKIE_TALKIE .. u8' Частота для использования рации /d')
-				end
-				createFrequencyPopup()
-				imgui.NextColumn()
-				imgui.CenterColumnText(u8('Тег получателя:'))
-				imgui.PushItemWidth(155 * dpi)
-				if imgui.InputText('##MODULE.Departament.tag2', MODULE.Departament.tag2, 32) then
-					modules.departament.data.dep_tag2 = u8:decode(ffi.string(MODULE.Departament.tag2))
-					save_module('departament')
-				end
-				if imgui.CenterColumnButton(u8('Выбрать тег##2')) then
-					imgui.OpenPopup(fa.TAG .. u8' Теги организаций##2')
-				end
-				createTagPopup('2', MODULE.Departament.tag2, 'dep_tag2')
-				imgui.Columns(1)
-				imgui.Separator()
-				imgui.CenterText(u8('Текст:'))
-				imgui.PushItemWidth(405 * dpi)
-				imgui.InputText(u8'##dep_input_text', MODULE.Departament.text, 256)
-				imgui.SameLine()
-				if imgui.Button(u8' Отправить ') then
-					local strip = not modules.departament.data.show_brackets
-					local tag1 = strip and u8:decode(ffi.string(MODULE.Departament.tag1)):gsub("[%[%]]", "") or u8:decode(ffi.string(MODULE.Departament.tag1))
-					local tag2 = strip and u8:decode(ffi.string(MODULE.Departament.tag2)):gsub("[%[%]]", "") or u8:decode(ffi.string(MODULE.Departament.tag2))
-					sampSendChat('/d ' .. tag1 .. ' ' .. u8:decode(ffi.string(MODULE.Departament.fm)) .. ' ' .. tag2 .. ' ' .. u8:decode(ffi.string(MODULE.Departament.text)))
-				end
 				local tag1 = ffi.string(MODULE.Departament.tag1)
 				local tag2 = ffi.string(MODULE.Departament.tag2)
 				local fm = ffi.string(MODULE.Departament.fm)
@@ -18208,17 +18373,35 @@ if not (isMode('ghetto') or isMode('mafia')) then
 					tag1 = tag1:gsub("[%[%]]", "")
 					tag2 = tag2:gsub("[%[%]]", "")
 				end
-				imgui.CenterText('/d ' .. tag1 .. ' ' .. fm .. ' ' .. tag2 .. ' ' .. text)
+				local parts = {}
+				if tag1 ~= "" then table.insert(parts, tag1) end
+				if fm ~= "" then table.insert(parts, fm) end
+				if tag2 ~= "" then table.insert(parts, tag2) end
+				if text ~= "" then table.insert(parts, text) end
+				local preview_str = '/d ' .. table.concat(parts, ' ')
+
+				imgui.GetWindowDrawList():AddRectFilled(
+					preview_rect_min, 
+					imgui.ImVec2(preview_rect_min.x + imgui.GetContentRegionAvail().x, preview_rect_min.y + preview_h), 
+					imgui.GetColorU32Vec4(imgui.ImVec4(0, 0, 0, 0.2)), 
+					4 * dpi
+				)
+				imgui.SetCursorPosY(preview_y + 5 * dpi)
+				imgui.SetCursorPosX(preview_rect_min.x - imgui.GetWindowPos().x + 8 * dpi)
+				imgui.TextColored(imgui.ImVec4(0.7, 0.7, 0.7, 1), preview_str)
 			end
+			imgui.Spacing()
 			imgui.Separator()
+			imgui.Spacing()
 			imgui.CenterText(fa.COMMENTS .. u8' Быстрые ответы ' .. fa.COMMENTS)
+			imgui.Spacing()
 			local replies = getQuickReplies()
 			if #replies > 0 then
 				local max_x = imgui.GetWindowContentRegionMax().x
 				local next_x = nil
 				for i, reply in ipairs(replies) do
 					local visible = ' ' .. u8(reply.name) .. ' '
-					local bw = imgui.CalcTextSize(visible).x + 2 * st.FramePadding.x
+					local bw = imgui.CalcTextSize(visible).x + 2 * st.FramePadding.x + 10 * dpi
 					local on_new_line = (next_x == nil) or (next_x + bw > max_x)
 					if on_new_line then
 						next_x = st.WindowPadding.x
@@ -18226,19 +18409,28 @@ if not (isMode('ghetto') or isMode('mafia')) then
 						imgui.SameLine()
 						imgui.SetCursorPosX(next_x)
 					end
-					if imgui.Button(visible .. '##qr_send_' .. i) then
+					if imgui.Button(visible .. '##qr_send_' .. i, imgui.ImVec2(bw, 25 * dpi)) then
 						local raw1 = u8:decode(ffi.string(MODULE.Departament.tag1))
 						local raw2 = u8:decode(ffi.string(MODULE.Departament.tag2))
+						local rawf = u8:decode(ffi.string(MODULE.Departament.fm))
 						local strip = not modules.departament.data.show_brackets
 						local q1 = strip and raw1:gsub("[%[%]]", "") or raw1
 						local q2 = strip and raw2:gsub("[%[%]]", "") or raw2
-						sampSendChat('/d ' .. q1 .. ' ' .. u8:decode(ffi.string(MODULE.Departament.fm)) .. ' ' .. q2 .. ' ' .. reply.text)
+						
+						local parts_qr = {}
+						if q1 ~= "" then table.insert(parts_qr, q1) end
+						if rawf ~= "" then table.insert(parts_qr, rawf) end
+						if q2 ~= "" then table.insert(parts_qr, q2) end
+						if reply.text ~= "" then table.insert(parts_qr, reply.text) end
+						
+						sampSendChat('/d ' .. table.concat(parts_qr, ' '))
 					end
 					next_x = next_x + bw + st.ItemSpacing.x
 				end
 			else
-				imgui.TextDisabled(u8'Нет настроенных быстрых ответов - настройте их в /helper -> Команды -> Стандартные команды (шестерёнка у /dep).')
+				imgui.TextDisabled(u8'Нет настроенных быстрых ответов - настройте их в /helper -> Команды -> Стандартные команды.')
 			end
+			imgui.Spacing()
 			local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
 			if posX ~= settings.windows_pos.dep_menu.x or posY ~= settings.windows_pos.dep_menu.y then
 				settings.windows_pos.dep_menu = { x = posX, y = posY }; save_settings()
@@ -18836,7 +19028,7 @@ if isMode('police') or isMode('fbi') or isMode('prison') then
 		end
 	end
 end
-if isMode('police') or isMode('fbi') then
+if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
 	imgui.OnFrame(
 		function() return MODULE.Patrool.Window[0] end,
 		function(player)
@@ -19103,6 +19295,8 @@ if isMode('police') or isMode('fbi') then
 			imgui.End()
 		end
 	)
+end
+if isMode('police') or isMode('fbi') then
 	imgui.OnFrame(
 		function() return MODULE.Wanted.Window[0] end,
 		function(player)
@@ -20277,6 +20471,56 @@ function drawPieSub(v)
         pie.EndPieMenu()
     end
 end
+
+imgui.OnFrame(
+	function() return MODULE.PieMenu.Window[0] end,
+	function(player)
+		imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.pie.x, settings.windows_pos.pie.y), imgui.Cond.FirstUseEver)
+		imgui.Begin('##MODULE.PieMenu.Window', MODULE.PieMenu.Window, imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoBackground + imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoScrollbar)
+		local m3_down = not IS_MOBILE and isKeyDown(0x04) or false
+		local m3_pressed  = m3_down and not (MODULE.PieMenu._m3_was_down or false)
+		local m3_released = (not m3_down) and (MODULE.PieMenu._m3_was_down == true)
+		MODULE.PieMenu._m3_was_down = m3_down
+		local pie_popup_active = false
+		local pie_open_flag = false
+		if IS_MOBILE then
+			imgui.Button(fa.GEAR .. '##PieMenuButton', imgui.ImVec2(50 * settings.ui.dpi, 50 * settings.ui.dpi))
+			if imgui.IsItemClicked(0) then pie_open_flag = true end
+		else
+			pie_open_flag = m3_pressed
+		end
+		if pie.BeginPiePopup('PieMenu', 2, pie_open_flag) then
+			pie_popup_active = true
+			if not IS_MOBILE then player.HideCursor = false end
+			if #modules.piemenu.data == 0 then
+				sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Настройте или отключите PieMenu в /helper - Команды - Фаст Меню - PieMenu', message_color)
+			end
+			for _, item in ipairs(modules.piemenu.data) do
+				if item.next == nil then
+					if pie.PieMenuItem(iconTextFormat(item)) then
+						sampProcessChatInput(item.action)
+					end
+				else
+					drawPieSub(item)
+				end
+			end
+			pie.EndPiePopup(m3_released)
+		end
+
+		if IS_MOBILE then
+			player.HideCursor = false
+		else
+			player.HideCursor = not pie_popup_active
+		end
+
+		local posX, posY = imgui.GetWindowPos().x, imgui.GetWindowPos().y
+		if posX ~= settings.windows_pos.pie.x or posY ~= settings.windows_pos.pie.y then
+			settings.windows_pos.pie = {x = posX, y = posY}
+			save_settings()
+		end
+		imgui.End()
+	end
+)
 ---------------------------------------------[ SCOREBOARD ]-----------------------------------------
 local SB_SORTS = {
     { key = function(id) return id end },
@@ -20437,7 +20681,7 @@ imgui.OnFrame(
 
             local body_ok, body_err = pcall(function()
                 change_dpi()
-                if MODULE.Network and type(MODULE.Network.start_for_ui) == 'function' then pcall(MODULE.Network.start_for_ui) end
+                network_ui_tick('scoreboard')
 
                 local sb = modules.scoreboard.data
                 local my_id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)) or -1
