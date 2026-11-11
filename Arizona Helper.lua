@@ -3,7 +3,7 @@
 script_name("Arizona&Rodina Helper")
 script_description('”ниверсальный хелпер дл€ игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.8.0")
+script_version("1.8.1")
 -----------------------------------------------[ INIT ]---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 pcall(os.remove, worked_dir .. '/Arizona Helper.lua.bak')
