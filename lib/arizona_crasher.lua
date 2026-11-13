@@ -1,4 +1,4 @@
--- LIB_VERSION: 1.2
+-- LIB_VERSION: 1.3
 local M = {}
 
 local HANDLER = [==[
@@ -19,8 +19,27 @@ local function validScript(path)
 	local c = f:read('*a') or ''
 	f:close()
 	if c == '' then return false end
-	local chunk = loadstring(c)
+	local chunk = (loadstring or load)(c)
 	return chunk ~= nil
+end
+local function scriptVersion(path)
+	local f = io.open(path, 'r')
+	if not f then return nil end
+	local head = f:read(8192) or ''
+	f:close()
+	local v = head:match("script_version%s*%(%s*[\"']([%d%.]+)[\"']%s*%)")
+	if not v then return nil end
+	local t = {}
+	for c in v:gmatch('%d+') do t[#t + 1] = tonumber(c) end
+	return t
+end
+local function verCmp(a, b)
+	for i = 1, math.max(#a, #b) do
+		local x, y = a[i] or 0, b[i] or 0
+		if x < y then return -1 end
+		if x > y then return 1 end
+	end
+	return 0
 end
 local function restoreHelper()
 	local base = getWorkingDirectory()
@@ -30,37 +49,68 @@ local function restoreHelper()
 	local legacy = base .. '/Arizona Helper.lua.bak'
 	if fileExists(helper) and validScript(helper) then return end
 	local candidates = { backup, fresh, legacy }
+	local best, bestVer = nil, nil
 	for _, backupPath in ipairs(candidates) do
 		if fileExists(backupPath) and validScript(backupPath) then
-			local f = io.open(backupPath, 'rb')
-			if f then
-				local data = f:read('*a')
-				f:close()
-				if data and data ~= '' then
-					if fileExists(helper) then
-						local cf = io.open(helper, 'rb')
-						if cf then
-							local cd = cf:read('*a')
-							cf:close()
-							if cd and cd ~= '' then
-								local corruptDir = base .. '/Arizona Helper/Backup'
-								if not doesDirectoryExist(corruptDir) then createDirectory(corruptDir) end
-								local co = io.open(corruptDir .. '/Arizona Helper.lua.corrupt', 'wb')
-								if co then co:write(cd); co:close() end
-							end
-						end
-					end
-					local o = io.open(helper, 'wb')
-					if o then
-						o:write(data)
-						o:close()
-						print('[DEBUG] helper restored from backup')
-						return
-					end
-				end
+			local v = scriptVersion(backupPath)
+			if v and (bestVer == nil or verCmp(v, bestVer) > 0) then
+				best, bestVer = backupPath, v
+			elseif not v and best == nil then
+				best = backupPath
 			end
 		end
 	end
+	if not best then return end
+	local f = io.open(best, 'rb')
+	if not f then return end
+	local data = f:read('*a')
+	f:close()
+	if not data or data == '' then return end
+	if fileExists(helper) then
+		local cf = io.open(helper, 'rb')
+		if cf then
+			local cd = cf:read('*a')
+			cf:close()
+			if cd and cd ~= '' then
+				local corruptDir = base .. '/Arizona Helper/Backup'
+				if not doesDirectoryExist(corruptDir) then createDirectory(corruptDir) end
+				local co = io.open(corruptDir .. '/Arizona Helper.lua.corrupt', 'wb')
+				if co then co:write(cd); co:close() end
+			end
+		end
+	end
+	local tmp_helper = helper .. '.tmp'
+	local old_helper = helper .. '.old'
+	local o = io.open(tmp_helper, 'wb')
+	if not o then return end
+	o:write(data)
+	o:close()
+	pcall(os.remove, old_helper)
+	local had_helper = fileExists(helper)
+	if had_helper and not os.rename(helper, old_helper) then
+		pcall(os.remove, tmp_helper)
+		return
+	end
+	if not os.rename(tmp_helper, helper) then
+		if had_helper and not fileExists(helper) and doesFileExist(old_helper) then
+			os.rename(old_helper, helper)
+		end
+		pcall(os.remove, tmp_helper)
+		return
+	end
+	pcall(os.remove, old_helper)
+	print('Хелпер восстановлен из резервной копии: ' .. best)
+	pcall(function()
+		lua_thread.create(function()
+			wait(5000)
+			sampShowDialog(123124,
+				'{009EFF}Arizona Helper',
+				'{ffffff}Файл хелпера был повреждён или отсутствовал.\n' ..
+				'Он автоматически восстановлен из резервной копии.\n\n' ..
+				'Нажмите {00FF00}CTRL + R{ffffff} для перезагрузки скриптов.',
+				'Понятно', '', 0)
+		end)
+	end)
 end
 restoreHelper()
 function getLog()
@@ -135,11 +185,33 @@ function M.install(worked_dir)
 	if not f then return false end
 	f:write(HANDLER)
 	f:close()
-	os.remove(path)
+	local old_path = path .. '.old'
+	os.remove(old_path)
+	if doesFileExist(path) then
+		if not os.rename(path, old_path) then
+			os.remove(tmp)
+			return false
+		end
+	end
 	if not os.rename(tmp, path) then
 		os.remove(tmp)
+		if doesFileExist(old_path) then os.rename(old_path, path) end
 		return false
 	end
+	local check = io.open(path, 'r')
+	if not check then
+		os.remove(path)
+		if doesFileExist(old_path) then os.rename(old_path, path) end
+		return false
+	end
+	local src = check:read('*a') or ''
+	check:close()
+	if src == '' or (loadstring or load)(src) == nil then
+		os.remove(path)
+		if doesFileExist(old_path) then os.rename(old_path, path) end
+		return false
+	end
+	os.remove(old_path)
 	local old = {
 		'Crash Info.lua',
 		'Error Handler.lua',
