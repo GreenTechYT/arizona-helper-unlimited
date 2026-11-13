@@ -1,6 +1,6 @@
--- LIB_VERSION: 1.1
+-- LIB_VERSION: 1.2
 local M = {}
-M.version = '1.1'
+M.version = '1.2'
 M.ctx = nil
 M.base_url = ''
 M.default_url = 'https://my-helper-api.greentechyt-helper.workers.dev'
@@ -13,7 +13,7 @@ M.crown_users = {}
 M.admin_users = {}
 M.all_users = {}
 M.show_users = false
-M.chat_open = false
+M.chat_open = false 
 M.network_thread_started = false
 M.disabled = false
 M.messages = {}
@@ -36,7 +36,6 @@ M.admin_confirm = nil
 M.admin_mute_buf = nil
 M.admin_lobby = nil
 M.server_pick_open = false
-M.server_pick_buf = nil
 M.banned_users = {}
 M.mute_until = {}
 M.ban_until = {}
@@ -48,15 +47,13 @@ M.user_servers = {}
 M.user_devices = {}
 M.user_fractions = {}
 M.online_any = {}
-M.last_heartbeat_at = 0
-M.last_cleared_at = ''
 M.last_fetch_users = 0
 M.last_fetch_crowns = 0
 M.last_poll = 0
 M.last_group_mention_at = 0
 M.MENTION_COOLDOWN = 120
 M.last_send_at = 0
-M.SEND_COOLDOWN = 2
+M.SEND_COOLDOWN = 5
 M.SYNC_INTERVAL = 30
 M.HEARTBEAT_INTERVAL = 90
 M.USERS_INTERVAL = 180
@@ -69,6 +66,7 @@ M.input_gen = 0
 M.notices = {}
 M.MAX_INPUT_LINES = 2
 M.network_tasks = {}
+M.cleared_rooms = {}
 
 local admin_ok, admin_mod = pcall(require, 'arizona_admin')
 M.admin = admin_ok and admin_mod or nil
@@ -101,6 +99,7 @@ local SERVER_ERRORS = {
     too_fast = 'слишком быстро: подождите немного',
     spam = 'расценено как спам: подождите немного',
     slow_down = 'слишком часто: сбавьте темп',
+    rate_limit_global = 'слишком часто: глобальный кулдаун сервера, подождите',
 }
 local function one_line(t)
     local s = tostring(t):gsub('[\r\n]+', '. '):gsub('%.%s*%.', '.'):gsub('%s+', ' ')
@@ -268,8 +267,9 @@ function M.toggle_reaction(id, icon, server)
         if type(data) == 'table' and data.ok == true then
             M.apply_reactions({ [mid] = data.reactions })
         elseif type(data) == 'table' and data.error then
-            notice('Не удалось поставить реакцию: ' .. (SERVER_ERRORS[tostring(data.error)] or ru_system_text(data.error)), 'err')
-        end
+            local e = SERVER_ERRORS[tostring(data.error)]
+            e = e and su8(e) or ru_system_text(data.error)
+            notice(su8('Не удалось поставить реакцию: ') .. M.to_utf8(e), 'err')        end
     end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
 end
 
@@ -331,7 +331,7 @@ function M.set_pin(id, pinned)
     http('POST', '/messages/pin', { message_id = mid, server = srv, pinned = pinned ~= false }, function(data)
     if type(data) == 'table' and data.ok == true then
     if data.pinned then
-        M.pinned = { id = data.pinned.id, sender = data.pinned.sender, text = M.to_utf8(tostring(data.pinned.text or '')), timestamp = data.pinned.timestamp, server = srv }
+        M.pinned = { id = data.pinned.id, sender = data.pinned.sender, text = M.expand_mentions(M.to_utf8(tostring(data.pinned.text or ''))), timestamp = data.pinned.timestamp, server = srv }
         else M.pinned = nil end
     else
         notice('Не удалось изменить закрепление', 'err')
@@ -398,7 +398,11 @@ local function apply_rp_format(msg)
 end
 
 local function insert_to_input(utf8_text)
-    if not M.input then M.input = imgui.new.char[4096]('') end
+	if not M.input then
+		local im = ctx().imgui
+		if not im then return end
+		M.input = im.new.char[4096]('')
+	end
     local current = ffi.string(M.input, 4096):match("^[^%z]*") or ""
     local addition = (current ~= '' and not current:match('%s$') and ' ' or '') .. utf8_text .. ' '
     local new_text = utf8_cut(current .. addition, 4000)
@@ -451,98 +455,311 @@ local function encode_json(data, pretty)
     return ''
 end
 
-local function read_config()
-    local path = config_path()
-    if path == '/HelperNetwork.json' or not doesFileExist(path) then return {} end
-    local file = io.open(path, 'r')
-    if not file then return {} end
-    local text = file:read('*a')
-    file:close()
-    return decode_json(text) or {}
+local NET_CFG_VERSION = 1
+local NET_DEFAULTS = {
+	server = 1,
+	hwid = '',
+	chat_crowns = true,
+	chat_nick_color = '{FFD700}',
+	show_avatars = true,
+	hide_system = false,
+	last_id = 0,
+	last_system_id = 0,
+	cleared_rooms = {},
+	avatar_mode = 'letters',
+	avatar_icon = 'FACE_SMILE',
+	avatar_outline = 1,
+}
+
+local NET_REMOVED = {
+	last_cleared_at = true,
+}
+
+local NET_KNOWN = { cfg_version = true, avatar_bg = true, avatar_fg = true }
+for k in pairs(NET_DEFAULTS) do NET_KNOWN[k] = true end
+
+local AUX_TMP      = '.tmp'
+local AUX_ROLLBACK = '.rollback'
+local AUX_GOOD     = '.good'
+local AUX_CORRUPT  = '.corrupt'
+
+local function cfg_file() return config_path() end
+
+local function cfg_name()
+	return cfg_file():match('([^/\\]+)$') or 'HelperNetwork.json'
 end
 
+local function backup_dir()
+	local base = tostring(ctx().config_dir or '')
+	if base == '' then return '' end
+	return base .. '/Backup'
+end
+
+local function copy_file_raw(src, dst)
+	return (pcall(function()
+		local f = io.open(src, 'rb'); if not f then error('src') end
+		local t = f:read('*a') or ''; f:close()
+		local g = io.open(dst, 'wb'); if not g then error('dst') end
+		g:write(t); g:close()
+	end))
+end
+
+local function ensure_backup_dir()
+	local dir = backup_dir()
+	if dir == '' then return false end
+	if doesDirectoryExist(dir) then return true end
+	if type(ctx().ensure_backup_dir) == 'function' then
+		pcall(ctx().ensure_backup_dir, cfg_file())
+	end
+	if not doesDirectoryExist(dir) then pcall(createDirectory, dir) end
+	return doesDirectoryExist(dir)
+end
+
+local function aux_path(suffix)
+	local dir = backup_dir()
+	if dir == '' then return cfg_file() .. suffix end
+	return dir .. '/' .. cfg_name() .. suffix
+end
+
+local function relocate_legacy_aux()
+	local live, dir = cfg_file(), backup_dir()
+	if dir == '' then return false end
+	local map = {
+		['.tmp']     = AUX_TMP,
+		['.bak']     = AUX_ROLLBACK,
+		['.good']    = AUX_GOOD,
+		['.corrupt'] = AUX_CORRUPT,
+	}
+	local moved = false
+	for old_suffix, new_suffix in pairs(map) do
+		local old = live .. old_suffix
+		if doesFileExist(old) then
+			ensure_backup_dir()
+			local new = aux_path(new_suffix)
+			if doesFileExist(new) then
+				pcall(os.remove, old)
+			else
+				local ok = pcall(os.rename, old, new)
+				if not ok or not doesFileExist(new) then
+					if copy_file_raw(old, new) then pcall(os.remove, old) end
+				end
+			end
+			moved = true
+		end
+	end
+	return moved
+end
+
+local function net_merge_defaults(default, loaded)
+	local changed = false
+	for k, v in pairs(default) do
+		if type(v) == 'table' then
+			if type(loaded[k]) ~= 'table' then loaded[k] = {}; changed = true end
+			if net_merge_defaults(v, loaded[k]) then changed = true end
+		elseif loaded[k] == nil then
+			loaded[k] = v; changed = true
+			print('[AHM] В HelperNetwork.json добавлено: ' .. k .. ' = ' .. tostring(v))
+		end
+	end
+	return changed
+end
+
+local function same_color(a, b)
+	if a == nil or b == nil then return a == b end
+	return a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
+end
+
+local function migrate_net_config(c)
+	local changed = false
+	local m, ic, bg, fg, o = norm_avatar(c.avatar_mode, c.avatar_icon, c.avatar_bg, c.avatar_fg, c.avatar_outline)
+	if c.avatar_mode ~= m then c.avatar_mode = m; changed = true end
+	if c.avatar_icon ~= ic then c.avatar_icon = ic; changed = true end
+	if c.avatar_outline ~= o then c.avatar_outline = o; changed = true end
+	if not same_color(c.avatar_bg, bg) then c.avatar_bg = bg; changed = true end
+	if not same_color(c.avatar_fg, fg) then c.avatar_fg = fg; changed = true end
+	if type(c.cleared_rooms) ~= 'table' then c.cleared_rooms = {}; changed = true end
+	local legacy = c.last_cleared_at
+	if type(legacy) == 'string' and legacy ~= '' then
+		local key = tostring(tonumber(c.server) or 1)
+		if type(c.cleared_rooms[key]) ~= 'string' or c.cleared_rooms[key] == '' then
+			c.cleared_rooms[key] = legacy
+		end
+		c.last_cleared_at = nil
+		changed = true
+	end
+	for k in pairs(NET_REMOVED) do
+		if c[k] ~= nil then c[k] = nil; changed = true end
+	end
+	if (tonumber(c.cfg_version) or 0) < NET_CFG_VERSION then
+		c.cfg_version = NET_CFG_VERSION
+		changed = true
+	end
+	return changed
+end
+
+local function read_config()
+	local path = cfg_file()
+	if path == '/HelperNetwork.json' then return {} end
+	relocate_legacy_aux()
+	local function rd(p)
+		if type(p) ~= 'string' or p == '' or not doesFileExist(p) then return nil end
+		local f = io.open(p, 'rb'); if not f then return nil end
+		local t = f:read('*a') or ''; f:close()
+		return decode_json(t)
+	end
+	local c, from = rd(path), 'main'
+	if not c then c, from = rd(aux_path(AUX_TMP)), 'tmp' end
+	if not c then c, from = rd(aux_path(AUX_GOOD)), 'good' end
+	if not c then c, from = rd(aux_path(AUX_ROLLBACK)), 'rollback' end
+	if not c then
+		if doesFileExist(path) then
+			ensure_backup_dir()
+			pcall(os.remove, aux_path(AUX_CORRUPT))
+			pcall(os.rename, path, aux_path(AUX_CORRUPT))
+		end
+		c, from = {}, nil
+	end
+	if from == 'main' then
+		ensure_backup_dir()
+		copy_file_raw(path, aux_path(AUX_GOOD))
+	end
+	local file_ver = tonumber(c.cfg_version) or 0
+	local ch = net_merge_defaults(NET_DEFAULTS, c)
+	if migrate_net_config(c) then ch = true end
+	M._cfg_extra = {}
+	if file_ver > NET_CFG_VERSION then
+		for k, v in pairs(c) do
+			if not NET_KNOWN[k] and not NET_REMOVED[k] then M._cfg_extra[k] = v end
+		end
+	else
+		for k in pairs(c) do
+			if not NET_KNOWN[k] then c[k] = nil; ch = true end
+		end
+	end
+	M._cfg_need_write = ch or (from ~= nil and from ~= 'main')
+	return c
+end
+
+function M.config_file() return cfg_file() end
+
 function M.save_config(force)
-    if M.ctx == nil then return end
-    local m, i, b, f, o = M.my_avatar()
-    local sig = avatar_sig_of(m, i, b, f, o)
-    if M._avatar_sig ~= nil and M._avatar_sig ~= sig then M._avatar_dirty = true end
-    M._avatar_sig = sig
-
-    local now = os.time()
-    if not force and M._cfg_last_write and now - M._cfg_last_write < 2 then return end
-    M._cfg_last_write = now
-
-    local data = {
-        server = M.server, hwid = M.hwid,
-        chat_crowns = M.chat_crowns ~= false, last_id = M.last_id or 0,
-        last_system_id = M.last_system_id or 0, hide_system = M.hide_system == true,
-        show_avatars = M.show_avatars ~= false, last_cleared_at = M.last_cleared_at or '',
-        avatar_mode = m, avatar_icon = i, avatar_outline = o, avatar_bg = b, avatar_fg = f
-    }
-    local path = config_path()
-    if path == '/HelperNetwork.json' then return end
-    local file = io.open(path, 'w')
-    if not file then return end
-    file:write(encode_json(data, true))
-    file:close()
+	if M.ctx == nil then return false end
+	local m, i, b, f, o = M.my_avatar()
+	local sig = avatar_sig_of(m, i, b, f, o)
+	if M._avatar_sig ~= nil and M._avatar_sig ~= sig then M._avatar_dirty = true end
+	M._avatar_sig = sig
+	local now = os.time()
+	if not force and M._cfg_last_write and now - M._cfg_last_write < 2 then return false end
+	local path = cfg_file()
+	if path == '/HelperNetwork.json' then return false end
+	local data = {}
+	if type(M._cfg_extra) == 'table' then
+		for k, v in pairs(M._cfg_extra) do data[k] = v end
+	end
+	data.cfg_version        = NET_CFG_VERSION
+	data.server             = tonumber(M.server) or 1
+	data.hwid               = M.hwid or ''
+	data.chat_crowns        = M.chat_crowns ~= false
+	data.chat_nick_color    = M.chat_nick_color or '{FFD700}'
+	data.show_avatars       = M.show_avatars ~= false
+	data.hide_system        = M.hide_system == true
+	data.last_id            = tonumber(M.last_id) or 0
+	data.last_system_id     = tonumber(M.last_system_id) or 0
+	data.cleared_rooms      = type(M.cleared_rooms) == 'table' and M.cleared_rooms or {}
+	data.avatar_mode, data.avatar_icon, data.avatar_outline = m, i, o
+	data.avatar_bg, data.avatar_fg = b, f
+	local text = encode_json(data, true)
+	if text == '' then return false end
+	ensure_backup_dir()
+	local tmp = aux_path(AUX_TMP)
+	local fh = io.open(tmp, 'wb'); if not fh then return false end
+	fh:write(text); fh:close()
+	if doesFileExist(path) then
+		pcall(os.remove, aux_path(AUX_ROLLBACK))
+		pcall(os.rename, path, aux_path(AUX_ROLLBACK))
+	end
+	if not os.rename(tmp, path) then
+		pcall(os.rename, aux_path(AUX_ROLLBACK), path)
+		return false
+	end
+	M._cfg_last_write = now
+	M._cfg_need_write = false
+	local bf, be = ctx().backup_file_for, ctx().backups_enabled
+	if type(bf) == 'function' and type(be) == 'function' then
+		local ok, enabled = pcall(be)
+		if ok and enabled then
+			pcall(function()
+				local dst = bf(path)
+				if type(dst) ~= 'string' or dst == '' then return end
+				if type(ctx().copy_file) == 'function' then
+					ctx().copy_file(path, dst)
+				else
+					ensure_backup_dir()
+					copy_file_raw(path, dst)
+				end
+			end)
+		end
+	end
+	return true
 end
 
 local function make_hwid()
-    if IS_MOBILE then
-        local mobile_ok, android_id = pcall(function()
-            local envu = require('android.jnienv-util')
-            envu.LooperPrepare()
-            local activity = require('android.jni-raw').activity
-            local resolver = envu.CallObjectMethod(activity, 'getContentResolver', '()Landroid/content/ContentResolver;')
-            local setting = envu.GetStaticObjectField('android/provider/Settings$Secure', 'ANDROID_ID', 'Ljava/lang/String;')
-            local value = envu.CallStaticObjectMethod('android/provider/Settings$Secure', 'getString', '(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;', resolver, setting)
-            return envu.FromJString(value)
-        end)
-        if mobile_ok and android_id and tostring(android_id) ~= '' then return 'AH-MOBILE-' .. tostring(android_id) end
-    end
-    local serial = ''
-    if ffi_ok then
-        pcall(function()
-            local value = ffi.new('unsigned long[1]')
-            if ffi.C.GetVolumeInformationA('C:\\', nil, 0, value, nil, nil, nil, 0) ~= 0 then
-                serial = string.format('%08X', tonumber(value[0]) or 0)
-            end
-        end)
-    end
-    local name = ''
-    pcall(function()
-        if type(getComputerName) == 'function' then name = tostring(getComputerName() or '') end
-    end)
-    name = name:gsub('[^%w]', ''):sub(1, 24)
-    if serial == '' then serial = 'UNKNOWN' end
-    if name == '' then name = 'PC' end
-    return 'AH-' .. serial .. '-' .. name
+	if IS_MOBILE then
+		local mobile_ok, android_id = pcall(function()
+			local envu = require('android.jnienv-util')
+			envu.LooperPrepare()
+			local activity = require('android.jni-raw').activity
+			local resolver = envu.CallObjectMethod(activity, 'getContentResolver', '()Landroid/content/ContentResolver;')
+			local setting = envu.GetStaticObjectField('android/provider/Settings$Secure', 'ANDROID_ID', 'Ljava/lang/String;')
+			local value = envu.CallStaticObjectMethod('android/provider/Settings$Secure', 'getString', '(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;', resolver, setting)
+			return envu.FromJString(value)
+		end)
+		if mobile_ok and android_id and tostring(android_id) ~= '' then
+			return 'AH-MOBILE-' .. tostring(android_id)
+		end
+		return 'AH-MOBILE-UNKNOWN-' .. tostring(math.random(1e9))
+	end
+	local serial = ''
+	if ffi_ok then
+		pcall(function()
+			local value = ffi.new('unsigned long[1]')
+			if ffi.C.GetVolumeInformationA('C:\\', nil, 0, value, nil, nil, nil, 0) ~= 0 then
+				serial = string.format('%08X', tonumber(value[0]) or 0)
+			end
+		end)
+	end
+	local name = ''
+	pcall(function()
+		if type(getComputerName) == 'function' then name = tostring(getComputerName() or '') end
+	end)
+	name = name:gsub('[^%w]', ''):sub(1, 24)
+	if serial == '' then serial = 'UNKNOWN' end
+	if name == '' then name = 'PC' end
+	return 'AH-' .. serial .. '-' .. name
 end
 
-function M.get_server()
-    if M.admin_lobby then
-        if tostring(M.admin_lobby) == '00' then return '900' end
-        return M.admin_lobby
-    end
-    if not isSampAvailable() then
-        local srv = tonumber(M.server) or 1
-        return srv < 10 and string.format('0%d', srv) or tostring(srv)
-    end
-    local ok, value = pcall(function() return getServerNumber() end)
-    if ok and type(value) == 'string' and value ~= '' and value ~= '00' then return value end
-    local srv = tonumber(M.server) or 1
-    return srv < 10 and string.format('0%d', srv) or tostring(srv)
+local function detect_server()
+	if isSampAvailable() then
+		local ok, value = pcall(function() return getServerNumber() end)
+		if ok and type(value) == 'string' and value ~= '' and value ~= '00' then return value end
+	end
+	local srv = tonumber(M.server) or 1
+	return srv < 10 and string.format('0%d', srv) or tostring(srv)
 end
 
 function M.get_home_server()
-    if not isSampAvailable() then
-        local srv = tonumber(M.server) or 1
-        return srv < 10 and string.format('0%d', srv) or tostring(srv)
-    end
-    local ok, value = pcall(function() return getServerNumber() end)
-    if ok and type(value) == 'string' and value ~= '' and value ~= '00' then return value end
-    local srv = tonumber(M.server) or 1
-    return srv < 10 and string.format('0%d', srv) or tostring(srv)
+	return detect_server()
+end
+
+function M.get_server()
+	if M.admin_lobby then
+		return tostring(M.admin_lobby) == '00' and '900' or M.admin_lobby
+	end
+	return detect_server()
+end
+
+function M.is_cross()
+	return tostring(M.get_server()) == '900'
 end
 
 local function norm_server(value)
@@ -552,36 +769,128 @@ local function norm_server(value)
 end
 
 local function server_tag_for(nick, srv_override)
-    local is_admin = M.admin_users[nick] == true or (nick ~= '' and nick == M.get_nick() and M.is_admin())
-    if is_admin then return '' end
-
-    local srv = srv_override or ((nick ~= '' and nick == M.get_nick()) and M.get_home_server() or (M.user_servers[nick] or ''))
-    if srv == '' then return '' end
-    local view = tostring(M.get_server())
-    if view == '900' then 
-        if srv == '900' then return '' end
-        return ' [' .. srv .. ']' 
-    end
-    if srv == view then return '' end    
-    return ' [' .. srv .. ']'
+	local is_admin = M.admin_users[nick] == true or (nick ~= '' and nick == M.get_nick() and M.is_admin())
+	if is_admin then return '' end
+	local srv = srv_override or ((nick ~= '' and nick == M.get_nick()) and M.get_home_server() or (M.user_servers[nick] or ''))
+	if srv == '' or srv == tostring(M.get_server()) then return '' end
+	return ' [' .. srv .. ']'
 end
 
 function M.get_nick()
-    if not isSampAvailable() or not sampIsLocalPlayerSpawned() then return M.nick end
-    local ok, nick = pcall(function()
-        local id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
-        if id and id >= 0 then return sampGetPlayerNickname(id) or '' end
-        return ''
-    end)
-    if ok and type(nick) == 'string' and nick ~= '' then return nick end
-    return M.nick
+	local now = os.clock()
+	if M._nick_cache ~= nil and (now - (M._nick_cache_at or 0)) < 0.25 then
+		return M._nick_cache
+	end
+	local result = M.nick
+	if isSampAvailable() and sampIsLocalPlayerSpawned() then
+		local ok, nick = pcall(function()
+			local id = select(2, sampGetPlayerIdByCharHandle(PLAYER_PED))
+			if id and id >= 0 then return sampGetPlayerNickname(id) or '' end
+			return ''
+		end)
+		if ok and type(nick) == 'string' and nick ~= '' then result = nick end
+	end
+	M._nick_cache, M._nick_cache_at = result, now
+	return result
 end
 
-local function sync_http(method, path, body, extra_headers)
+local MENTION_MAX_CHARS = 256
+local function utf16_len(s)
+    local n = 0
+    for i = 1, #s do
+        local b = s:byte(i)
+        if b >= 0xF0 then n = n + 2
+        elseif b < 0x80 or b >= 0xC0 then n = n + 1 end
+    end
+    return n
+end
+
+local function mention_my_id()
+    if type(ctx().get_my_id) == 'function' then
+        local ok, id = pcall(ctx().get_my_id)
+        id = ok and tonumber(id) or nil
+        if id and id >= 0 then return id end
+    end
+    local ok, id = pcall(function() return select(2, sampGetPlayerIdByCharHandle(PLAYER_PED)) end)
+    id = ok and tonumber(id) or nil
+    if id and id >= 0 then return id end
+    local mod = ctx().module
+    return tonumber(mod and mod.MOBILE_PLAYER_ID) or -1
+end
+
+local function mention_my_nick()
+    local n = tostring(M.get_nick() or ''):gsub('{%x%x%x%x%x%x}', ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if n == '' then n = tostring(M.player_data().nick or '') end
+    return n
+end
+
+local function mention_nick_by_id(id)
+    id = tonumber(id)
+    if not id or id < 0 or id > 999 then return nil end
+    if id == mention_my_id() then
+        local n = mention_my_nick()
+        if n ~= '' then return n end
+    end
+    local ok, connected = pcall(sampIsPlayerConnected, id)
+    if not ok or not connected then return nil end
+    local ok2, nick = pcall(sampGetPlayerNickname, id)
+    if ok2 and type(nick) == 'string' then
+        nick = nick:gsub('{%x%x%x%x%x%x}', '')
+        if nick ~= '' then return nick end
+    end
+    return nil
+end
+
+function M.expand_mentions(text, limit)
+	if type(text) ~= 'string' then return text, 0 end
+    if not text:find('@', 1, true) then return text, 0 end
+    if tostring(M.get_server()) == '900' then return text, 0 end
+    local base, added, count = utf16_len(text), 0, 0
+    local out = (' ' .. text):gsub('([^%w_])@(%d+)%f[^%w_]', function(pre, digits)
+        local nick = mention_nick_by_id(digits)
+        if not nick then return pre .. '@' .. digits end
+        local delta = utf16_len(nick) - #digits
+        if limit and (base + added + delta) > limit then return pre .. '@' .. digits end
+        added = added + delta
+        count = count + 1
+        return pre .. '@' .. nick
+    end)
+    return out:sub(2), count
+end
+
+local function mention_kind(text)
+    local low = ' ' .. tostring(text):gsub('{%x%x%x%x%x%x}', ''):lower()
+	if low:find('[^%w_]@all%f[^%w_]') then return 'all' end
+    local nick = mention_my_nick():lower()
+    if nick ~= '' then
+        local esc = nick:gsub('%p', '%%%p')
+        if low:find('[^%w_]@' .. esc .. '%f[^%w_]') then return 'nick' end
+    end
+    local id = mention_my_id()
+    if id >= 0 and low:find('[^%w_]@' .. id .. '%f[^%w_]') then return 'id' end
+    if tostring(M.get_server()) ~= '900' then
+        local mode = M.fraction_mode()
+        if type(mode) == 'string' and mode ~= 'none' then
+            for _, m in ipairs(MENTION_MODES) do
+                if m == mode and low:find('[^%w_]@' .. m .. '%f[^%w_]') then return 'mode' end
+            end
+        end
+    end
+    return nil
+end
+M.mention_kind = mention_kind
+
+local function sync_http(method, path, body, extra_headers, auto_session)
     local result = nil
     local done = false
     local headers = { ['Content-Type'] = 'application/json' }
     if type(extra_headers) == 'table' then for k, v in pairs(extra_headers) do headers[k] = v end end
+	if auto_session and M.session ~= '' then
+        local p = tostring(path)
+        if not (p:find('/heartbeat', 1, true) or p:find('/news/', 1, true)) then
+            headers['X-Session'] = M.session
+        end
+    end
     local args = { timeout = 8, headers = headers }
     if body ~= nil then args.data = encode_json(body) end
     
@@ -614,18 +923,20 @@ local function sync_http(method, path, body, extra_headers)
 end
 
 http = function(method, path, body, on_ok, on_error, extra_headers, priority)
-    if not M.enabled or M.base_url == '' then return false end
-    if #M.network_tasks >= 64 then
-        for i = #M.network_tasks, 1, -1 do
-            if not M.network_tasks[i].priority then table.remove(M.network_tasks, i); break end
-        end
-    end    
-    table.insert(M.network_tasks, {
-        method = method, path = path, body = body,
-        on_ok = on_ok, on_error = on_error, headers = extra_headers,
-        priority = priority
-    })
-    return true
+	if not M.enabled or M.base_url == '' then return false end
+	if #M.network_tasks >= 64 then
+		for i = #M.network_tasks, 1, -1 do
+			if not M.network_tasks[i].priority then table.remove(M.network_tasks, i); break end
+		end
+	end
+	table.insert(M.network_tasks, {
+		method = method, path = path, body = body,
+		on_ok = on_ok, on_error = on_error,
+		headers = extra_headers,
+		auto_session = true,
+		priority = priority == true,
+	})
+	return true
 end
 
 local function parse_iso_time(value)
@@ -654,6 +965,7 @@ function M.fetch_users()
     http('GET', '/users?server=' .. tostring(M.get_server()), nil, function(data)
         if type(data) ~= 'table' then return end
         M.users, M.crown_users, M.admin_users = {}, {}, {}
+        for _, u in ipairs(M.all_users) do u.online = false end
         for _, item in ipairs(data.users or {}) do
             local nick = type(item) == 'table' and item.nick or item
             if type(nick) == 'string' then
@@ -773,7 +1085,8 @@ function M.add_system(data)
         local status_text = M.to_utf8(tostring(data.text or ''))
         if data.banned ~= nil then
             M.my_banned = (data.banned == true) or (tonumber(data.banned) == 1)
-            M.my_ban_until = data.ban_until and parse_iso_time(data.ban_until) or 0
+            local ban_epoch = data.ban_until and parse_iso_time(data.ban_until) or 0
+            M.my_ban_until = (ban_epoch > 0) and ban_epoch or (M.my_banned and 9999999999 or 0)
             if M.my_banned then M.messages = {}; M.system_messages = {} end
         end
         if data.mute_until ~= nil then M.my_mute_until = parse_iso_time(data.mute_until) end
@@ -854,7 +1167,6 @@ function M.heartbeat()
     local nick = M.get_nick()
     if nick == '' then return end
     M.nick = nick
-    M.last_heartbeat_at = os.time()
     local pdata = M.player_data()
     local heartbeat_priority = M.pending_initial_sync == true
     http('POST', '/heartbeat', {
@@ -868,7 +1180,6 @@ function M.heartbeat()
         avatar_outline = M._av_o,
         server = M.get_home_server(),
         home = M.get_home_server(),
-        lobby = M.get_server(),
         version = ctx().version or '1.8.0',
         mode = M.fraction_mode(),
         fraction = M.to_utf8(tostring(pdata.fraction or '')),
@@ -886,7 +1197,8 @@ function M.heartbeat()
             local was_banned = M.my_banned
             local was_mute_until = M.my_mute_until
             M.my_banned = (data.banned == true) or (tonumber(data.banned) == 1)
-            M.my_ban_until = data.ban_until and parse_iso_time(data.ban_until) or 0
+            local ban_epoch = data.ban_until and parse_iso_time(data.ban_until) or 0
+            M.my_ban_until = (ban_epoch > 0) and ban_epoch or (M.my_banned and 9999999999 or 0)
             M.my_mute_until = data.mute_until and parse_iso_time(data.mute_until) or 0
             if was_banned and not M.my_banned then M.print('Блокировка чата снята.') end
             if was_mute_until > os.time() and M.my_mute_until <= os.time() then M.print('Мут снят.') end
@@ -911,18 +1223,10 @@ local function add_message(message)
     local my_nick = M.get_nick()
     local notifications = (ctx().settings and ctx().settings.notifications) or {}
     local my_mode = M.fraction_mode()
-    local is_cross_server = (tostring(M.get_server()) == '900')
-    local is_mentioned = false
-    local mention_type = 'user'
-    local my_nick_u8 = M.to_utf8(my_nick)
-    if my_nick ~= '' and item.sender ~= my_nick and item.text:find('@' .. my_nick_u8 .. '%f[%W]') then
-        is_mentioned = true
-    elseif item.sender ~= my_nick and not is_cross_server and my_mode ~= 'none' then
-        if item.text:find('@' .. my_mode .. '%f[%W]') then
-            is_mentioned = true
-            mention_type = 'mode'
-        end
-    end
+    item.text = M.expand_mentions(item.text)
+    local kind = mention_kind(item.text)
+    local mention_type = kind or 'user'
+    local is_mentioned = (kind ~= nil) and (item.sender ~= my_nick)
     item.mention_type = mention_type
     item.is_mentioned = is_mentioned
     local ts_epoch = parse_iso_time(item.timestamp)
@@ -955,7 +1259,7 @@ local function add_message(message)
     
     if id > M.last_id then M.last_id = id end
     while #M.messages > M.max_messages do table.remove(M.messages, 1) end
-    M.auto_scroll = true
+    if M.chat_open and M._at_bottom ~= false then M.auto_scroll = true end
 end
 
 function M.clear_history()
@@ -967,7 +1271,7 @@ function M.remove_message(id)
     if target <= 0 then return end
     for i = 1, #M.messages do
         if M.messages[i].id == target then
-            M.messages[i].text = "Сообщение удалено"
+			M.messages[i].text = M.to_utf8('Сообщение удалено')
             M.messages[i].deleted = true
             M.messages[i].sender = ""
             break
@@ -978,6 +1282,16 @@ end
 function M.ingest(list)
     if type(list) ~= 'table' then return end
     for _, message in ipairs(list) do add_message(message) end
+end
+
+local function add_system_local(text, ts)
+    table.insert(M.system_messages, {
+        id = 0, local_only = true, admin = '', target = '',
+        text = one_line(M.to_utf8(tostring(text or ''))),
+        timestamp = tostring(ts or os.date('!%Y-%m-%d %H:%M:%SZ')),
+    })
+    while #M.system_messages > 100 do table.remove(M.system_messages, 1) end
+    M.auto_scroll = true
 end
 
 function M.poll(force)
@@ -992,7 +1306,7 @@ function M.poll(force)
         .. '&after_id=' .. tostring(M.last_id)
         .. '&system_after=' .. tostring(M.last_system_id), nil, function(data)
         M.polling = false
-        if type(data) == 'table' and data.error == 'rate_limit' then M.rate_backoff() end
+        if type(data) == 'table' and data.error == 'rate_limit' then M.rate_backoff() return end
         if type(data) == 'table' and data.error == 'unauthorized' then
             M.session = ''
             M.pending_initial_sync = M.chat_open
@@ -1001,24 +1315,20 @@ function M.poll(force)
         end
         if type(data) ~= 'table' then return end
 
-        local server_cleared = data.cleared_at or ""
-        local cleared_epoch = parse_iso_time(server_cleared)
-        local last_cleared_epoch = parse_iso_time(M.last_cleared_at or "")
-        if server_cleared ~= "" and cleared_epoch > 0 and cleared_epoch > last_cleared_epoch then
+		local room_key = tostring(view_server)
+		if type(M.cleared_rooms) ~= 'table' then M.cleared_rooms = {} end
+		local server_cleared = data.cleared_at or ''
+		local cleared_epoch = parse_iso_time(server_cleared)
+		local last_cleared_epoch = parse_iso_time(M.cleared_rooms[room_key] or '')
+		if server_cleared ~= '' and cleared_epoch > 0 and cleared_epoch > last_cleared_epoch then
             M.messages = {}
             M.system_messages = {}
             M.last_id = 0
             M.last_system_id = 0
             M.auto_scroll = true
-            M.last_cleared_at = server_cleared
-            M.add_system({
-                id = 0,
-                text = "История чата очищена администратором",
-                admin = "Система",
-                target = "",
-                timestamp = server_cleared
-            })
-            M.save_config()
+			M.cleared_rooms[room_key] = server_cleared
+			add_system_local('История чата очищена администратором', server_cleared)
+			M.save_config(true)
         end
 
         M.ingest(data.messages)
@@ -1030,7 +1340,7 @@ function M.poll(force)
                 M.pinned = {
                     id = data.pinned.id,
                     sender = data.pinned.sender,
-                    text = M.to_utf8(tostring(data.pinned.text or '')),
+                    text = M.expand_mentions(M.to_utf8(tostring(data.pinned.text or ''))),
                     timestamp = data.pinned.timestamp,
                     server = view_server
                 }
@@ -1066,9 +1376,14 @@ end
 
 function M.send(text)
     local raw_in = trim(text)
-    local message = apply_rp_format(raw_in)
+    local expanded = M.expand_mentions(raw_in, MENTION_MAX_CHARS)
+    local message = apply_rp_format(expanded)
     if message == '' then return false end
-    if #message > 2000 then message = utf8_cut(message, 2000) end
+    local chars = utf16_len(message)
+    if chars > MENTION_MAX_CHARS then
+        notice(string.format('Сообщение слишком длинное: %d/%d символов. Сократите текст.', chars, MENTION_MAX_CHARS), 'err')
+        return false
+    end
     local nick = M.get_nick()
     if nick == '' then return false end
     
@@ -1079,6 +1394,10 @@ function M.send(text)
         notice('У вас мут: осталось ' .. math.ceil((M.my_mute_until - os.time()) / 60) .. ' мин', 'err')
         return false
     end
+	if M.my_banned then
+		notice('Вы заблокированы в чате.', 'err')
+		return false
+	end
     if not M.enabled then M.print('Мессенджер отключен (сбор данных выключен в настройках).'); return false end
 
     local flood_left = M.SEND_COOLDOWN - (os.time() - (M.last_send_at or 0))
@@ -1089,11 +1408,11 @@ function M.send(text)
 
     local has_group_mention = false
     local my_admin = M.is_admin()
-    local is_cross_server = (tostring(M.get_server()) == '900')
+    local is_cross_server = M.is_cross()
 
     if not my_admin and not is_cross_server then
         for _, mode in ipairs(MENTION_MODES) do
-            if message:find('@' .. mode .. '%f[%W]') then
+			if (' ' .. message):find('[^%w_]@' .. mode .. '%f[^%w_]') then
                 has_group_mention = true
                 break
             end
@@ -1111,7 +1430,7 @@ function M.send(text)
         end
     elseif not my_admin and is_cross_server then
         for _, mode in ipairs(MENTION_MODES) do
-            if message:find('@' .. mode .. '%f[%W]') then
+			if (' ' .. message):find('[^%w_]@' .. mode .. '%f[^%w_]') then
                 notice('Групповые упоминания запрещены в межпроектном чате', 'err')
                 return false
             end
@@ -1128,8 +1447,7 @@ function M.send(text)
                 table.insert(M.network_tasks, { due_at = os.time() + 2, action = function() attempt(n + 1) end })
             elseif type(data) == 'table' and (data.error == 'storage_unavailable' or data.error == 'database_unavailable') and n < 3 then
                 table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() attempt(n + 1) end })
-            elseif type(data) == 'table' and (data.error == 'rate_limit' or data.error == 'too_many_messages' or data.error == 'flood' or data.error == 'too_fast') and n < 3 then
-                M.rate_backoff()
+            elseif type(data) == 'table' and (data.error == 'rate_limit' or data.error == 'rate_limit_global' or data.error == 'too_many_messages' or data.error == 'flood' or data.error == 'too_fast') and n < 3 then                M.rate_backoff()
                 table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() attempt(n + 1) end })
             elseif type(data) == 'table' and data.error then
                 local err_msg = SERVER_ERRORS[tostring(data.error)]
@@ -1137,7 +1455,11 @@ function M.send(text)
                 notice(su8('Сервер отклонил сообщение: ') .. M.to_utf8(err_msg), 'err')
                 restore_input(raw_in)
             end
-        end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), true)
+        end, function(err)
+            M.last_error = tostring(err or '')
+            notice('Не удалось отправить сообщение: ' .. tostring(err or 'сеть'), 'err')
+            restore_input(raw_in)
+        end, M.session_headers(), true)
     end
     attempt(1)
     return true
@@ -1161,7 +1483,7 @@ function M.start_network_thread()
                 if type(task.action) == 'function' then
                     pcall(task.action)
                 else
-                    local result = sync_http(task.method, task.path, task.body, task.headers)
+                    local result = sync_http(task.method, task.path, task.body, task.headers, task.auto_session)
                     if result.type == 'ok' then
                         if type(task.on_ok) == 'function' then pcall(task.on_ok, result.data, result.response) end
                     else
@@ -1235,23 +1557,35 @@ function M.set_disabled(value)
     if M.disabled then M.stop()
     else
         M.enabled = M.base_url ~= ''
-        if M.hwid == '' then M.hwid = make_hwid(); M.save_config() end
+		if M.hwid == '' then
+			M.hwid = make_hwid()
+			M.save_config(true)
+		end
         M.start()
     end
 end
 
 function M.stop()
     M.running, M.started, M.loop_started, M.chat_open, M.network_thread_started = false, false, false, false, false
-    M.users, M.all_users, M.messages, M.system_messages, M.online_any = {}, {}, {}, {}, {}
+	M.users, M.all_users, M.messages, M.system_messages, M.online_any = {}, {}, {}, {}, {}
+	M.crown_users, M.admin_users, M.banned_users = {}, {}, {}
+	M.user_servers, M.user_devices, M.user_fractions = {}, {}, {}
+	M.mute_until, M.ban_until = {}, {}
+	M._users_rev = (M._users_rev or 0) + 1
     M.network_tasks = {}
     M.polling, M.pending_initial_sync = false, false
+    M.session = ''
     M.msg_reactions, M.pinned = {}, nil
-    M._users_rev = (M._users_rev or 0) + 1
     M.save_config(true)
 end
 
 function M.admin_request(method, path, body, headers, on_ok, on_error)
-    table.insert(M.network_tasks, { method = method, path = path, body = body, on_ok = on_ok, on_error = on_error, headers = headers, priority = true })
+	table.insert(M.network_tasks, {
+		method = method, path = path, body = body,
+		on_ok = on_ok, on_error = on_error, headers = headers,
+		auto_session = true,
+		priority = true,
+	})
     return true
 end
 
@@ -1260,7 +1594,12 @@ function M.is_admin_sender(nick)
     return M.admin_users[value] == true or (value ~= '' and value == M.get_nick() and M.is_admin())
 end
 
-function M.is_admin() return M.admin and type(M.admin.is_admin) == 'function' and M.admin.is_admin(M.hwid) end
+function M.is_admin()
+	if M.disabled then return false end
+	local my = M.get_nick()
+	if my ~= '' and M.admin_users[my] == true then return true end
+	return (M.admin and type(M.admin.is_admin) == 'function' and M.admin.is_admin(M.hwid)) or false
+end
 function M.delete_message(id) if M.admin and type(M.admin.delete) == 'function' then return M.admin.delete(M, id) end end
 function M.mute_user(nick, minutes) if M.admin and type(M.admin.mute) == 'function' then return M.admin.mute(M, nick, minutes) end end
 function M.ban_user(nick, seconds) if M.admin and type(M.admin.ban) == 'function' then return M.admin.ban(M, nick, seconds) end end
@@ -1273,6 +1612,30 @@ function M.is_user(nick)
     if type(nick) ~= 'string' then return false end
     local clean = nick:gsub('^%s+', ''):gsub('%s+$', '')
     return M.crown_users[clean] == true or M.users[clean] == true or M.admin_users[clean] == true
+end
+
+function M.is_banned_user(nick)
+	if type(nick) ~= 'string' then return false end
+	local clean = nick:gsub('{%x%x%x%x%x%x}', ''):gsub('^%s+', ''):gsub('%s+$', '')
+	return M.banned_users[clean] == true
+end
+
+function M.remaining_seconds(until_ts)
+	local left = (tonumber(until_ts) or 0) - os.time()
+	return left > 0 and left or 0
+end
+
+function M.start_for_ui()
+	if M.disabled or not M.enabled then return end
+	if not M.started then M.start() end
+	if os.time() - (M.last_fetch_crowns or 0) >= 5 then M.fetch_crowns() end
+end
+
+function M.restriction_left(nick, kind)
+	local map = (kind == 'ban') and M.ban_until or M.mute_until
+	local until_ts = tonumber(map[tostring(nick or '')]) or 0
+	local left = until_ts - os.time()
+	return left > 0 and left or 0
 end
 
 local crown_set_cache, crown_set_rev = nil, -1
@@ -1390,7 +1753,11 @@ end
 function M.load_users() M.show_users = true; M.fetch_user_directory() end
 
 function M.insert_mention(nick)
-    if not M.input then M.input = imgui.new.char[4096]('') end
+	if not M.input then
+		local im = ctx().imgui
+		if not im then return end
+		M.input = im.new.char[4096]('')
+	end
     local current = ffi.string(M.input, 4096):match("^[^%z]*") or ""
     local addition = (current ~= '' and not current:match('%s$') and ' ' or '') .. '@' .. M.to_utf8(nick) .. ' '
     local text = utf8_cut(current .. addition, 4000)
@@ -1510,7 +1877,7 @@ function M.draw(player)
             for i, s in ipairs(servers_list) do if tostring(s.number) == cur_num then M.server_pick_combo_idx[0] = i - 1; break end end
         end
     end
-    if imgui.IsItemHovered() then imgui.SetTooltip(T('Настройки подключения')) end
+    if imgui.IsItemHovered() then imgui.SetTooltip(T('Настройки мессенджера')) end
     imgui.PopStyleColor(3)
     pcall(function()
         dl:AddLine(imgui.ImVec2(wp.x, hp.y + header_h), imgui.ImVec2(wp.x + ws.x, hp.y + header_h), imgui.GetColorU32Vec4(line_col), 1)
@@ -1587,7 +1954,8 @@ function M.draw(player)
             end
         end
         section(fa.CLOCK_ROTATE_LEFT or fa.DOWNLOAD or '', T('История'))
-        if not M.hide_system_cb then M.hide_system_cb = imgui.new.bool(M.hide_system or false) end
+		if not M.hide_system_cb then M.hide_system_cb = imgui.new.bool(M.hide_system or false) end
+		M.hide_system_cb[0] = (M.hide_system == true)
         row_label(fa.BELL_SLASH or fa.EYE_SLASH or '', T('Скрывать системные'))
         right_x(row_h)
         if imgui.Checkbox('##hide_sys', M.hide_system_cb) then M.hide_system = M.hide_system_cb[0]; M.save_config() end
@@ -1609,8 +1977,8 @@ function M.draw(player)
             M.chat_crowns = M.chat_crowns_cb[0]
             M.save_config(true)
         end
-        if imgui.IsItemHovered() then imgui.SetTooltip(T('Помечает ники пользователей хелпера в игровом чате')) end
-        if not M.show_avatars_cb then M.show_avatars_cb = imgui.new.bool(M.show_avatars ~= false) end
+		if not M.show_avatars_cb then M.show_avatars_cb = imgui.new.bool(M.show_avatars ~= false) end
+		M.show_avatars_cb[0] = (M.show_avatars ~= false)
         row_label(fa.COMMENTS or '', T('Пузыри и аватары'))
         right_x(row_h)
         if imgui.Checkbox('##av_on', M.show_avatars_cb) then M.show_avatars = M.show_avatars_cb[0]; M.save_config() end
@@ -1655,9 +2023,6 @@ function M.draw(player)
                 end)
                 local pv_gw = imgui.CalcTextSize(pv_g).x
                 draw_glyph_outlined(imgui, pdl, pv_x + pv_d * 0.5 - pv_gw * 0.5, pv_y + pv_d * 0.5 - imgui.GetTextLineHeight() * 0.5, pv_g, imgui.GetColorU32Vec4(pv_fg), math.min(tonumber(M.avatar_outline) or 0, 2))
-                local cap = T('Пример: так ваш аватар выглядит в чате')
-                imgui.SetCursorScreenPos(imgui.ImVec2(g0.x + (pw - imgui.CalcTextSize(cap).x) * 0.5, g0.y + math.max(grid_h, pv_d) + 4 * dpi))
-                imgui.TextColored(muted, cap)
             end
             M.avatar_bg_buf = M.avatar_bg_buf or imgui.new.float[3](M.avatar_bg and M.avatar_bg[1] / 255 or 0.13, M.avatar_bg and M.avatar_bg[2] / 255 or 0.38, M.avatar_bg and M.avatar_bg[3] / 255 or 0.22)
             M.avatar_fg_buf = M.avatar_fg_buf or imgui.new.float[3](M.avatar_fg and M.avatar_fg[1] / 255 or 1, M.avatar_fg and M.avatar_fg[2] / 255 or 1, M.avatar_fg and M.avatar_fg[3] / 255 or 1)
@@ -1738,8 +2103,13 @@ function M.draw(player)
             imgui.SetCursorPosX(cmin + (cw - imgui.CalcTextSize(text1).x) * 0.5); imgui.TextColored(red, text1)
             imgui.SetCursorPosX(cmin + (cw - imgui.CalcTextSize(text2).x) * 0.5); imgui.TextColored(muted, text2)
         else
-            local my_nick = M.get_nick()
-            local timeline = {}
+			local my_nick = M.get_nick()
+			local mouse = nil
+			pcall(function()
+				local io = imgui.GetIO()
+				if io then mouse = io.MousePos end
+			end)
+			local timeline = {}
             for _, m in ipairs(M.messages) do m.is_system = false; timeline[#timeline + 1] = m end
             if not M.hide_system then for _, s in ipairs(M.system_messages) do s.is_system = true; timeline[#timeline + 1] = s end end
             table.sort(timeline, function(a, b)
@@ -1931,7 +2301,10 @@ function M.draw(player)
                             imgui.SetCursorScreenPos(imgui.ImVec2(time_x, ty))
                             imgui.TextColored(is_mine and text_on_out or muted, time)
                         end
-                        if imgui.IsItemHovered() then M.hover_msg_id = message.id end
+						if mouse and mouse.x >= cwp.x + bx and mouse.x <= cwp.x + bx + bubble_w
+							and mouse.y >= y0 and mouse.y <= y0 + bubble_h then
+							M.hover_msg_id = message.id
+						end
                         if has_reacts then
                             local pills = {}
                             local total_w = 0
@@ -2007,7 +2380,8 @@ function M.draw(player)
                     end
                 end
             end
-            if M.auto_scroll then imgui.SetScrollHereY(1.0); M.auto_scroll = false end
+            M._at_bottom = (imgui.GetScrollY() >= imgui.GetScrollMaxY() - 8)
+            if M.auto_scroll then imgui.SetScrollHereY(1.0); M.auto_scroll = false; M._at_bottom = true end
         end
     end
     imgui.EndChild()
@@ -2131,8 +2505,15 @@ function M.draw(player)
                         local dev_label = (dev == 'MOBILE') and T('мобильное устройство') or ((dev == 'PC') and T('ПК') or dev)
                         lines[#lines + 1] = T('Устройство: ') .. dev_label
                     end
-                    local frac = M.user_fractions[nick] or user.fraction or ''
-                    if frac ~= '' then lines[#lines + 1] = T('Фракция: ') .. frac end
+					local frac = M.user_fractions[nick] or user.fraction or ''
+					if frac ~= '' then lines[#lines + 1] = T('Фракция: ') .. frac end
+					local ban_left = M.restriction_left(nick, 'ban')
+					local mute_left = M.restriction_left(nick, 'mute')
+					if is_banned and ban_left > 0 then
+						lines[#lines + 1] = T('Блокировка: ') .. M.format_remaining(ban_left)
+					elseif mute_left > 0 then
+						lines[#lines + 1] = T('Мут: ') .. M.format_remaining(mute_left)
+					end
                     if #lines > 0 then imgui.SetTooltip(table.concat(lines, '\n')) end
                 end
                 imgui.SameLine(0, 0)
@@ -2214,12 +2595,12 @@ function M.draw(player)
     if imgui.Button('@##mention_btn', imgui.ImVec2(btn_size, btn_size)) then imgui.OpenPopup('##mention_popup') end
     imgui.PopStyleColor(3)
     if imgui.BeginPopup('##mention_popup') then
-        local is_cross_server = (tostring(M.get_server()) == '900')
+        imgui.TextColored(muted, T('Личные упоминания: @ID или @Nickname'))
+        local is_cross_server = M.is_cross()
         if is_cross_server then
             imgui.TextColored(red, (fa.BAN or '') .. T(' Упоминания групп запрещены в межпроектном чате'))
             imgui.TextColored(muted, T('Используйте только эмодзи и личные упоминания (@ник)'))
         else
-            imgui.Text(T('Упомянуть группу:'))
             imgui.Separator()
             if not M.is_admin() then
                 local elapsed = os.time() - (M.last_group_mention_at or 0)
@@ -2261,30 +2642,41 @@ function M.draw(player)
     imgui.End()
 end
 
-function M.return_home()
-    M.set_server(0)
+local function enter_room(lobby)
+	M.admin_lobby = lobby
+	M.messages, M.system_messages = {}, {}
+	M.last_id, M.last_system_id = 0, 0
+	M.session = ''
+	M.pending_initial_sync = true
+	M.msg_reactions, M.pinned = {}, nil
+	M.all_users, M.online_any, M.users = {}, {}, {}
+	M._users_rev = (M._users_rev or 0) + 1
+	M.last_fetch_users, M.last_fetch_crowns = 0, 0
+	M.heartbeat()
+	if M.chat_open then
+		M.fetch_user_directory(true)
+		M.fetch_crowns()
+	end
 end
+
+function M.return_home()
+	enter_room(nil)
+end
+
 function M.set_server(value)
-    local str_val = tostring(value)
-    local is_cross = (str_val == '00' or str_val == 'Межпроектный')
-    local is_reset = (str_val == '0' or str_val == '')
-    if is_reset then
-        M.admin_lobby = nil; M.messages = {}; M.system_messages = {}; M.last_id = 0; M.last_system_id = 0
-        M.session = ''
-        M.pending_initial_sync = true
-        M.msg_reactions, M.pinned = {}, nil
-        M.heartbeat()
-        return
-    end
-    if not is_cross and not M.is_admin() then M.print('Другие серверы доступны только администраторам.'); return end
-    local server_num = tonumber(str_val) or 0
-    if not is_cross and (server_num < 1 or server_num > 1000) then return end
-    local server_label = is_cross and '00' or (server_num < 10 and string.format('0%d', server_num) or tostring(server_num))
-    M.admin_lobby = server_label; M.messages = {}; M.system_messages = {}; M.last_id = 0; M.last_system_id = 0
-    M.session = ''
-    M.pending_initial_sync = true
-    M.msg_reactions, M.pinned = {}, nil
-    M.heartbeat()
+	local str_val = tostring(value)
+	if str_val == '0' or str_val == '' then
+		enter_room(nil)
+		return
+	end
+	local cross = (str_val == '00' or str_val == 'Межпроектный')
+	if not cross and not M.is_admin() then
+		M.print('Другие серверы доступны только администраторам.')
+		return
+	end
+	local num = tonumber(str_val) or 0
+	if not cross and (num < 1 or num > 1000) then return end
+	enter_room(cross and '00' or (num < 10 and string.format('0%d', num) or tostring(num)))
 end
 
 function M.print(text)
@@ -2297,30 +2689,45 @@ end
 
 function M.init(opts)
     M.ctx = opts or {}
+    local ctx_opts = M.ctx
     if M.admin and type(M.admin.init) == 'function' then
-        local admin_inited = pcall(M.admin.init, { config_dir = opts.config_dir or '', chat_prefix = opts.chat_prefix, message_color = opts.message_color, decodeJson = opts.decodeJson, encodeJson = opts.encodeJson, asyncHttpRequest = opts.asyncHttpRequest, base_url = M.base_url, hwid = M.hwid })
+        local admin_inited = pcall(M.admin.init, { 
+            config_dir = ctx_opts.config_dir or '', 
+            chat_prefix = ctx_opts.chat_prefix, 
+            message_color = ctx_opts.message_color, 
+            decodeJson = ctx_opts.decodeJson, 
+            encodeJson = ctx_opts.encodeJson, 
+            asyncHttpRequest = ctx_opts.asyncHttpRequest, 
+            backup_file_for = ctx_opts.backup_file_for, 
+            ensure_backup_dir = ctx_opts.ensure_backup_dir, 
+            copy_file = ctx_opts.copy_file, 
+            backups_enabled = ctx_opts.backups_enabled, 
+        })
         if not admin_inited then M.admin = nil end
     end
-    M.disabled = opts.disabled == true
+    M.disabled = ctx_opts.disabled == true
     local config = read_config()
     M.base_url = M.default_url
-    M.server = tonumber(opts.server or config.server or 1) or 1
+    M.server = tonumber(ctx_opts.server or config.server or 1) or 1
     M.hwid = tostring(config.hwid or '')
     M.last_id = tonumber(config.last_id) or 0
     M.last_system_id = tonumber(config.last_system_id) or 0
-    M.last_cleared_at = tostring(config.last_cleared_at or '')
     M.hide_system = config.hide_system == true
     M.show_avatars = config.show_avatars ~= false
     M.chat_crowns = config.chat_crowns ~= false
+	M.chat_nick_color = tostring(config.chat_nick_color or '{FFD700}')
+	M.cleared_rooms = type(config.cleared_rooms) == 'table' and config.cleared_rooms or {}
     M.avatar_mode = config.avatar_mode or 'letters'
     M.avatar_icon = config.avatar_icon or 'FACE_SMILE'
     M.avatar_outline = tonumber(config.avatar_outline) or 1
     M.avatar_bg = type(config.avatar_bg) == 'table' and config.avatar_bg or nil
     M.avatar_fg = type(config.avatar_fg) == 'table' and config.avatar_fg or nil
-    if M.hwid == '' and not M.disabled then M.hwid = make_hwid() end
+	if M.hwid == '' and not M.disabled then
+		M.hwid = make_hwid()
+	end
     M.enabled = (not M.disabled) and M.base_url ~= ''
-    if opts.enabled ~= nil then M.enabled = opts.enabled == true and M.base_url ~= '' end
-    M.save_config()
+    if ctx_opts.enabled ~= nil then M.enabled = ctx_opts.enabled == true and M.base_url ~= '' end
+	M.save_config(M._cfg_need_write == true)
     if ctx().imgui then
         M.window = ctx().imgui.new.bool(false)
         M.input = ctx().imgui.new.char[4096]('')
