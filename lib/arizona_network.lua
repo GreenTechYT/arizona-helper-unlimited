@@ -5,7 +5,7 @@ M.ctx = nil
 M.base_url = ''
 M.default_url = 'https://my-helper-api.greentechyt-helper.workers.dev'
 M.enabled = false
-M.server = 1
+M.server = 0
 M.nick = ''
 M.hwid = ''
 M.users = {}
@@ -163,7 +163,8 @@ local function notice(text, kind)
 end
 
 local REACT_ICONS = { 'HEART', 'THUMBS_UP', 'THUMBS_DOWN', 'FACE_LAUGH', 'FIRE', 'STAR' }
-local AVATAR_ICONS = { 'FACE_SMILE', 'FACE_GRIN', 'STAR', 'CROWN', 'HEART', 'FIRE', 'ROCKET', 'SKULL', 'GHOST', 'TROPHY' }
+local AVATAR_ICONS = { 'FACE_SMILE', 'FACE_GRIN', 'STAR', 'CROWN', 'HEART', 'FIRE', 'ROCKET', 'SKULL', 'GHOST', 'TROPHY', 'THUMBS_UP', 'LIGHTBULB', 'BOMB', 'GIFT' }
+M.AVATAR_ICONS = AVATAR_ICONS
 M.user_avatars = M.user_avatars or {}
 local AVATAR_ICON_SET = {}
 for _, k in ipairs(AVATAR_ICONS) do AVATAR_ICON_SET[k] = true end
@@ -189,7 +190,7 @@ local function norm_avatar(mode, icon, bg, fg, outline)
     local ic = tostring(icon or '')
     if not AVATAR_ICON_SET[ic] then ic = 'FACE_SMILE' end
     local o = tonumber(outline) or 0
-    o = math.max(0, math.min(3, math.floor(o)))
+    o = math.max(0, math.min(3, o))
     return m, ic, norm_color3(bg), norm_color3(fg), o
 end
 
@@ -342,7 +343,7 @@ end
 M.pinned = nil
 M.avatar_mode = M.avatar_mode or 'letters'
 M.avatar_icon = M.avatar_icon or 'FACE_SMILE'
-M.avatar_outline = M.avatar_outline or 1
+M.avatar_outline = M.avatar_outline or 1.0
 
 local SU8_CACHE = {}
 su8 = function(v)
@@ -457,7 +458,7 @@ end
 
 local NET_CFG_VERSION = 1
 local NET_DEFAULTS = {
-	server = 1,
+	server = 0,
 	hwid = '',
 	chat_crowns = true,
 	chat_nick_color = '{FFD700}',
@@ -468,7 +469,7 @@ local NET_DEFAULTS = {
 	cleared_rooms = {},
 	avatar_mode = 'letters',
 	avatar_icon = 'FACE_SMILE',
-	avatar_outline = 1,
+	avatar_outline = 1.0,
 }
 
 local NET_REMOVED = {
@@ -758,6 +759,14 @@ function M.get_server()
 	return detect_server()
 end
 
+function M.status()
+	if M.disabled then return 'disabled' end
+	if not M.enabled then return 'unavailable' end
+	if M.online and M.session ~= '' then return 'online' end
+	if M.session ~= '' then return 'stale' end
+	return 'offline'
+end
+
 function M.is_cross()
 	return tostring(M.get_server()) == '900'
 end
@@ -960,50 +969,40 @@ end
 function M.fetch_users()
     if not M.enabled then return end
     if os.time() - M.last_fetch_users < 5 then return end
-    M.last_fetch_users = os.time()
-    
+    M.last_fetch_users = os.time()   
     http('GET', '/users?server=' .. tostring(M.get_server()), nil, function(data)
         if type(data) ~= 'table' then return end
-        M.users, M.crown_users, M.admin_users = {}, {}, {}
-        for _, u in ipairs(M.all_users) do u.online = false end
+        if data.error then return end
+        M.users, M.all_users, M.online_any = {}, {}, {}
         for _, item in ipairs(data.users or {}) do
-            local nick = type(item) == 'table' and item.nick or item
-            if type(nick) == 'string' then
-                local online = type(item) == 'table' and (item.online == 1 or item.online == true) or false
-                local since = type(item) == 'table' and tostring(item.first_seen or '') or ''
-                local is_admin_user = type(item) == 'table' and (item.admin == 1 or item.admin == true) or false
-                local user_srv = norm_server(type(item) == 'table' and (item.home or item.server) or nil)
+            if type(item) == 'table' and type(item.nick) == 'string' then
+                local nick = item.nick
+                local online = (item.online == 1 or item.online == true)
+                local is_admin_user = (item.admin == 1 or item.admin == true)
+                local user_srv = norm_server(item.home or item.server)
+                local user_dev = tostring(item.device or '')
+                local user_frac = M.to_utf8(tostring(item.fraction_tag or item.mode or ''))               
                 if user_srv ~= '' then M.user_servers[nick] = user_srv end
-                local user_dev = type(item) == 'table' and tostring(item.device or '') or ''
-                local user_frac = M.to_utf8(type(item) == 'table' and tostring(item.fraction_tag or item.mode or '') or '')
                 if user_dev ~= '' then M.user_devices[nick] = user_dev end
-                if user_frac ~= '' then M.user_fractions[nick] = user_frac end
-                store_user_avatar(nick, item)
-                M.crown_users[nick] = true
-                local banned_flag = type(item) == 'table' and (item.banned == 1 or item.banned == true) or false
-                local mute_until = type(item) == 'table' and tostring(item.mute_until or '') or ''
-                local ban_until = type(item) == 'table' and tostring(item.ban_until or '') or ''
+                if user_frac ~= '' then M.user_fractions[nick] = user_frac end               
+                store_user_avatar(nick, item)             
+                local banned_flag = (item.banned == 1 or item.banned == true)
                 if banned_flag then M.banned_users[nick] = true else M.banned_users[nick] = nil end
-                M.mute_until[nick] = mute_until ~= '' and parse_iso_time(mute_until) or 0
-                M.ban_until[nick] = ban_until ~= '' and parse_iso_time(ban_until) or 0
-                if is_admin_user then M.admin_users[nick] = true end
+                M.mute_until[nick] = item.mute_until and parse_iso_time(item.mute_until) or 0
+                M.ban_until[nick] = item.ban_until and parse_iso_time(item.ban_until) or 0               
                 if online then
                     M.users[nick] = true
-                    local found = false
-                    for _, u in ipairs(M.all_users) do
-                        if u.nick == nick then
-                            u.online, u.admin, u.server, u.device, u.fraction = true, is_admin_user, user_srv, user_dev, user_frac
-                            found = true; break
-                        end
-                    end
-                    if not found then
-                        table.insert(M.all_users, { nick = nick, first_seen = since, last_seen = type(item) == 'table' and tostring(item.last_seen or '') or '', online = true, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac })
-                    end 
-                end
+                    M.online_any[nick] = true
+                end             
+                table.insert(M.all_users, {
+                    nick = nick, first_seen = tostring(item.first_seen or ''), last_seen = tostring(item.last_seen or ''),
+                    online = online, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac
+                })
             end
         end
         M._users_rev = (M._users_rev or 0) + 1
         if ctx().module and ctx().module.HelperUsers then ctx().module.HelperUsers.list = M.users end
+        if not M._fetch_users_silent then M.show_users = true end
     end, function(err) M.last_error = tostring(err or '') end)
 end
 
@@ -1011,19 +1010,23 @@ function M.fetch_crowns()
     if not M.enabled then return end
     if os.time() - M.last_fetch_crowns < 5 then return end
     M.last_fetch_crowns = os.time()
-    
-    http('GET', '/crowns?server=' .. tostring(M.get_server()), nil, function(data)
+    local requested_server = tostring(M.get_server())
+    http('GET', '/crowns?server=' .. requested_server, nil, function(data)
         if type(data) ~= 'table' then return end
+        if data.error then return end
+        if requested_server ~= tostring(M.get_server()) then return end
         local crowns, admins = {}, {}
+        local has_entries = false
         for _, item in ipairs(data.users or {}) do
             local nick = type(item) == 'table' and item.nick or nil
             if type(nick) == 'string' then
+                has_entries = true
                 crowns[nick] = true
                 store_user_avatar(nick, item)
                 if item.admin == 1 or item.admin == true then admins[nick] = true end
                 if item.banned == 1 or item.banned == true then M.banned_users[nick] = true else M.banned_users[nick] = nil end
                 M.mute_until[nick] = item.mute_until and parse_iso_time(item.mute_until) or 0
-                M.ban_until[nick] = item.ban_until and parse_iso_time(item.ban_until) or 0
+                M.ban_until[nick]  = item.ban_until  and parse_iso_time(item.ban_until)  or 0
                 local cs = norm_server(item.home or item.server)
                 if cs ~= '' then M.user_servers[nick] = cs end
                 if item.device and tostring(item.device) ~= '' then M.user_devices[nick] = tostring(item.device) end
@@ -1031,38 +1034,11 @@ function M.fetch_crowns()
                 if frac_tag ~= '' then M.user_fractions[nick] = frac_tag end
             end
         end
-        M.crown_users, M.admin_users = crowns, admins
-        M._users_rev = (M._users_rev or 0) + 1
-    end, function(err) M.last_error = tostring(err or '') end)
-end
-
-function M.fetch_user_directory(silent)
-    if not M.enabled then return false end
-    http('GET', '/users?server=' .. tostring(M.get_server()), nil, function(data)
-        if type(data) ~= 'table' then return end
-        M.all_users, M.online_any = {}, {}
-        for _, item in ipairs(data.users or {}) do
-            if type(item) == 'table' and type(item.nick) == 'string' then
-                store_user_avatar(item.nick, item)
-                local is_admin_user = (item.admin == 1 or item.admin == true)
-                local is_online = (item.online == 1 or item.online == true)
-                local user_srv = norm_server(item.home or item.server)
-                if user_srv ~= '' then M.user_servers[item.nick] = user_srv end
-                local user_dev = tostring(item.device or '')
-                local user_frac = M.to_utf8(tostring(item.fraction_tag or item.mode or ''))
-                if user_dev ~= '' then M.user_devices[item.nick] = user_dev end
-                if user_frac ~= '' then M.user_fractions[item.nick] = user_frac end
-                if is_online then M.online_any[item.nick] = true end
-                table.insert(M.all_users, { nick = item.nick, first_seen = tostring(item.first_seen or ''), last_seen = tostring(item.last_seen or ''), online = is_online, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac })
-                if is_admin_user then M.admin_users[item.nick] = true end
-            end
+        if has_entries then
+            M.crown_users, M.admin_users = crowns, admins
         end
         M._users_rev = (M._users_rev or 0) + 1
-        if not silent then M.show_users = true end
-    end, function(err)
-        M.last_error = tostring(err or '')
-    end)
-    return true
+    end, function(err) M.last_error = tostring(err or '') end)
 end
 
 function M.add_system(data)
@@ -1103,18 +1079,60 @@ function M.add_system(data)
     while #M.system_messages > 100 do table.remove(M.system_messages, 1) end
 end
 
-function M.news_likes(key, callback)
-    if not M.enabled or M.hwid == '' then return end
-    http('POST', '/news/likes', { key = key, hwid = M.hwid }, function(data)
-        if type(callback) == 'function' then pcall(callback, data) end
-    end, function(err) M.last_error = tostring(err or '') end)
+local function normalize_news_response(data)
+    if type(data) ~= 'table' then return { error = 'invalid_response' } end
+    if data.error then return data end
+    local result = {
+        likes = tonumber(data.likes) or 0,
+        dislikes = tonumber(data.dislikes) or 0,
+        vote = 'none'
+    }
+    if type(data.my_vote) == 'string' then
+        result.vote = data.my_vote
+    elseif type(data.vote) == 'number' then
+        if data.vote == 1 then result.vote = 'like'
+        elseif data.vote == -1 then result.vote = 'dislike'
+        else result.vote = 'none' end
+    elseif type(data.vote) == 'string' then
+        result.vote = data.vote
+    end
+    return result
 end
 
-function M.vote_news(key, vote, callback)
-    if not M.enabled or M.hwid == '' then return end
+function M.news_likes(key, callback, _retry)
+    if not M.enabled or M.hwid == '' then
+        if type(callback) == 'function' then pcall(callback, { error = 'disabled' }) end
+        return
+    end
+    http('POST', '/news/likes', { key = key, hwid = M.hwid }, function(data)
+        if type(data) == 'table' and (data.error == 'unauthorized' or data.error == 'rate_limit' or data.error == 'rate_limit_global') and not _retry then
+            if data.error == 'unauthorized' then M.heartbeat() end
+            table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() M.news_likes(key, callback, true) end })
+            return
+        end
+        if type(callback) == 'function' then pcall(callback, normalize_news_response(data)) end
+    end, function(err)
+        M.last_error = tostring(err or '')
+        if type(callback) == 'function' then pcall(callback, { error = 'network_error' }) end
+    end, M.session_headers(), true)
+end
+
+function M.vote_news(key, vote, callback, _retry)
+    if not M.enabled or M.hwid == '' then
+        if type(callback) == 'function' then pcall(callback, { error = 'disabled' }) end
+        return
+    end
     http('POST', '/news/like', { key = key, hwid = M.hwid, vote = vote or 'none' }, function(data)
-        if type(callback) == 'function' then pcall(callback, data) end
-    end, function(err) M.last_error = tostring(err or '') end)
+        if type(data) == 'table' and (data.error == 'unauthorized' or data.error == 'rate_limit' or data.error == 'rate_limit_global') and not _retry then
+            if data.error == 'unauthorized' then M.heartbeat() end
+            table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() M.vote_news(key, vote, callback, true) end })
+            return
+        end
+        if type(callback) == 'function' then pcall(callback, normalize_news_response(data)) end
+    end, function(err)
+        M.last_error = tostring(err or '')
+        if type(callback) == 'function' then pcall(callback, { error = 'network_error' }) end
+    end, M.session_headers(), true)
 end
 
 function M.current_account()
@@ -1169,15 +1187,15 @@ function M.heartbeat()
     M.nick = nick
     local pdata = M.player_data()
     local heartbeat_priority = M.pending_initial_sync == true
+    local av_m, av_i, av_b, av_f, av_o = M.my_avatar()
     http('POST', '/heartbeat', {
         nick = nick,
         hwid = M.hwid,
-        avatar_mode = (function() local m, i, b, f, o = M.my_avatar()
-            M._av_m, M._av_i, M._av_b, M._av_f, M._av_o = m, i, b, f, o return m end)(),
-        avatar_icon = M._av_i,
-        avatar_bg = M._av_b and table.concat(M._av_b, ',') or '',
-        avatar_fg = M._av_f and table.concat(M._av_f, ',') or '',
-        avatar_outline = M._av_o,
+        avatar_mode = av_m,
+        avatar_icon = av_i,
+        avatar_bg = av_b and table.concat(av_b, ',') or '',
+        avatar_fg = av_f and table.concat(av_f, ',') or '',
+        avatar_outline = av_o,
         server = M.get_home_server(),
         home = M.get_home_server(),
         version = ctx().version or '1.8.0',
@@ -1527,7 +1545,7 @@ function M.start_loop()
                     last_sync = now
                 end
                 if now - last_users >= M.USERS_INTERVAL then
-                    M.fetch_user_directory(true)
+                    M._fetch_users_silent = true
                     M.fetch_users()
                     last_users = now
                 end
@@ -1573,25 +1591,11 @@ function M.stop()
 	M.mute_until, M.ban_until = {}, {}
 	M._users_rev = (M._users_rev or 0) + 1
     M.network_tasks = {}
-    M.polling, M.pending_initial_sync = false, false
-    M.session = ''
+	M.polling, M.pending_initial_sync = false, false
+	M.online = false
+	M.session = ''
     M.msg_reactions, M.pinned = {}, nil
     M.save_config(true)
-end
-
-function M.admin_request(method, path, body, headers, on_ok, on_error)
-	table.insert(M.network_tasks, {
-		method = method, path = path, body = body,
-		on_ok = on_ok, on_error = on_error, headers = headers,
-		auto_session = true,
-		priority = true,
-	})
-    return true
-end
-
-function M.is_admin_sender(nick)
-    local value = tostring(nick or '')
-    return M.admin_users[value] == true or (value ~= '' and value == M.get_nick() and M.is_admin())
 end
 
 function M.is_admin()
@@ -1611,18 +1615,13 @@ function M.revoke_admin(nick) if M.admin and type(M.admin.revoke) == 'function' 
 function M.is_user(nick)
     if type(nick) ~= 'string' then return false end
     local clean = nick:gsub('^%s+', ''):gsub('%s+$', '')
-    return M.crown_users[clean] == true or M.users[clean] == true or M.admin_users[clean] == true
+    return M.crown_users[clean] == true or M.admin_users[clean] == true
 end
 
 function M.is_banned_user(nick)
 	if type(nick) ~= 'string' then return false end
 	local clean = nick:gsub('{%x%x%x%x%x%x}', ''):gsub('^%s+', ''):gsub('%s+$', '')
 	return M.banned_users[clean] == true
-end
-
-function M.remaining_seconds(until_ts)
-	local left = (tonumber(until_ts) or 0) - os.time()
-	return left > 0 and left or 0
 end
 
 function M.start_for_ui()
@@ -1707,12 +1706,14 @@ function M.toggle()
         else
             M.poll(true)
         end
+        M._fetch_users_silent = true
         M.fetch_users()
         M.fetch_crowns()
     else
         M.pending_initial_sync = false
     end
 end
+
 local function message_time(timestamp)
     local key = tostring(timestamp or '')
     M._time_cache = M._time_cache or {}
@@ -1750,7 +1751,11 @@ local function since_text(value)
     return ''
 end
 
-function M.load_users() M.show_users = true; M.fetch_user_directory() end
+function M.load_users()
+    M.show_users = true
+    M._fetch_users_silent = false
+    M.fetch_users()
+end
 
 function M.insert_mention(nick)
 	if not M.input then
@@ -1877,42 +1882,80 @@ function M.draw(player)
             for i, s in ipairs(servers_list) do if tostring(s.number) == cur_num then M.server_pick_combo_idx[0] = i - 1; break end end
         end
     end
-    if imgui.IsItemHovered() then imgui.SetTooltip(T('Настройки мессенджера')) end
+    if imgui.IsItemHovered() then imgui.SetTooltip(T('Выбор сервера')) end
     imgui.PopStyleColor(3)
     pcall(function()
         dl:AddLine(imgui.ImVec2(wp.x, hp.y + header_h), imgui.ImVec2(wp.x + ws.x, hp.y + header_h), imgui.GetColorU32Vec4(line_col), 1)
     end)
     imgui.SetCursorPosY(hp.y - wp.y + header_h + 6 * dpi)
-
     if M.server_pick_open then M.server_pick_open = false; imgui.OpenPopup('##ahm_server_pick') end
     imgui.SetNextWindowPos(imgui.ImVec2(wp.x + ws.x * 0.5, wp.y + ws.y * 0.40), imgui.Cond.Always, imgui.ImVec2(0.5, 0.5))
+    imgui.SetNextWindowSize(imgui.ImVec2(320 * dpi, 0), imgui.Cond.Always)
+
+    local function srv_solid(idx, fb)
+        local col = st.Colors[idx]
+        if col and (col.x + col.y + col.z) > 0 then return imgui.ImVec4(col.x, col.y, col.z, 1) end
+        return fb
+    end
+    local srv_pal = {
+        { imgui.Col.PopupBg,        srv_solid(imgui.Col.PopupBg,        light and imgui.ImVec4(0.96, 0.96, 0.97, 1) or imgui.ImVec4(0.10, 0.10, 0.12, 1)) },
+        { imgui.Col.Border,         srv_solid(imgui.Col.Border,         light and imgui.ImVec4(0.72, 0.72, 0.75, 1) or imgui.ImVec4(0.28, 0.28, 0.31, 1)) },
+        { imgui.Col.Text,           srv_solid(imgui.Col.Text,           light and imgui.ImVec4(0.10, 0.10, 0.12, 1) or imgui.ImVec4(0.94, 0.94, 0.96, 1)) },
+        { imgui.Col.TextDisabled,   srv_solid(imgui.Col.TextDisabled,   muted) },
+        { imgui.Col.FrameBg,        srv_solid(imgui.Col.FrameBg,        light and imgui.ImVec4(0.88, 0.88, 0.90, 1) or imgui.ImVec4(0.16, 0.16, 0.19, 1)) },
+        { imgui.Col.FrameBgHovered, srv_solid(imgui.Col.FrameBgHovered, light and imgui.ImVec4(0.82, 0.82, 0.85, 1) or imgui.ImVec4(0.22, 0.22, 0.26, 1)) },
+        { imgui.Col.FrameBgActive,  srv_solid(imgui.Col.FrameBgActive,  light and imgui.ImVec4(0.78, 0.78, 0.82, 1) or imgui.ImVec4(0.26, 0.26, 0.30, 1)) },
+        { imgui.Col.Button,         srv_solid(imgui.Col.Button,         light and imgui.ImVec4(0.85, 0.85, 0.88, 1) or imgui.ImVec4(0.18, 0.18, 0.21, 1)) },
+        { imgui.Col.ButtonHovered,  srv_solid(imgui.Col.ButtonHovered,  light and imgui.ImVec4(0.78, 0.78, 0.82, 1) or imgui.ImVec4(0.25, 0.25, 0.29, 1)) },
+        { imgui.Col.ButtonActive,   srv_solid(imgui.Col.ButtonActive,   light and imgui.ImVec4(0.70, 0.70, 0.75, 1) or imgui.ImVec4(0.32, 0.32, 0.37, 1)) },
+        { imgui.Col.Header,         srv_solid(imgui.Col.Header,         light and imgui.ImVec4(0.85, 0.85, 0.88, 1) or imgui.ImVec4(0.18, 0.18, 0.21, 1)) },
+        { imgui.Col.HeaderHovered,  srv_solid(imgui.Col.HeaderHovered,  light and imgui.ImVec4(0.78, 0.78, 0.82, 1) or imgui.ImVec4(0.25, 0.25, 0.29, 1)) },
+        { imgui.Col.HeaderActive,   srv_solid(imgui.Col.HeaderActive,   light and imgui.ImVec4(0.70, 0.70, 0.75, 1) or imgui.ImVec4(0.32, 0.32, 0.37, 1)) },
+    }
+    for i = 1, #srv_pal do imgui.PushStyleColor(srv_pal[i][1], srv_pal[i][2]) end
     if imgui.BeginPopup('##ahm_server_pick') then
         local pdl = imgui.GetWindowDrawList()
-        local pw = 320 * dpi
-        local row_h = frame_h
-        local function section(icon, title)
-            imgui.Spacing()
-            imgui.TextColored(muted, (icon ~= '' and (icon .. ' ') or '') .. title:upper())
-            pcall(function()
-                local mx = imgui.GetItemRectMax()
-                local mn = imgui.GetItemRectMin()
-                pdl:AddLine(imgui.ImVec2(mx.x + 6 * dpi, (mn.y + mx.y) * 0.5), imgui.ImVec2(mx.x + 6 * dpi + (pw - (mx.x - mn.x) - 6 * dpi), (mn.y + mx.y) * 0.5), imgui.GetColorU32Vec4(line_col), 1)
-            end)
+        local pwp = imgui.GetWindowPos()
+        local pww = imgui.GetWindowWidth()
+        local inner_w = pww - 2 * st.WindowPadding.x
+        local row_h = frame_h + 2 * dpi
+        if isKeyJustPressed(27) and not IS_MOBILE then imgui.CloseCurrentPopup() end
+
+        local head_h = frame_h + 8 * dpi
+        pcall(function()
+            pdl:AddRectFilled(imgui.ImVec2(pwp.x + 1, pwp.y + 1), imgui.ImVec2(pwp.x + pww - 1, pwp.y + head_h),
+                imgui.GetColorU32Vec4(light and imgui.ImVec4(0, 0, 0, 0.05) or imgui.ImVec4(1, 1, 1, 0.06)), st.PopupRounding, 3)
+            pdl:AddLine(imgui.ImVec2(pwp.x + 1, pwp.y + head_h), imgui.ImVec2(pwp.x + pww - 1, pwp.y + head_h),
+                imgui.GetColorU32Vec4(line_col), 1)
+        end)
+        imgui.AlignTextToFramePadding()
+        imgui.TextColored(yellow, (fa.GLOBE or fa.SERVER or '') .. T(' Выбор сервера'))
+        local xs = frame_h - 2 * dpi
+        imgui.SameLine(0, 0)
+        imgui.SetCursorPosX(pww - xs - st.WindowPadding.x)
+        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0, 0, 0, 0))
+        imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(red.x, red.y, red.z, 0.35))
+        imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(red.x, red.y, red.z, 0.55))
+        if imgui.Button((fa.XMARK or fa.CIRCLE_XMARK or 'X') .. '##ahm_srv_close', imgui.ImVec2(xs, xs)) then
+            imgui.CloseCurrentPopup()
         end
-        local function row_label(icon, label)
-            imgui.AlignTextToFramePadding()
-            imgui.Text((icon ~= '' and (icon .. ' ') or '') .. label)
+        imgui.PopStyleColor(3)
+        imgui.SetCursorPosY(head_h + 6 * dpi)
+        imgui.PushStyleColor(imgui.Col.ChildBg, light and imgui.ImVec4(0, 0, 0, 0.04) or imgui.ImVec4(1, 1, 1, 0.05))
+        if imgui.BeginChild('##srv_current', imgui.ImVec2(-1, 44 * dpi), true) then
+            imgui.TextColored(muted, (fa.SERVER or '') .. T(' Текущий сервер'))
+            imgui.TextColored(green, T(active_server))
+            imgui.SameLine()
+            if header_server ~= '' and header_server ~= active_server then
+                imgui.TextColored(muted, T('· ' .. header_server))
+            else
+                imgui.TextColored(muted, T('· домашний'))
+            end
+            imgui.EndChild()
         end
-        local function right_x(w)
-            imgui.SameLine(0, 0)
-            imgui.SetCursorPosX(pw - w)
-        end
-        imgui.TextColored(yellow, (fa.GEAR or '') .. T(' Настройки мессенджера'))
-        imgui.Separator()
-        section(fa.GLOBE or '', T('Сервер'))
-        row_label(fa.SERVER or '', T('Текущий:'))
-        imgui.SameLine()
-        imgui.TextColored(green, T(active_server .. (header_server ~= '' and (' (' .. header_server .. ')') or '')))
+        imgui.PopStyleColor()
+        imgui.Spacing()
+
         if M.is_admin() then
             local servers_list = {}
             if M.ctx and type(M.ctx.get_servers) == 'function' then
@@ -1929,17 +1972,22 @@ function M.draw(player)
                     M.server_combo_count = #servers_list
                     if not M.server_pick_combo_idx then M.server_pick_combo_idx = imgui.new.int(0) end
                 end
-                row_label(fa.RIGHT_LEFT or fa.GLOBE or '', T('Лобби:'))
-                right_x(pw * 0.60)
-                imgui.PushItemWidth(pw * 0.60)
+                imgui.TextColored(muted, T('Комната чата:'))
+                imgui.PushItemWidth(-1)
                 imgui.Combo('##ahm_server_combo', M.server_pick_combo_idx, M.server_combo_items, #servers_list)
                 imgui.PopItemWidth()
                 local selected = servers_list[M.server_pick_combo_idx[0] + 1]
-                local bw2 = (pw - st.ItemSpacing.x) / 2
-                if imgui.Button((fa.FOLDER_OPEN or '') .. ' ' .. T('Подключить'), imgui.ImVec2(bw2, row_h)) then
+                imgui.Spacing()
+                local bw2 = (inner_w - st.ItemSpacing.x) / 2
+                imgui.PushStyleColor(imgui.Col.Button, accent)
+                imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(math.min(1, accent.x * 1.15), math.min(1, accent.y * 1.15), math.min(1, accent.z * 1.15), 1))
+                imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(accent.x * 0.85, accent.y * 0.85, accent.z * 0.85, 1))
+                imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1, 1, 1, 1))
+                if imgui.Button((fa.PLUG or fa.FOLDER_OPEN or '') .. ' ' .. T('Подключить'), imgui.ImVec2(bw2, row_h)) then
                     if selected then M.set_server(selected.number) end
                     imgui.CloseCurrentPopup()
                 end
+                imgui.PopStyleColor(4)
                 imgui.SameLine()
                 if imgui.Button((fa.ARROW_LEFT or fa.ROTATE_LEFT or '') .. ' ' .. T('Назад'), imgui.ImVec2(bw2, row_h)) then
                     if M.admin_lobby then M.return_home() end
@@ -1947,110 +1995,34 @@ function M.draw(player)
                 end
             end
         else
+            imgui.PushStyleColor(imgui.Col.Button, accent)
+            imgui.PushStyleColor(imgui.Col.ButtonHovered, imgui.ImVec4(math.min(1, accent.x * 1.15), math.min(1, accent.y * 1.15), math.min(1, accent.z * 1.15), 1))
+            imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(accent.x * 0.85, accent.y * 0.85, accent.z * 0.85, 1))
+            imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1, 1, 1, 1))
             if M.admin_lobby ~= '00' then
-                if imgui.Button((fa.GLOBE or '') .. ' ' .. T('В межпроектный'), imgui.ImVec2(pw, row_h)) then M.set_server('00'); imgui.CloseCurrentPopup() end
-            else
-                if imgui.Button((fa.ROTATE_LEFT or '') .. ' ' .. T('На свой сервер'), imgui.ImVec2(pw, row_h)) then M.return_home(); imgui.CloseCurrentPopup() end
-            end
-        end
-        section(fa.CLOCK_ROTATE_LEFT or fa.DOWNLOAD or '', T('История'))
-		if not M.hide_system_cb then M.hide_system_cb = imgui.new.bool(M.hide_system or false) end
-		M.hide_system_cb[0] = (M.hide_system == true)
-        row_label(fa.BELL_SLASH or fa.EYE_SLASH or '', T('Скрывать системные'))
-        right_x(row_h)
-        if imgui.Checkbox('##hide_sys', M.hide_system_cb) then M.hide_system = M.hide_system_cb[0]; M.save_config() end
-        if M.is_admin() then
-            local bw3 = (pw - st.ItemSpacing.x) / 2
-            if imgui.Button((fa.TRASH_CAN or '') .. ' ' .. T('Очистить'), imgui.ImVec2(bw3, row_h)) then M.clear_history(); imgui.CloseCurrentPopup() end
-            imgui.SameLine()
-            if imgui.Button((fa.DOWNLOAD or '') .. ' ' .. T('Загрузить всё'), imgui.ImVec2(bw3, row_h)) then
-                if M.admin and type(M.admin.load_history) == 'function' then M.admin.load_history(M) end
-                imgui.CloseCurrentPopup()
-            end
-        end
-        section(fa.PALETTE or '', T('Внешний вид'))
-        if not M.chat_crowns_cb then M.chat_crowns_cb = imgui.new.bool(M.chat_crowns ~= false) end
-        M.chat_crowns_cb[0] = (M.chat_crowns ~= false)
-        row_label(fa.PALETTE or fa.CROWN or '', T('Золотые ники в чате'))
-        right_x(row_h)
-        if imgui.Checkbox('##chat_crowns', M.chat_crowns_cb) then
-            M.chat_crowns = M.chat_crowns_cb[0]
-            M.save_config(true)
-        end
-		if not M.show_avatars_cb then M.show_avatars_cb = imgui.new.bool(M.show_avatars ~= false) end
-		M.show_avatars_cb[0] = (M.show_avatars ~= false)
-        row_label(fa.COMMENTS or '', T('Пузыри и аватары'))
-        right_x(row_h)
-        if imgui.Checkbox('##av_on', M.show_avatars_cb) then M.show_avatars = M.show_avatars_cb[0]; M.save_config() end
-        if M.show_avatars ~= false then
-            if not M.avatar_mode_buf then M.avatar_mode_buf = imgui.new.int(0) end
-            if not M.avatar_mode_strings then M.avatar_mode_strings = { T('Буквы'), T('Иконка') } end
-            if not M.avatar_mode_items then M.avatar_mode_items = imgui.new['const char*'][2](M.avatar_mode_strings) end
-            M.avatar_mode_buf[0] = (M.avatar_mode == 'icon') and 1 or 0
-            row_label(fa.USER or '', T('Свой аватар'))
-            right_x(pw * 0.45)
-            imgui.PushItemWidth(pw * 0.45)
-            if imgui.Combo('##avmode', M.avatar_mode_buf, M.avatar_mode_items, 2) then
-                M.avatar_mode = (M.avatar_mode_buf[0] == 1) and 'icon' or 'letters'
-                M.save_config()
-            end
-            imgui.PopItemWidth()
-            if M.avatar_mode == 'icon' then
-                local g0 = imgui.GetCursorScreenPos()
-                local cell = 26 * dpi
-                local gapx = 2 * dpi
-                local grid_w = 5 * cell + 4 * gapx
-                local grid_h = 2 * cell + gapx
-                for i, key in ipairs(AVATAR_ICONS) do
-                    if (i - 1) % 5 ~= 0 then imgui.SameLine(0, gapx) end
-                    local sel = (M.avatar_icon == key)
-                    if sel then imgui.PushStyleColor(imgui.Col.Button, accent) end
-                    if imgui.Button((fa[key] or '?') .. '##av_' .. key, imgui.ImVec2(cell, cell)) then
-                        M.avatar_icon = key
-                        M.save_config()
-                    end
-                    if sel then imgui.PopStyleColor() end
+                if imgui.Button((fa.GLOBE or '') .. ' ' .. T('В межпроектный чат'), imgui.ImVec2(-1, row_h)) then
+                    M.set_server('00'); imgui.CloseCurrentPopup()
                 end
-                local pv_d = grid_h
-                local free_w = pw - grid_w
-                local pv_x = g0.x + grid_w + math.max(6 * dpi, (free_w - pv_d) * 0.5)
-                local pv_y = g0.y
-                local pv_bg = M.avatar_bg and imgui.ImVec4(M.avatar_bg[1] / 255, M.avatar_bg[2] / 255, M.avatar_bg[3] / 255, 1) or accent
-                local pv_fg = M.avatar_fg and imgui.ImVec4(M.avatar_fg[1] / 255, M.avatar_fg[2] / 255, M.avatar_fg[3] / 255, 1) or imgui.ImVec4(1, 1, 1, 1)
-                local pv_g = fa[M.avatar_icon or ''] or '?'
-                pcall(function()
-                    pdl:AddCircleFilled(imgui.ImVec2(pv_x + pv_d * 0.5, pv_y + pv_d * 0.5), pv_d * 0.5, imgui.GetColorU32Vec4(pv_bg), 24)
-                end)
-                local pv_gw = imgui.CalcTextSize(pv_g).x
-                draw_glyph_outlined(imgui, pdl, pv_x + pv_d * 0.5 - pv_gw * 0.5, pv_y + pv_d * 0.5 - imgui.GetTextLineHeight() * 0.5, pv_g, imgui.GetColorU32Vec4(pv_fg), math.min(tonumber(M.avatar_outline) or 0, 2))
+            else
+                if imgui.Button((fa.ROTATE_LEFT or '') .. ' ' .. T('На свой сервер'), imgui.ImVec2(-1, row_h)) then
+                    M.return_home(); imgui.CloseCurrentPopup()
+                end
             end
-            M.avatar_bg_buf = M.avatar_bg_buf or imgui.new.float[3](M.avatar_bg and M.avatar_bg[1] / 255 or 0.13, M.avatar_bg and M.avatar_bg[2] / 255 or 0.38, M.avatar_bg and M.avatar_bg[3] / 255 or 0.22)
-            M.avatar_fg_buf = M.avatar_fg_buf or imgui.new.float[3](M.avatar_fg and M.avatar_fg[1] / 255 or 1, M.avatar_fg and M.avatar_fg[2] / 255 or 1, M.avatar_fg and M.avatar_fg[3] / 255 or 1)
-            row_label(fa.FILL_DRIP or '', T('Фон аватара'))
-            right_x(row_h)
-            if imgui.ColorEdit3('##avbg', M.avatar_bg_buf, imgui.ColorEditFlags.NoInputs) then
-                M.avatar_bg = { math.floor(M.avatar_bg_buf[0] * 255 + 0.5), math.floor(M.avatar_bg_buf[1] * 255 + 0.5), math.floor(M.avatar_bg_buf[2] * 255 + 0.5) }
-                M.save_config()
-            end
-            row_label(fa.FONT or '', T('Цвет символа'))
-            right_x(row_h)
-            if imgui.ColorEdit3('##avfg', M.avatar_fg_buf, imgui.ColorEditFlags.NoInputs) then
-                M.avatar_fg = { math.floor(M.avatar_fg_buf[0] * 255 + 0.5), math.floor(M.avatar_fg_buf[1] * 255 + 0.5), math.floor(M.avatar_fg_buf[2] * 255 + 0.5) }
-                M.save_config()
-            end
-            if not M.avatar_outline_buf then M.avatar_outline_buf = imgui.new.int(M.avatar_outline or 1) end
-            row_label(fa.PEN or '', T('Обводка символа'))
-            right_x(pw * 0.45)
-            imgui.PushItemWidth(pw * 0.45)
-            if imgui.SliderInt('##avol', M.avatar_outline_buf, 0, 3) then
-                M.avatar_outline = M.avatar_outline_buf[0]
-                M.save_config()
-            end
-            imgui.PopItemWidth()
+            imgui.PopStyleColor(4)
         end
+
+        imgui.Spacing()
+        imgui.Separator()
+        imgui.PushTextWrapPos(imgui.GetCursorPosX() + inner_w)
+        if M.admin_lobby then
+            imgui.TextColored(muted, T('Вы во временной комнате: после перезапуска мессенджера вернётся домашний сервер.'))
+        else
+            imgui.TextColored(muted, T('Переключение влияет только на чат мессенджера, игровой сервер не меняется.'))
+        end
+        imgui.PopTextWrapPos()
         imgui.EndPopup()
     end
-
+    imgui.PopStyleColor(#srv_pal)
     local input_line_h = imgui.GetTextLineHeight() + st.FramePadding.y * 2
     local current_text = ffi.string(M.input, 4096):match("^[^%z]*") or ""
     local nl = 1
@@ -2654,7 +2626,8 @@ local function enter_room(lobby)
 	M.last_fetch_users, M.last_fetch_crowns = 0, 0
 	M.heartbeat()
 	if M.chat_open then
-		M.fetch_user_directory(true)
+		M._fetch_users_silent = true
+        M.fetch_users()
 		M.fetch_crowns()
 	end
 end
@@ -2731,7 +2704,9 @@ function M.init(opts)
     if ctx().imgui then
         M.window = ctx().imgui.new.bool(false)
         M.input = ctx().imgui.new.char[4096]('')
-        M.admin_mute_buf = ffi.new("int[1]", 15)
+        if ffi_ok then
+            M.admin_mute_buf = ffi.new("int[1]", 15)
+        end
         ctx().imgui.OnFrame(function() return M.window and M.window[0] end, function(player) M.draw(player) end)
     end
     if type(ctx().module) == 'table' then
