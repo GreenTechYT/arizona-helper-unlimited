@@ -1,4 +1,4 @@
--- LIB_VERSION: 1.0
+-- LIB_VERSION: 1.1
 local function setup(ctx)
 	ctx = ctx or {}
 	local u8 = ctx.u8
@@ -127,6 +127,14 @@ local function setup(ctx)
 		end
 		return name
 	end
+	local function apply_rp(tpl, p)
+		local n = select(2, tpl:gsub('%%s', ''))
+		if n == 0 then return tpl end
+		if n == 1 then return tpl:format(p) end
+		local args = {}
+		for i = 1, n do args[i] = p end
+		return tpl:format(unpack(args, 1, n))
+	end
 	local RP_START_LINES = {
 		bodycam_offline = 	'/me загрузил%s в  ѕ  сохранЄнную запись нательной камеры и передал%s фрагмент на опознание по архиву ЁЅ√ќ.',
 		bodycam_online = {
@@ -134,9 +142,9 @@ local function setup(ctx)
 							'/me провед€ пальцем по экрану, выделил%s лицо человека на фрагменте и передал%s его на опознание в ЁЅ√ќ.',
 		},
 		voiced = {
-							'/me выш%s в эфир рации департамента и получил%s запись переговоров.',
-							'/me загрузил%s образец голоса в ЁЅ√ќ и запустил%s идентификацию.',
-		},	
+							'/me использу€ рацию департамента, получил%s запись переговоров.',
+ 			 				'/me загрузил%s образец голоса в ЁЅ√ќ и запустил%s идентификацию.',
+		},
 		voice = 			'/me загрузил%s в ЁЅ√ќ сохранЄнный образец голоса и запустил%s поиск совпадений по базе.',
 		unsu =				'/me запросил%s у диспетчера данные о сн€тии розыска с гражданина и, получив их, запустил%s пробив по базе.',
 		offline = 			'/me вручную ввЄл%s в систему имеющиес€ данные и запросил%s сверку по архиву ЁЅ√ќ.',
@@ -154,9 +162,9 @@ local function setup(ctx)
 		else lines = offline and RP_START_LINES.offline or RP_START_LINES.online end
 		
 		if type(lines) == 'table' then
-			for _, line in ipairs(lines) do MODULE.Edgo.say(line:format(p, p)) end
+			for _, line in ipairs(lines) do MODULE.Edgo.say(apply_rp(line, p)) end
 		else
-			MODULE.Edgo.say(lines:format(p, p))
+			MODULE.Edgo.say(apply_rp(lines, p))
 		end
 	end
 	local function edgo_init_badge(mode, d)
@@ -407,7 +415,7 @@ local function setup(ctx)
 			if hit_rank then
 				b.found = true; b.closing = true
 				sampSendDialogResponse(id, 0, 0, "")
-				local org_for_result = (b.phase == 'members') and "‘Ѕ–" or (b.full_org_name or "...")
+				local org_for_result = (b.phase == 'members') and (modules.player.data.fraction_tag or modules.player.data.fraction or "‘Ѕ–") or  (b.full_org_name or "...")
 				MODULE.Edgo.request_number(b.mode, b.display_name, { phone = "", status = "¬ штате", rank = hit_rank }, org_for_result, b.target_id)
 				return false
 			end
