@@ -46,6 +46,9 @@ M.session = ''
 M.user_servers = {}
 M.user_devices = {}
 M.user_fractions = {}
+M.user_lib_versions = {}
+M.user_use_days = {}
+M.user_first_use_days = {}
 M.online_any = {}
 M.last_fetch_users = 0
 M.last_fetch_crowns = 0
@@ -53,11 +56,11 @@ M.last_poll = 0
 M.last_group_mention_at = 0
 M.MENTION_COOLDOWN = 120
 M.last_send_at = 0
-M.SEND_COOLDOWN = 5
+M.SEND_COOLDOWN = 10
 M.SYNC_INTERVAL = 30
 M.HEARTBEAT_INTERVAL = 90
-M.USERS_INTERVAL = 180
-M.CROWNS_INTERVAL = 180
+M.USERS_INTERVAL = 60
+M.CROWNS_INTERVAL = 60
 M.backoff_until = 0
 M.backoff_sec = 30
 M.show_avatars = true
@@ -67,6 +70,8 @@ M.notices = {}
 M.MAX_INPUT_LINES = 2
 M.network_tasks = {}
 M.cleared_rooms = {}
+M.room_last_ids = {}
+M._pending_heartbeat = false
 
 local admin_ok, admin_mod = pcall(require, 'arizona_admin')
 M.admin = admin_ok and admin_mod or nil
@@ -100,6 +105,7 @@ local SERVER_ERRORS = {
     spam = 'расценено как спам: подождите немного',
     slow_down = 'слишком часто: сбавьте темп',
     rate_limit_global = 'слишком часто: глобальный кулдаун сервера, подождите',
+    admin_nick_protected = 'ник зарезервирован за администратором - используйте свой HWID',
 }
 local function one_line(t)
     local s = tostring(t):gsub('[\r\n]+', '. '):gsub('%.%s*%.', '.'):gsub('%s+', ' ')
@@ -118,6 +124,14 @@ local function is_utf8_string(text)
             i = i + 3
         elseif c >= 0xF0 and c <= 0xF4 then
             if i + 3 > length then return false end
+            local c1 = text:byte(i + 1)
+            local c2 = text:byte(i + 2)
+            local c3 = text:byte(i + 3)
+            if c1 < 0x80 or c1 > 0xBF then return false end
+            if c2 < 0x80 or c2 > 0xBF then return false end
+            if c3 < 0x80 or c3 > 0xBF then return false end
+            if c == 0xF0 and c1 < 0x90 then return false end
+            if c == 0xF4 and c1 > 0x8F then return false end
             i = i + 4
         else return false end
     end
@@ -125,7 +139,7 @@ local function is_utf8_string(text)
 end
 local su8
 local function trim(text) return (tostring(text or ''):gsub('^%s+', ''):gsub('%s+$', '')) end
-local function utf8_cut(s, n) s = tostring(s) if #s <= n then return s end local cut = s:sub(1, n) return cut:gsub('[\128-\191]+$', '') end
+local function utf8_cut(s, n) s = tostring(s) if #s <= n then return s end local cut = s:sub(1, n) return cut:gsub('[\192-\255][\128-\191]*$', '') end
 function M.to_utf8(text)
     local value = tostring(text or '')
     if value == '' or is_utf8_string(value) then return value end
@@ -360,7 +374,8 @@ su8 = function(v)
         if not u8 then return v end
         local ok, r = pcall(u8, v)
         local res = (ok and r) or v
-        if #SU8_CACHE < 2048 then SU8_CACHE[v] = res end
+        if #SU8_CACHE >= 2048 then SU8_CACHE = {} end
+        SU8_CACHE[v] = res
         return res
     end
     local u8 = ctx().u8
@@ -645,6 +660,7 @@ function M.config_file() return cfg_file() end
 
 function M.save_config(force)
 	if M.ctx == nil then return false end
+    M.save_room_state()
 	local m, i, b, f, o = M.my_avatar()
 	local sig = avatar_sig_of(m, i, b, f, o)
 	if M._avatar_sig ~= nil and M._avatar_sig ~= sig then M._avatar_dirty = true end
@@ -664,8 +680,7 @@ function M.save_config(force)
 	data.chat_nick_color    = M.chat_nick_color or '{FFD700}'
 	data.show_avatars       = M.show_avatars ~= false
 	data.hide_system        = M.hide_system == true
-	data.last_id            = tonumber(M.last_id) or 0
-	data.last_system_id     = tonumber(M.last_system_id) or 0
+    data.room_last_ids      = type(M.room_last_ids) == 'table' and M.room_last_ids or {}
 	data.cleared_rooms      = type(M.cleared_rooms) == 'table' and M.cleared_rooms or {}
 	data.avatar_mode, data.avatar_icon, data.avatar_outline = m, i, o
 	data.avatar_bg, data.avatar_fg = b, f
@@ -739,13 +754,30 @@ local function make_hwid()
 	return 'AH-' .. serial .. '-' .. name
 end
 
+local function current_server_name()
+    local f = ctx().get_server_name or _G.server_name_safe
+    if type(f) == 'function' then
+        local ok, n = pcall(f)
+        if ok and type(n) == 'string' then return n end
+    end
+    if type(_G.sampGetCurrentServerName) == 'function' then
+        local ok, n = pcall(_G.sampGetCurrentServerName)
+        if ok and type(n) == 'string' then return n end
+    end
+    return ''
+end
+
 local function detect_server()
-	if isSampAvailable() then
-		local ok, value = pcall(function() return getServerNumber() end)
-		if ok and type(value) == 'string' and value ~= '' and value ~= '00' then return value end
-	end
-	local srv = tonumber(M.server) or 1
-	return srv < 10 and string.format('0%d', srv) or tostring(srv)
+    local low = current_server_name():lower()
+    if low:find('arizona', 1, true) == nil then
+        return '0'
+    end
+    if isSampAvailable() then
+        local ok, value = pcall(function() return getServerNumber() end)
+        if ok and type(value) == 'string' and value ~= '' and value ~= '00' then return value end
+    end
+    local srv = tonumber(M.server) or 1
+    return srv < 10 and string.format('0%d', srv) or tostring(srv)
 end
 
 function M.get_home_server()
@@ -757,6 +789,22 @@ function M.get_server()
 		return tostring(M.admin_lobby) == '00' and '900' or M.admin_lobby
 	end
 	return detect_server()
+end
+
+function M.get_room_key()
+    return tostring(M.get_server())
+end
+
+function M.load_room_state()
+    local key = M.get_room_key()
+    M.last_id = tonumber(M.room_last_ids[key .. '_id']) or 0
+    M.last_system_id = tonumber(M.room_last_ids[key .. '_sys']) or 0
+end
+
+function M.save_room_state()
+    local key = M.get_room_key()
+    M.room_last_ids[key .. '_id'] = M.last_id
+    M.room_last_ids[key .. '_sys'] = M.last_system_id
 end
 
 function M.status()
@@ -932,11 +980,23 @@ local function sync_http(method, path, body, extra_headers, auto_session)
 end
 
 http = function(method, path, body, on_ok, on_error, extra_headers, priority)
-	if not M.enabled or M.base_url == '' then return false end
+	if not M.enabled or M.base_url == '' then 
+        if type(on_error) == 'function' then pcall(on_error, 'disabled') end
+        return false 
+    end
 	if #M.network_tasks >= 64 then
+        local removed = false
 		for i = #M.network_tasks, 1, -1 do
-			if not M.network_tasks[i].priority then table.remove(M.network_tasks, i); break end
+			if not M.network_tasks[i].priority then 
+                table.remove(M.network_tasks, i)
+                removed = true
+                break
+            end
 		end
+        if not removed then
+            if type(on_error) == 'function' then pcall(on_error, 'queue_full') end
+            return false
+        end
 	end
 	table.insert(M.network_tasks, {
 		method = method, path = path, body = body,
@@ -966,13 +1026,17 @@ function M.format_remaining(seconds)
     return tostring(ctx().u8 and ctx().u8(str) or str)
 end
 
-function M.fetch_users()
+function M.fetch_users(priority)
     if not M.enabled then return end
-    if os.time() - M.last_fetch_users < 5 then return end
+    if not priority and os.time() - M.last_fetch_users < 5 then return end
     M.last_fetch_users = os.time()
     local requested_server = tostring(M.get_server())
     http('GET', '/users?server=' .. requested_server, nil, function(data)
         if type(data) ~= 'table' then return end
+        if data.error == 'unauthorized' then
+            M.handle_unauthorized(function() M.fetch_users(true) end)
+            return
+        end
         if data.error then return end
         if requested_server ~= tostring(M.get_server()) then return end
         M.users, M.all_users, M.online_any = {}, {}, {}
@@ -983,10 +1047,16 @@ function M.fetch_users()
                 local is_admin_user = (item.admin == 1 or item.admin == true)
                 local user_srv = norm_server(item.home or item.server)
                 local user_dev = tostring(item.device or '')
-                local user_frac = M.to_utf8(tostring(item.fraction_tag or item.mode or ''))               
+                local user_frac = M.to_utf8(tostring(item.fraction_tag or item.mode or ''))
+                local user_lib_ver = tostring(item.lib_version or '')
+                local user_use_days = tonumber(item.use_days) or 0
+                local user_first_use = tostring(item.first_use_day or '')
                 if user_srv ~= '' then M.user_servers[nick] = user_srv end
                 if user_dev ~= '' then M.user_devices[nick] = user_dev end
-                if user_frac ~= '' then M.user_fractions[nick] = user_frac end               
+                if user_frac ~= '' then M.user_fractions[nick] = user_frac end
+                if user_lib_ver ~= '' then M.user_lib_versions[nick] = user_lib_ver end
+                if user_use_days > 0 then M.user_use_days[nick] = user_use_days end
+                if user_first_use ~= '' then M.user_first_use_days[nick] = user_first_use end
                 store_user_avatar(nick, item)             
                 local banned_flag = (item.banned == 1 or item.banned == true)
                 if banned_flag then M.banned_users[nick] = true else M.banned_users[nick] = nil end
@@ -998,22 +1068,27 @@ function M.fetch_users()
                 end             
                 table.insert(M.all_users, {
                     nick = nick, first_seen = tostring(item.first_seen or ''), last_seen = tostring(item.last_seen or ''),
-                    online = online, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac
+                    online = online, admin = is_admin_user, server = user_srv, device = user_dev, fraction = user_frac,
+                    lib_version = user_lib_ver, use_days = user_use_days, first_use_day = user_first_use,
                 })
             end
         end
         M._users_rev = (M._users_rev or 0) + 1
         if not M._fetch_users_silent then M.show_users = true end
-    end, function(err) M.last_error = tostring(err or '') end)
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), priority == true)
 end
 
-function M.fetch_crowns()
+function M.fetch_crowns(priority)
     if not M.enabled then return end
-    if os.time() - M.last_fetch_crowns < 5 then return end
+    if not priority and os.time() - M.last_fetch_crowns < 5 then return end
     M.last_fetch_crowns = os.time()
     local requested_server = tostring(M.get_server())
     http('GET', '/crowns?server=' .. requested_server, nil, function(data)
         if type(data) ~= 'table' then return end
+        if data.error == 'unauthorized' then
+            M.handle_unauthorized(function() M.fetch_crowns(true) end)
+            return
+        end
         if data.error then return end
         if requested_server ~= tostring(M.get_server()) then return end
         local crowns, admins = {}, {}
@@ -1033,14 +1108,21 @@ function M.fetch_crowns()
                 if item.device and tostring(item.device) ~= '' then M.user_devices[nick] = tostring(item.device) end
                 local frac_tag = M.to_utf8(tostring(item.fraction_tag or item.mode or ''))
                 if frac_tag ~= '' then M.user_fractions[nick] = frac_tag end
+                local lib_ver = tostring(item.lib_version or '')
+                if lib_ver ~= '' then M.user_lib_versions[nick] = lib_ver end
+                local use_d = tonumber(item.use_days) or 0
+                if use_d > 0 then M.user_use_days[nick] = use_d end
+                local first_use = tostring(item.first_use_day or '')
+                if first_use ~= '' then M.user_first_use_days[nick] = first_use end
             end
         end
         if has_entries then
             M.crown_users, M.admin_users = crowns, admins
         end
         M._users_rev = (M._users_rev or 0) + 1
-    end, function(err) M.last_error = tostring(err or '') end)
+    end, function(err) M.last_error = tostring(err or '') end, M.session_headers(), priority == true)
 end
+
 
 function M.add_system(data)
     if type(data) ~= 'table' then return end
@@ -1107,7 +1189,10 @@ function M.news_likes(key, callback, _retry)
     end
     http('POST', '/news/likes', { key = key, hwid = M.hwid }, function(data)
         if type(data) == 'table' and (data.error == 'unauthorized' or data.error == 'rate_limit' or data.error == 'rate_limit_global') and not _retry then
-            if data.error == 'unauthorized' then M.heartbeat() end
+            if data.error == 'unauthorized' and not M._pending_heartbeat then
+                M._pending_heartbeat = true
+                M.heartbeat(function() M._pending_heartbeat = false end)
+            end
             table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() M.news_likes(key, callback, true) end })
             return
         end
@@ -1125,7 +1210,10 @@ function M.vote_news(key, vote, callback, _retry)
     end
     http('POST', '/news/like', { key = key, hwid = M.hwid, vote = vote or 'none' }, function(data)
         if type(data) == 'table' and (data.error == 'unauthorized' or data.error == 'rate_limit' or data.error == 'rate_limit_global') and not _retry then
-            if data.error == 'unauthorized' then M.heartbeat() end
+            if data.error == 'unauthorized' and not M._pending_heartbeat then
+                M._pending_heartbeat = true
+                M.heartbeat(function() M._pending_heartbeat = false end)
+            end
             table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() M.vote_news(key, vote, callback, true) end })
             return
         end
@@ -1181,14 +1269,22 @@ function M.player_data()
     return {}
 end
 
-function M.heartbeat()
-    if not M.enabled then return end
+function M.heartbeat(callback)
+    local function done(ok)
+        if type(callback) == 'function' then pcall(callback, ok) end
+    end
+    if not M.enabled then done(false) return end
     local nick = M.get_nick()
-    if nick == '' then return end
+    if nick == '' then done(false) return end
     M.nick = nick
     local pdata = M.player_data()
     local heartbeat_priority = M.pending_initial_sync == true
     local av_m, av_i, av_b, av_f, av_o = M.my_avatar()
+    local acc = M.current_account()
+    local today = os.date('%d.%m.%Y')
+    local use_days = (acc and tonumber(acc.use_days)) or 1
+    local first_use_day = (acc and tostring(acc.first_use_day or ''))
+    if first_use_day == '' then first_use_day = today end
     http('POST', '/heartbeat', {
         nick = nick,
         hwid = M.hwid,
@@ -1200,19 +1296,40 @@ function M.heartbeat()
         server = M.get_home_server(),
         home = M.get_home_server(),
         version = ctx().version or '1.8.0',
+        lib_version = M.version,
+        use_days = use_days,
+        first_use_day = first_use_day,
         mode = M.fraction_mode(),
         fraction = M.to_utf8(tostring(pdata.fraction or '')),
         fraction_tag = M.to_utf8(tostring(pdata.fraction_tag or '')),
         device = IS_MOBILE and 'MOBILE' or 'PC',
     }, function(data)
-        if type(data) == 'table' and data.error == 'rate_limit' then return end
+        if type(data) == 'table' and data.error then
+            if data.error == 'rate_limit' or data.error == 'rate_limit_global' then
+                M.rate_backoff()
+                done(false)
+                return
+            end
+            if data.error == 'unauthorized' then
+                M.session = ''
+            end
+            M.online = false
+            M.last_error = tostring(data.error)
+            local e = SERVER_ERRORS[tostring(data.error)]
+            if e and M._last_hb_err ~= data.error then
+                M._last_hb_err = data.error
+                notice(su8('Сервер: ' .. e), 'err')
+            end
+            done(false)
+            return
+        end
         M.online = data and data.ok == true or false
         if M.online then
             M.session = tostring(data.session or M.session)
-        if M.pending_initial_sync and M.chat_open then
-            M.pending_initial_sync = false
-            M.poll(true)
-        end
+            if M.pending_initial_sync and M.chat_open then
+                M.pending_initial_sync = false
+                M.poll(true)
+            end
             local was_banned = M.my_banned
             local was_mute_until = M.my_mute_until
             M.my_banned = (data.banned == true) or (tonumber(data.banned) == 1)
@@ -1224,7 +1341,29 @@ function M.heartbeat()
             if was_banned and not M.my_banned then M.messages = {}; M.system_messages = {}; M.poll(true) end
             if M.my_banned then M.messages = {}; M.system_messages = {} end
         end
-    end, function(err) M.online = false; M.last_error = tostring(err or '') end, nil, heartbeat_priority)
+        done(M.online)
+    end, function(err) 
+        M.online = false; M.last_error = tostring(err or '') 
+        done(false)
+    end, nil, heartbeat_priority)
+end
+
+function M.handle_unauthorized(retry_fn)
+    M.session = ''
+    if not M._pending_heartbeat then
+        M._pending_heartbeat = true
+        M.heartbeat(function(ok)
+            M._pending_heartbeat = false
+            if ok and type(retry_fn) == 'function' then retry_fn() end
+        end)
+    else
+        table.insert(M.network_tasks, { 
+            due_at = os.time() + 2, 
+            action = function()
+                if M.session ~= '' and type(retry_fn) == 'function' then retry_fn() end
+            end 
+        })
+    end
 end
 
 function M.session_headers()
@@ -1249,7 +1388,12 @@ end
 local function add_message(message)
     if M.my_banned or type(message) ~= 'table' then return end
     local id = tonumber(message.id) or 0
-    if id > 0 and id <= M.last_id then return end
+    if id > 0 and not message._force then
+        if id <= M.last_id then return end
+        for _, m in ipairs(M.messages) do
+            if m.id == id then return end
+        end
+    end
     local item = { id = id, server = tonumber(message.server) or 1, sender = tostring(message.sender or ''), text = M.to_utf8(tostring(message.text or '')), timestamp = tostring(message.timestamp or ''), home = norm_server(message.home), avatar_mode = message.avatar_mode ~= nil and tostring(message.avatar_mode) or nil, avatar_icon = message.avatar_icon ~= nil and tostring(message.avatar_icon) or nil, avatar_bg = message.avatar_bg ~= nil and tostring(message.avatar_bg) or nil, avatar_fg = message.avatar_fg ~= nil and tostring(message.avatar_fg) or nil, avatar_outline = message.avatar_outline ~= nil and tonumber(message.avatar_outline) or nil }
     if item.text == '' then return end
     table.insert(M.messages, item)
@@ -1330,6 +1474,7 @@ end
 function M.poll(force)
     if not M.enabled or M.my_banned then return end
     if M.polling and not force then return end
+    if M._pending_heartbeat then return end
     if not force and os.time() < (M.backoff_until or 0) then return end
     if not force and os.time() - M.last_poll < M.SYNC_INTERVAL then return end
     M.last_poll = os.time()
@@ -1343,10 +1488,16 @@ function M.poll(force)
         if type(data) == 'table' and data.error == 'unauthorized' then
             M.session = ''
             M.pending_initial_sync = M.chat_open
-            M.heartbeat()
+            if not M._pending_heartbeat then
+                M._pending_heartbeat = true
+                M.heartbeat(function(ok)
+                    M._pending_heartbeat = false
+                end)
+            end
             return
         end
         if type(data) ~= 'table' then return end
+        M.online = true
 
 		local room_key = tostring(view_server)
 		if type(M.cleared_rooms) ~= 'table' then M.cleared_rooms = {} end
@@ -1381,6 +1532,7 @@ function M.poll(force)
                 M.pinned = nil
             end
         end
+        M.save_room_state()
     end, function(err)
         M.polling = false
         M.last_error = tostring(err or '')
@@ -1394,7 +1546,6 @@ function M.rate_backoff()
     M.backoff_sec = math.min(300, math.max(30, (M.backoff_sec or 30) * 2))
     M.backoff_until = now + M.backoff_sec
     M.last_poll = now + M.backoff_sec
-    M.last_fetch_users = now + M.backoff_sec
 end
 
 
@@ -1469,19 +1620,42 @@ function M.send(text)
             end
         end
     end
-    
     M.last_send_at = os.time()
     local function attempt(n)
         http('POST', '/messages', { nick = nick, hwid = M.hwid, server = M.get_server(), home = M.get_home_server(), device = IS_MOBILE and 'MOBILE' or 'PC', text = message }, function(data)
             if type(data) == 'table' and type(data.message) == 'table' then
+                M.online = true
+                data.message._force = true
                 add_message(data.message)
             elseif type(data) == 'table' and data.error == 'unauthorized' and n < 2 then
-                M.heartbeat()
-                table.insert(M.network_tasks, { due_at = os.time() + 2, action = function() attempt(n + 1) end })
+                notice('Сессия устарела, обновляю...', 'warn')
+                M.session = ''
+                if not M._pending_heartbeat then
+                    M._pending_heartbeat = true
+                    M.heartbeat(function(ok)
+                        M._pending_heartbeat = false
+                        if ok then
+                            attempt(n + 1)
+                        else
+                            restore_input(raw_in)
+                        end
+                    end)
+                else
+                    table.insert(M.network_tasks, { due_at = os.time() + 2, action = function()
+                        if M.session ~= '' then
+                            attempt(n + 1)
+                        else
+                            restore_input(raw_in)
+                        end
+                    end })
+                end
             elseif type(data) == 'table' and (data.error == 'storage_unavailable' or data.error == 'database_unavailable') and n < 3 then
                 table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() attempt(n + 1) end })
-            elseif type(data) == 'table' and (data.error == 'rate_limit' or data.error == 'rate_limit_global' or data.error == 'too_many_messages' or data.error == 'flood' or data.error == 'too_fast') and n < 3 then                M.rate_backoff()
-                table.insert(M.network_tasks, { due_at = os.time() + 3, action = function() attempt(n + 1) end })
+            elseif type(data) == 'table' and (data.error == 'rate_limit' or data.error == 'rate_limit_global' or data.error == 'too_many_messages' or data.error == 'flood' or data.error == 'too_fast') and n < 3 then
+                M.rate_backoff()
+                local is_global = (data.error == 'rate_limit' or data.error == 'rate_limit_global')
+                local delay = is_global and math.max(5, M.backoff_sec or 30) or 3
+                table.insert(M.network_tasks, { due_at = os.time() + delay, action = function() attempt(n + 1) end })
             elseif type(data) == 'table' and data.error then
                 local err_msg = SERVER_ERRORS[tostring(data.error)]
                 if err_msg then err_msg = su8(err_msg) else err_msg = ru_system_text(data.error) end
@@ -1518,7 +1692,14 @@ function M.start_network_thread()
                 else
                     local result = sync_http(task.method, task.path, task.body, task.headers, task.auto_session)
                     if result.type == 'ok' then
-                        if type(task.on_ok) == 'function' then pcall(task.on_ok, result.data, result.response) end
+                        local resp = result.data
+                        local is_rate = type(resp) == 'table' and (
+                            resp.error == 'rate_limit' or resp.error == 'rate_limit_global')
+                        if not is_rate then
+                            M.backoff_sec = 30
+                            M.backoff_until = 0
+                        end
+                        if type(task.on_ok) == 'function' then pcall(task.on_ok, resp, result.response) end
                     else
                         if type(task.on_error) == 'function' then pcall(task.on_error, result.err) end
                     end
@@ -1545,7 +1726,7 @@ function M.start_loop()
         while M.running do
             wait(1000)
             local now = os.time()
-            if M._avatar_dirty and now - (M.last_avatar_heartbeat or 0) >= 2 then
+            if M._avatar_dirty and not M._pending_heartbeat and now - (M.last_avatar_heartbeat or 0) >= 2 then
                 M._avatar_dirty = false
                 M.last_avatar_heartbeat = now
                 M.heartbeat()
@@ -1561,17 +1742,16 @@ function M.start_loop()
                 end
                 if now - last_users >= M.USERS_INTERVAL then
                     M._fetch_users_silent = true
-                    M.fetch_users()
+                    M.fetch_users(true)
                     last_users = now
                 end
-
             end
             if now - last_crowns >= M.CROWNS_INTERVAL then
-                M.fetch_crowns()
+                M.fetch_crowns(true)
                 last_crowns = now
-                end
+            end
 
-            if now - last_heartbeat >= M.HEARTBEAT_INTERVAL then
+            if not M._pending_heartbeat and now - last_heartbeat >= M.HEARTBEAT_INTERVAL then
                 M.heartbeat()
                 last_heartbeat = now
             end
@@ -1581,7 +1761,14 @@ end
 
 
 function M.start()
-    if M.started or not M.enabled then return end
+    if M.started then return end
+    if M.base_url == '' then M.base_url = M.default_url end
+    M.enabled = (not M.disabled) and (M.base_url ~= '')
+    if not M.enabled then return end
+    if M.hwid == '' then
+        M.hwid = make_hwid()
+        M.save_config(true)
+    end
     M.started = true; M.running = true; M.session_started_at = os.time(); M.system_messages = {}; M.start_loop()
 end
 
@@ -1600,16 +1787,25 @@ end
 
 function M.stop()
     M.running, M.started, M.loop_started, M.chat_open, M.network_thread_started = false, false, false, false, false
-	M.users, M.all_users, M.messages, M.system_messages, M.online_any = {}, {}, {}, {}, {}
-	M.crown_users, M.admin_users, M.banned_users = {}, {}, {}
-	M.user_servers, M.user_devices, M.user_fractions = {}, {}, {}
-	M.mute_until, M.ban_until = {}, {}
-	M._users_rev = (M._users_rev or 0) + 1
+    M.users, M.all_users, M.messages, M.system_messages, M.online_any = {}, {}, {}, {}, {}
+    M.crown_users, M.admin_users, M.banned_users = {}, {}, {}
+    M.user_servers, M.user_devices, M.user_fractions = {}, {}, {}
+    M.user_lib_versions, M.user_use_days, M.user_first_use_days = {}, {}, {}
+    M.mute_until, M.ban_until = {}, {}
+    M._users_rev = (M._users_rev or 0) + 1
     M.network_tasks = {}
-	M.polling, M.pending_initial_sync = false, false
-	M.online = false
-	M.session = ''
+    M.polling, M.pending_initial_sync = false, false
+    M.online = false
+    M.session = ''
     M.msg_reactions, M.pinned = {}, nil
+    M.backoff_until = 0
+    M.backoff_sec = 30
+    M.last_poll = 0
+    M.last_fetch_users = 0
+    M.last_fetch_crowns = 0
+    M.last_send_at = 0
+    M.last_group_mention_at = 0
+    M._pending_heartbeat = false
     M.save_config(true)
 end
 
@@ -1714,16 +1910,34 @@ function M.toggle()
     M.window[0] = not M.window[0]
     M.chat_open = M.window[0] == true
     if M.chat_open then
+        M.load_room_state()
         M.start_loop()
         if M.session == '' then
-            M.pending_initial_sync = true
-            M.heartbeat()
+            if not M._pending_heartbeat then
+                M.pending_initial_sync = true
+                M._pending_heartbeat = true
+                M.last_fetch_users = 0
+                M.last_fetch_crowns = 0
+                M.heartbeat(function(ok)
+                    M._pending_heartbeat = false
+                    if ok then
+                        M.poll(true)
+                        M._fetch_users_silent = false
+                        M.last_fetch_users = 0
+                        M.last_fetch_crowns = 0
+                        M.fetch_users(true)
+                        M.fetch_crowns(true)
+                    end
+                end)
+            end
         else
             M.poll(true)
+            M._fetch_users_silent = false
+            M.last_fetch_users = 0
+            M.last_fetch_crowns = 0
+            M.fetch_users(true)
+            M.fetch_crowns(true)
         end
-        M._fetch_users_silent = true
-        M.fetch_users()
-        M.fetch_crowns()
     else
         M.pending_initial_sync = false
     end
@@ -1769,7 +1983,10 @@ end
 function M.load_users()
     M.show_users = true
     M._fetch_users_silent = false
-    M.fetch_users()
+    M.last_fetch_users = 0
+    M.last_fetch_crowns = 0
+    M.fetch_users(true)
+    M.fetch_crowns(true)
 end
 
 function M.insert_mention(nick)
@@ -1807,7 +2024,7 @@ function M.draw(player)
 
     local server_name = ''
     local active_server = tostring(M.get_server())
-    local active_label = (M.admin_lobby == '00') and 'Межпроектный' or active_server
+    local active_label = (M.admin_lobby == '00') and 'Межпроектный' or (active_server == '0' and 'Общая' or active_server)
     if M.admin_lobby == '00' then
         server_name = 'Межпроектный'
     elseif isSampAvailable() then
@@ -2045,8 +2262,14 @@ function M.draw(player)
     local vis_lines = math.min(nl, M.MAX_INPUT_LINES or 2)
     local dynamic_input_h = math.min(input_line_h + (vis_lines - 1) * imgui.GetTextLineHeight(), ws.y * 0.35)
     local btn_size = dynamic_input_h
+    local notice_line_h = imgui.GetTextLineHeight()
+    local notices_h = 0
+    if #M.notices > 0 then
+        notices_h = #M.notices * (notice_line_h + st.ItemSpacing.y)
+    end
+
     local input_w = region_w - send_w - btn_size * 2 - st.ItemSpacing.x * 3
-    local body_h = math.max(120 * dpi, imgui.GetContentRegionAvail().y - dynamic_input_h - st.ItemSpacing.y * 2)
+    local body_h = math.max(120 * dpi, imgui.GetContentRegionAvail().y - dynamic_input_h - st.ItemSpacing.y * 2 - notices_h)
     local hist_w = M.show_users and (region_w - users_w - st.ItemSpacing.x) or region_w
 
     if M.pinned then
@@ -2374,6 +2597,30 @@ function M.draw(player)
     imgui.EndChild()
     imgui.PopStyleColor()
 
+    local now_ts = os.time()
+    local ni = 1
+    while ni <= #M.notices do
+        if M.notices[ni].until_ts <= now_ts then table.remove(M.notices, ni) else ni = ni + 1 end
+    end
+    if #M.notices > 0 then
+        local avail_w = imgui.GetContentRegionAvail().x
+        for _, n in ipairs(M.notices) do
+            local col = n.kind == 'err' and red or yellow
+            local ntxt = (fa.TRIANGLE_EXCLAMATION or '!') .. ' ' .. n.text
+            local nw = imgui.CalcTextSize(ntxt).x
+            local p = imgui.GetCursorScreenPos()
+            local x = p.x + avail_w - nw - 8 * dpi
+            local bg = light and imgui.ImVec4(0.15, 0.15, 0.15, 0.88) or imgui.ImVec4(0.04, 0.04, 0.04, 0.88)
+            
+            pcall(function()
+                local wdl = imgui.GetWindowDrawList()
+                wdl:AddRectFilled(imgui.ImVec2(x - 6 * dpi, p.y - 2 * dpi), imgui.ImVec2(p.x + avail_w, p.y + notice_line_h + 2 * dpi), imgui.GetColorU32Vec4(bg), 4 * dpi)
+                wdl:AddText(imgui.ImVec2(x, p.y), imgui.GetColorU32Vec4(col), ntxt)
+            end)
+            imgui.Dummy(imgui.ImVec2(avail_w, notice_line_h))
+        end
+    end
+
     local rmb = false
     pcall(function() rmb = imgui.IsMouseReleased(1) end)
     if rmb and M.hover_msg_id then
@@ -2492,15 +2739,15 @@ function M.draw(player)
                         local dev_label = (dev == 'MOBILE') and T('мобильное устройство') or ((dev == 'PC') and T('ПК') or dev)
                         lines[#lines + 1] = T('Устройство: ') .. dev_label
                     end
-					local frac = M.user_fractions[nick] or user.fraction or ''
-					if frac ~= '' then lines[#lines + 1] = T('Фракция: ') .. frac end
-					local ban_left = M.restriction_left(nick, 'ban')
-					local mute_left = M.restriction_left(nick, 'mute')
-					if is_banned and ban_left > 0 then
-						lines[#lines + 1] = T('Блокировка: ') .. M.format_remaining(ban_left)
-					elseif mute_left > 0 then
-						lines[#lines + 1] = T('Мут: ') .. M.format_remaining(mute_left)
-					end
+                    local frac = M.user_fractions[nick] or user.fraction or ''
+                    if frac ~= '' then lines[#lines + 1] = T('Фракция: ') .. frac end
+                    local ban_left = M.restriction_left(nick, 'ban')
+                    local mute_left = M.restriction_left(nick, 'mute')
+                    if is_banned and ban_left > 0 then
+                        lines[#lines + 1] = T('Блокировка: ') .. M.format_remaining(ban_left)
+                    elseif mute_left > 0 then
+                        lines[#lines + 1] = T('Мут: ') .. M.format_remaining(mute_left)
+                    end
                     if #lines > 0 then imgui.SetTooltip(table.concat(lines, '\n')) end
                 end
                 imgui.SameLine(0, 0)
@@ -2515,31 +2762,6 @@ function M.draw(player)
 
     if M.admin and type(M.admin.draw_panel) == 'function' then
         M.admin.draw_panel({ M = M, imgui = imgui, fa = fa, u8 = u8, dpi = dpi, st = st, yellow = yellow, gold = gold, red = red })
-    end
-
-    local now_ts = os.time()
-    local ni = 1
-    while ni <= #M.notices do
-        if M.notices[ni].until_ts <= now_ts then table.remove(M.notices, ni) else ni = ni + 1 end
-    end
-    if #M.notices > 0 then
-        local nline = imgui.GetTextLineHeight()
-        local nx_right = wp.x + ws.x - st.WindowPadding.x - 6 * dpi
-        local ny = wp.y + ws.y - dynamic_input_h - st.ItemSpacing.y * 2 - 6 * dpi
-        for i = #M.notices, 1, -1 do
-            local n = M.notices[i]
-            local ntxt = (fa.TRIANGLE_EXCLAMATION or '!') .. ' ' .. n.text
-            local nw = imgui.CalcTextSize(ntxt).x
-            ny = ny - nline - 6 * dpi
-            local col = n.kind == 'err' and red or yellow
-            local bg = light and imgui.ImVec4(0.15, 0.15, 0.15, 0.88) or imgui.ImVec4(0.04, 0.04, 0.04, 0.88)
-            pcall(function()
-                dl:AddRectFilled(imgui.ImVec2(nx_right - nw - 10 * dpi, ny - 4 * dpi),
-                    imgui.ImVec2(nx_right + 4 * dpi, ny + nline + 4 * dpi),
-                    imgui.GetColorU32Vec4(bg), 6 * dpi)
-                dl:AddText(imgui.ImVec2(nx_right - nw - 4 * dpi, ny), imgui.GetColorU32Vec4(col), ntxt)
-            end)
-        end
     end
 
     local old_scroll_size = st.ScrollbarSize
@@ -2630,21 +2852,32 @@ function M.draw(player)
 end
 
 local function enter_room(lobby)
-	M.admin_lobby = lobby
-	M.messages, M.system_messages = {}, {}
-	M.last_id, M.last_system_id = 0, 0
-	M.session = ''
-	M.pending_initial_sync = true
-	M.msg_reactions, M.pinned = {}, nil
-	M.all_users, M.online_any, M.users = {}, {}, {}
-	M._users_rev = (M._users_rev or 0) + 1
-	M.last_fetch_users, M.last_fetch_crowns = 0, 0
-	M.heartbeat()
-	if M.chat_open then
-		M._fetch_users_silent = true
-        M.fetch_users()
-		M.fetch_crowns()
-	end
+    M.admin_lobby = lobby
+    M.messages, M.system_messages = {}, {}
+    M.last_id, M.last_system_id = 0, 0
+    M.save_room_state()
+    M.session = ''
+    M.pending_initial_sync = true
+    M.msg_reactions, M.pinned = {}, nil
+    M.all_users, M.online_any, M.users = {}, {}, {}
+    M._users_rev = (M._users_rev or 0) + 1
+    M.last_fetch_users, M.last_fetch_crowns = 0, 0
+    if not M._pending_heartbeat then
+        M._pending_heartbeat = true
+        M.heartbeat(function(ok)
+            M._pending_heartbeat = false
+            if ok then
+                M.poll(true)
+                if M.chat_open then
+                    M._fetch_users_silent = false
+                    M.last_fetch_users = 0
+                    M.last_fetch_crowns = 0
+                    M.fetch_users(true)
+                    M.fetch_crowns(true)
+                end
+            end
+        end)
+    end
 end
 
 function M.return_home()
@@ -2698,8 +2931,9 @@ function M.init(opts)
     M.base_url = M.default_url
     M.server = tonumber(ctx_opts.server or config.server or 1) or 1
     M.hwid = tostring(config.hwid or '')
-    M.last_id = tonumber(config.last_id) or 0
-    M.last_system_id = tonumber(config.last_system_id) or 0
+    M.room_last_ids = type(config.room_last_ids) == 'table' and config.room_last_ids or {}
+    M.last_id = 0
+    M.last_system_id = 0
     M.hide_system = config.hide_system == true
     M.show_avatars = config.show_avatars ~= false
     M.chat_crowns = config.chat_crowns ~= false
@@ -2734,6 +2968,13 @@ function M.init(opts)
         })
     end
     M.start()
+    M.load_room_state()
+    if M.enabled and M.session == '' and not M._pending_heartbeat then
+        M._pending_heartbeat = true
+        M.heartbeat(function(ok)
+            M._pending_heartbeat = false
+        end)
+    end
     return M
 end
 
