@@ -969,10 +969,12 @@ end
 function M.fetch_users()
     if not M.enabled then return end
     if os.time() - M.last_fetch_users < 5 then return end
-    M.last_fetch_users = os.time()   
-    http('GET', '/users?server=' .. tostring(M.get_server()), nil, function(data)
+    M.last_fetch_users = os.time()
+    local requested_server = tostring(M.get_server())
+    http('GET', '/users?server=' .. requested_server, nil, function(data)
         if type(data) ~= 'table' then return end
         if data.error then return end
+        if requested_server ~= tostring(M.get_server()) then return end
         M.users, M.all_users, M.online_any = {}, {}, {}
         for _, item in ipairs(data.users or {}) do
             if type(item) == 'table' and type(item.nick) == 'string' then
@@ -1001,7 +1003,6 @@ function M.fetch_users()
             end
         end
         M._users_rev = (M._users_rev or 0) + 1
-        if ctx().module and ctx().module.HelperUsers then ctx().module.HelperUsers.list = M.users end
         if not M._fetch_users_silent then M.show_users = true end
     end, function(err) M.last_error = tostring(err or '') end)
 end
@@ -1229,6 +1230,20 @@ end
 function M.session_headers()
     if M.session == '' then return nil end
     return { ['X-Session'] = M.session }
+end
+
+function M.admin_request(method, path, body, extra_headers, on_ok, on_error)
+	if not M.enabled then
+		if type(on_error) == 'function' then pcall(on_error, 'disabled') end
+		return false
+	end
+	return http(method, path, body, on_ok, on_error, extra_headers, true)
+end
+
+function M.fetch_user_directory(silent)
+	M._fetch_users_silent = (silent ~= false)
+	M.fetch_users()
+	return true
 end
 
 local function add_message(message)
@@ -2711,8 +2726,12 @@ function M.init(opts)
     end
     if type(ctx().module) == 'table' then
         ctx().module.Messenger = M
-        ctx().module.HelperUsers = ctx().module.HelperUsers or {}
-        ctx().module.HelperUsers.list = M.users
+        ctx().module.HelperUsers = setmetatable({}, {
+            __index = function(_, key)
+                if key == 'list' then return M.users end
+                return nil
+            end
+        })
     end
     M.start()
     return M
