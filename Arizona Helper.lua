@@ -4306,6 +4306,7 @@ local function sobes_say(text, cd)
 end
 --------------------------------------------[ FUNCTION ]---------------------------------------
 function main()
+	check_resources() 
 	do
 		if wt_ok and type(wt_mod) == 'table' and type(wt_mod.apply) == 'function' then
 			MODULE.WeatherTime = wt_mod
@@ -4656,7 +4657,6 @@ end
 			end
 		end
 	end
-	check_resources() 
 	delete_old_helpers()
 	if not is_account_fully_setup() then
 		repeat wait(0) until sampIsLocalPlayerSpawned()
@@ -7592,7 +7592,7 @@ function downloadFileFromUrlToPath(url, path, key, on_done)
 	end)
 end
 
-function sync_libs(names, only_missing, on_done)
+function sync_libs(names, only_missing, on_done, blocking)
 	names = names or DEFAULT_LIBS
 	local lib_dir = worked_dir .. '/lib'
 	if not doesDirectoryExist(lib_dir) then createDirectory(lib_dir) end
@@ -7630,18 +7630,22 @@ function sync_libs(names, only_missing, on_done)
 				need = true
 			end
 		end
+		
 		if need then table.insert(jobs, { url = LIBS_BASE .. file, path = path }) end
 	end
-	if #jobs == 0 then
+	local total_jobs = #jobs
+	if total_jobs == 0 then
 		if on_done then pcall(on_done, true, 0) end
-		return
+		return true, 0
 	end
 	local index, failed = 1, 0
+	local is_done = false
 	local function step()
 		local job = jobs[index]
 		index = index + 1
 		if not job then
-			if on_done then pcall(on_done, failed == 0, #jobs) end
+			is_done = true
+			if on_done then pcall(on_done, failed == 0, total_jobs) end
 			return
 		end
 		downloadFileFromUrlToPath(job.url, job.path, 'lib', function(ok)
@@ -7650,7 +7654,14 @@ function sync_libs(names, only_missing, on_done)
 		end)
 	end
 	step()
+	if blocking then
+		while not is_done do
+			wait(0)
+		end
+	end
+	return failed == 0, total_jobs
 end
+
 function MODULE.Update.show_notice(force)
 	if not MODULE.Update.is_need_update then MODULE.Update.pending_show = false; return end
 	if MODULE.Update.Window[0] then return end
@@ -7910,7 +7921,6 @@ end
 function check_resources()
 	if not CHAT_PREFIX then CHAT_PREFIX = settings.ui.chat_prefix or 'Arizona Helper' end
 	if not doesDirectoryExist(config_dir .. '/Resourse') then createDirectory(config_dir .. '/Resourse') end
-	
 	if not doesFileExist(config_dir .. '/Resourse/logo.png') or is_html_garbage(config_dir .. '/Resourse/logo.png') then
 		pcall(os.remove, config_dir .. '/Resourse/logo.png')
 		downloadFileFromUrlToPath(RES_BASE .. 'logo.png', config_dir .. '/Resourse/logo.png', 'logo')
@@ -7924,16 +7934,13 @@ function check_resources()
 		pcall(os.remove, veh_path)
 		downloadFileFromUrlToPath(VEHICLES_BASE .. ((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), veh_path, 'vehicles')
 	end
-	sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, function(ok, count)
-		if count and count > 0 and ok then
-			notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки хелпера успешно загружены! Выполняю автоматическую перезагрузку...', message_color)
-			lua_thread.create(function()
-				wait(1500)
-				reload_script = true
-				thisScript():reload()
-			end)
-		end
-	end)
+	local ok, count = sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, nil, true)
+	if count and count > 0 and ok then
+		notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки хелпера успешно загружены! Выполняю автоматическую перезагрузку...', message_color)
+		wait(1500)
+		thisScript():reload()
+		return
+	end
 end
 function import_fraction_data(mode)
     local before_my = #modules.commands.data.commands.my
