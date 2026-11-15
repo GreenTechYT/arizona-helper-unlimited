@@ -4335,9 +4335,11 @@ function main()
             end
         end
     end
+	
+	if reload_script then return end
 
-    check_resources() 
-    delete_old_helpers()
+	check_resources() 
+	delete_old_helpers()
 
     if wt_ok and type(wt_mod) == 'table' and type(wt_mod.apply) == 'function' then
         MODULE.WeatherTime = wt_mod
@@ -7435,22 +7437,13 @@ local DOWNLOAD_HANDLERS = {
 		MODULE.Update.download_start = nil
 		MODULE.Update.download_file = ''
 		MODULE.Update.auto_start_download = false
-		MODULE.Update.installing = true
-		MODULE.Update.pending_reload = true
-		sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, function()
-			if not MODULE.Update.pending_reload then return end
-			MODULE.Update.pending_reload = false
-			MODULE.Update.installing = false
+		MODULE.Update.installing = false
+		notify('update', '[' .. CHAT_PREFIX .. '] {ffffff}Обновление установлено! Выполняется перезагрузка...', message_color)
+		lua_thread.create(function()
+			wait(1500) 
 			reload_script = true
 		end)
-		lua_thread.create(function()
-			wait(60000)
-			if MODULE.Update.pending_reload then
-				MODULE.Update.pending_reload = false
-				MODULE.Update.installing = false
-				reload_script = true
-			end
-		end)
+		
 		return true
 	end,
 	smart_pdd = function()
@@ -7512,15 +7505,11 @@ local function validate_download(part, path, key)
 			return false, 'old version'
 		end
 	elseif key == 'lib' then
-		local f_lib = io.open(part, 'r')
+		local f_lib = io.open(part, 'rb')
 		if not f_lib then return false, 'corrupted' end
 		local content = f_lib:read('*a')
 		f_lib:close()
-		if not content or content == '' then return false, 'empty' end
-		
-		local chunk, err = loadstring(content, '@' .. part)
-		if not chunk then return false, 'corrupted' end
-		
+		if not content or content == '' then return false, 'empty' end		
 		local name = path:match('[^/\\]+$')
 		local rv = MODULE.Update and MODULE.Update.lib_versions and name and MODULE.Update.lib_versions[name]
 		if rv then
@@ -7975,7 +7964,10 @@ function check_resources()
 	end
 	local ok, count = sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, nil, true)
 	if count and count > 0 and ok then
-		notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки хелпера успешно загружены! Инициализация...', message_color)
+		notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки успешно загружены! Выполняю перезагрузку для их активации...', message_color)
+		wait(1500)
+		thisScript():reload()
+		return
 	end
 end
 function import_fraction_data(mode)
