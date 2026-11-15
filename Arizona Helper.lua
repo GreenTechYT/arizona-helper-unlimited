@@ -4306,526 +4306,562 @@ local function sobes_say(text, cd)
 end
 --------------------------------------------[ FUNCTION ]---------------------------------------
 function main()
-	check_resources() 
-	do
-		if wt_ok and type(wt_mod) == 'table' and type(wt_mod.apply) == 'function' then
-			MODULE.WeatherTime = wt_mod
-		else
-			MODULE.WeatherTime = nil
-			print('[WeatherTime] Библиотека не загружена или устарела. Обновите lib/arizona_weather_and_time.lua')
-		end
-	end
-	if MODULE.WeatherTime then
-		MODULE.WeatherTime.apply(settings.general)
-		local function wt_command(is_time)
-			local cmd    = is_time and 'st' or 'sw'
-			local what   = is_time and 'времени' or 'погоды'
-			local ok_msg = is_time and 'Установлено время: ' or 'Установлена погода: '
-			local unit   = is_time and ' ч.' or ''
-			local cd_key = is_time and '_cd_t' or '_cd_w'
-			return function(arg)
-				local wt = MODULE.WeatherTime
-				if not wt then return end
-				local pre = '[' .. CHAT_PREFIX .. '] {ffffff}'
-				local hex = message_color_hex or '{FFFFFF}'
-				if settings.general.wt_enable ~= true then
-					notify('auto_features', pre .. 'Функция отключена. Включите "Смена времени и погоды" в Ассистенте.', message_color)
-					return
-				end
-				local locked
-				if is_time then locked = wt.locked_time else locked = wt.locked_weather end
-				if locked then
-					notify('auto_features', pre .. 'Сначала выключите фиксацию ' .. what .. ' (шестерёнка в Ассистенте).', message_color)
-					return
-				end
-				local maxv = tonumber(is_time and wt.MAX_TIME or wt.MAX_WEATHER) or (is_time and 23 or 45)
-				local v = tonumber(arg)
-				if not v or v < 0 or v > maxv or v ~= math.floor(v) then
-					notify('auto_features', pre .. 'Используйте ' .. hex .. '/' .. cmd .. ' [0-' .. maxv .. ']', message_color)
-					return
-				end
-				local now = os.clock()
-				if now - (wt[cd_key] or 0) < 0.5 then return end
-				wt[cd_key] = now
-
-				local ok
-				if is_time then ok = wt.set_time(v) else ok = wt.set_weather(v) end
-				if ok then
-					notify('auto_features', pre .. ok_msg .. hex .. v .. unit, message_color)
-				end
-			end
-		end
-		sampRegisterChatCommand('st', wt_command(true))
-		sampRegisterChatCommand('sw', wt_command(false))
-	end
-	MODULE.AutoDoor = autodoor_ok and autodoor_mod or nil
-	if MODULE.AutoDoor then MODULE.AutoDoor.init(settings) end
-	if settings.general.piemenu and pie_ok then MODULE.PieMenu.Window[0] = true end
-	do
-		local ok, edgo_setup = pcall(require, 'edgo')
-		if ok and type(edgo_setup) == 'function' then
-			edgo_setup({
-				u8 = u8, ffi = ffi, MODULE = MODULE,
-				settings = settings, modules = modules,
-			})
-		else
-			print('[EDGO] Не удалось загрузить lib/edgo.lua: ' .. tostring(edgo_setup))
-		end
-	end
-	lua_thread.create(function()
-		while true do
-			wait(250)
-			local cc = MODULE.CruiseControl
-			if cc.active or cc.pursuit_active then
-				local bad = not isCharInAnyCar(PLAYER_PED)
-				if not bad then
-					local ok, c = pcall(storeCarCharIsInNoSave, PLAYER_PED)
-					if ok and c then bad = not isCarEngineOn(c) end
-				end
-				if bad then
-					cruise_deactivate('Потеря контроля над т/с, круиз-контроль отключён.')
-				end
-			end
-		end
-	end)
-	function update_lssd_patrol_settings()
-		local rank_num = modules.player.data.fraction_rank_number or 1
-		local prefix = rank_num >= 9 and 'US' or rank_num >= 7 and 'C' or rank_num == 6 and 'L' or rank_num == 5 and 'D' or rank_num == 4 and 'S' or ''
-		local mark = MODULE.Patrool.mark or ''
-		local num = mark:find('%-') and 100 or (tonumber(mark:match('%d+$')) or 100)
-		if num < 100 then num = 100 elseif num > 130 then num = 130 end
-		MODULE.Patrool.lssd_prefix = prefix
-		MODULE.Patrool.mark = prefix .. num
-	end
-	lua_thread.create(function()
-		while true do
-			wait(1000)
-			if settings.general.aflip_domkrat and isCharInAnyCar(PLAYER_PED) then
-				local car = storeCarCharIsInNoSave(PLAYER_PED)
-				if getDriverOfCar(car) == PLAYER_PED and isCarUpsidedown(car) then
-					if not MODULE.AutoFlipDomkrat.cooldown then
-						MODULE.AutoFlipDomkrat.cooldown = true
-						local delay_ms = (settings.general.aflip_domkrat_delay or 5) * 1000
-						wait(delay_ms)
-						if isCharInAnyCar(PLAYER_PED) and isCarUpsidedown(storeCarCharIsInNoSave(PLAYER_PED)) then
-							sampSendChat("/domkrat")
-							notify('auto_features', '[' .. CHAT_PREFIX .. '] {ffffff}Использую домкрат...', message_color)
-						end
-						MODULE.AutoFlipDomkrat.cooldown = false
-					end
-				end
-			end
-		end
-	end)
-	lua_thread.create(function()
-		while true do
-			if settings.general.auto_clicker and MODULE.AutoClicker.active then
-				wait(settings.general.clicker_delay)
-				local command = "clickMinigame"
-				local bs = raknetNewBitStream()
-				raknetBitStreamWriteInt8(bs, 220)
-				raknetBitStreamWriteInt8(bs, 18)
-				raknetBitStreamWriteInt16(bs, #command)
-				raknetBitStreamWriteString(bs, command)
-				raknetBitStreamWriteInt32(bs, 0)
-				raknetSendBitStream(bs)
-				raknetDeleteBitStream(bs)
-			else
-				wait(250)
-			end
-		end
-	end)
-
-local function report_active_text(kind)
-	local r = report_cfg(kind)
-	local idx = tonumber(r.active) or 0
-	local item = idx > 0 and r.items[idx] or nil
-	if item and type(item.text) == 'string' and item.text ~= '' then return item.text end
-	return nil
-end
-local function report_context(kind)
-	local t = MODULE.Binder.tag
-	return {
-		nick = t.my_doklad_nick(),
-		post = kind == 'post' and t.get_post_name() or '',
-		code = kind == 'post' and t.get_post_code() or t.get_patrool_code(),
-		time = kind == 'post' and t.get_post_format_time() or t.get_patrool_format_time(),
-		units = t.get_car_units(),
-		mark = t.get_patrool_mark(),
-		area = t.get_area(),
-		square = t.get_square(),
-	}
-end
-local function report_render(kind)
-	local text = report_active_text(kind)
-	if not text then return nil end
-	local ctx = report_context(kind)
-	return (text:gsub('{([%w_]+)}', function(k)
-		local v = ctx[k]
-		return v ~= nil and tostring(v) or ('{' .. k .. '}')
-	end))
-end
-function report_send(kind)
-	local text = report_render(kind)
-	if not text or text == '' then return false end
-	local out = {}
-	for line in text:gmatch('[^&\r\n]+') do
-		line = line:gsub('^%s+', ''):gsub('%s+$', '')
-		if line ~= '' then
-			line = apply_binder_tags(line)
-			if line:sub(1, 1) ~= '/' then line = '/r ' .. line end
-			out[#out + 1] = line
-		end
-	end
-	if #out == 0 then return false end
-	if #out == 1 then
-		sampSendChat(out[1])
-	else
-		lua_thread.create(function()
-			for i, line in ipairs(out) do
-				if i > 1 then wait(math.floor((tonumber(settings.general.report_cd_sec) or 3) * 1000)) end
-				sampSendChat(line)
-			end
-		end)
-	end
-	return true
-end
-function report_send_post_fallback()
-	sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. '. Пост: ' .. MODULE.Binder.tag.get_post_name() .. ', состояние ' .. MODULE.Binder.tag.get_post_code())
-	wait(1500)
-	sampSendChat('/r Нахожусь на посту уже ' .. MODULE.Binder.tag.get_post_format_time())
-end
-function report_send_patrool_fallback()
-	if MODULE.Binder.tag.get_car_units() ~= 'Нету' then
-		sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ' в составе юнита ' .. MODULE.Binder.tag.get_car_units() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
-	else
-		sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
-	end
-end
-
-	lua_thread.create(function()
-		while true do
-			local md = modules.members.data
-			local period = md.update_period or 3
-			wait(period * 1000)
-			if MODULE.Members and MODULE.Members.Window[0]
-			   and md.auto_update
-			   and MODULE.Members.upd and MODULE.Members.upd.check
-			   and not MODULE.Members.info.check
-			   and not (MODULE.Members.flood_suppress_until and MODULE.Members.flood_suppress_until > 0 and os.time() <= MODULE.Members.flood_suppress_until)
-			   and not MODULE.Binder.state.isActive then
-				MODULE.Members.new = {}
-				MODULE.Members.info.check = true
-				MODULE.Members.flood_suppress_until = os.time() + 3
-				sampSendChat("/members")
-			end
-		end
-	end)
-	lua_thread.create(function()
-		while true do
-			wait(1000)
-			local ok, is_spawned = pcall(sampIsLocalPlayerSpawned)
-			local is_mj = isMode('police') or isMode('fbi')
-			if settings.mj.awanted and is_mj and ok and is_spawned and doesCharExist(PLAYER_PED) then
-				local my_x, my_y, my_z = getCharCoordinates(PLAYER_PED)
-				local _, my_id = sampGetPlayerIdByCharHandle(PLAYER_PED)
-				for id = 0, 999 do
-					if sampIsPlayerConnected(id) and id ~= my_id then
-						if not MODULE.Awanted.checked[id] then
-							local res, handle = sampGetCharHandleBySampPlayerId(id)
-							if res and doesCharExist(handle) then
-								local px, py, pz = getCharCoordinates(handle)
-								local dist = getDistanceBetweenCoords3d(my_x, my_y, my_z, px, py, pz)
-								if dist <= (settings.mj.scan_radius or 50) then
-									table.insert(MODULE.Awanted.queue, id)
-									MODULE.Awanted.checked[id] = true
-								end
-							end
-						end
-					end
-				end
-				if MODULE.Awanted.last_target ~= -1 and not sampIsPlayerConnected(MODULE.Awanted.last_target) then
-					MODULE.Awanted.last_target = -1
-				end
-				if MODULE.Awanted.last_target ~= -1
-				   and MODULE.Awanted.last_target_time
-				   and os.time() - MODULE.Awanted.last_target_time > (settings.mj.target_timeout or 10) then
-					MODULE.Awanted.last_target = -1
-				end
-				if #MODULE.Awanted.queue > 0 and not MODULE.Awanted.scanning then
-					local target_id = table.remove(MODULE.Awanted.queue, 1)
-					if sampIsPlayerConnected(target_id) then
-						MODULE.Awanted.scanning = true
-						MODULE.Awanted.last_target = target_id
-						MODULE.Awanted.last_target_time = os.time()
-						sampSendChat('/z ' .. target_id)
-						wait((settings.mj.scan_delay or 2) * 1000)
-						MODULE.Awanted.scanning = false
-					end
-				end
-				if os.time() - (MODULE.Awanted.last_reset or 0) >= (settings.mj.reset_interval or 45) then
-					MODULE.Awanted.checked = {}
-					MODULE.Awanted.last_reset = os.time()
-				end
-			else
-				MODULE.Awanted.queue = {}
-				MODULE.Awanted.checked = {}
-				MODULE.Awanted.scanning = false
-				MODULE.Awanted.last_target = -1
-			end
-		end
-	end)
-	lua_thread.create(function()
-		while true do
-			wait(1000)
-			if settings.mj.auto_update_wanteds and MODULE.Wanted.updwanteds.check and not MODULE.Wanted.checker then
-				local period = settings.mj.wanted_update_period or 10
-				local max_lvl = isMode('fbi') and 7 or 6
-				local last = MODULE.Wanted.updwanteds.last_time
-				if not last then
-					MODULE.Wanted.updwanteds.last_time = os.time()
-					last = MODULE.Wanted.updwanteds.last_time
-				end
-				local elapsed = os.time() - last
-				if elapsed >= (period - max_lvl) then
-					MODULE.Wanted.checker = true
-					MODULE.Wanted.new = {}
-					MODULE.Wanted.scan_cancel = false
-					for i = max_lvl, 1, -1 do
-						if MODULE.Wanted.scan_cancel then break end
-						sampSendChat('/wanted ' .. i)
-						wait(1000)
-					end
-					MODULE.Wanted.checker = false
-					MODULE.Wanted.updwanteds.last_time = os.time()
-					if not MODULE.Wanted.scan_cancel then
-						MODULE.Wanted.all = MODULE.Wanted.new
-						if #MODULE.Wanted.new == 0 then
-							MODULE.Wanted.Window[0] = false
-						else
-							MODULE.Wanted.Window[0] = true
-						end
-					end
-				end
-			end
-		end
-	end)
-	lua_thread.create(function()
-		local tick = 0
-		local dirty = false
-		while true do
-			wait(1000)
-			if sampGetGamestate() == 3 and not isGamePaused() and not isPauseMenuActive() then
-				local acc = find_account(modules.accounts.data.current)
-				if acc then
-					acc.total_seconds = (tonumber(acc.total_seconds) or 0) + 1
-					dirty = true
-				end
-			end
-			tick = tick + 1
-			if tick >= 60 then
-				tick = 0
-				if dirty then
-					dirty = false
-					save_module('accounts')
-				end
-			end
-		end
-	end)
-	if not isSampLoaded() or not isSampfuncsLoaded() then return end
+    if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(0) end
-	require_terms()
-	local start_check_update = os.clock()
-	check_update()
-	if settings.general.updater then
-		while not isUpdateChecked do
-			wait(10)
-			if (os.clock() - start_check_update > 10) then
-				isUpdateChecked = true
-			end
-		end
-		if MODULE.Update.is_need_update and (MODULE.Update.downloading or MODULE.Update.auto_start_download) then
-			local download_timeout = 165
-			local download_start = os.clock()
-			while MODULE.Update.downloading do
-				wait(100)
-				if (os.clock() - download_start > download_timeout) then
-					MODULE.Update.downloading = false
-					MODULE.Update.download_start = nil
-					break
-				end
-			end
-		end
-	end
-	delete_old_helpers()
-	if not is_account_fully_setup() then
-		repeat wait(0) until sampIsLocalPlayerSpawned()
-		MODULE.Initial.Window[0] = true
-		if hotkey_ok then loadHotkeys() end
-		lua_thread.create(function()
-			while not is_account_fully_setup() do
-				wait(3000)
-				if not MODULE.Initial.Window[0] then
-					MODULE.Initial.Window[0] = true
-				end
-			end
-		end)
-		return
-	end
-	initialize_commands()
-	lua_thread.create(function()
-		while true do
-			wait(1000)
-			if MODULE.Update.pending_show and not MODULE.Update.Window[0] then
-				MODULE.Update.show_notice()
-			end
-		end
-	end)
-	initialize_vehicles()
-	initialize_weapon()
-	if IS_MOBILE then render_buttons() end
-	if jit.arch == 'arm' and memory_ok then
-		memory.setint8(MONET_GTASA_BASE + 0x5E49EE, 0x00, true)
-		memory.setint8(MONET_GTASA_BASE + 0x5E49EE + 1, 0xBF, true)
-	end
-	welcome_message()
-	while true do
-		wait(0)
-		if IS_MOBILE and settings.general.mobile_fastmenu_button then
-			local now_fm = os.clock()
-			if not MODULE.FastMenuButton._last_check or now_fm - MODULE.FastMenuButton._last_check >= 0.5 then
-				MODULE.FastMenuButton._last_check = now_fm
-				MODULE.FastMenuButton._has_players = (players_near_count(8) > 0)
-			end
-			if MODULE.FastMenuButton._has_players and not MODULE.FastMenu.Window[0] and not MODULE.FastMenuPlayers.Window[0] then
-				MODULE.FastMenuButton.Window[0] = true
-			else
-				MODULE.FastMenuButton.Window[0] = false
-			end
-		end
-		if MODULE.Post.active then
-			MODULE.Post.time = os.difftime(os.time(), MODULE.Post.start_time)
-			if settings.general.auto_doklad_post and not MODULE.Post.process_doklad then
-				local period_sec = math.max(60, (tonumber(settings.general.post_doklad_period) or 5) * 60)
-				local ad = MODULE.Post.auto_doklad
-				if not ad.next_at then
-					local next_at = MODULE.Post.start_time + period_sec
-					while next_at <= os.time() do next_at = next_at + period_sec end
-					ad.next_at = next_at
-				end
-				if os.time() >= ad.next_at then
-					ad.next_at = ad.next_at + period_sec
-					if ad.next_at <= os.time() then ad.next_at = os.time() + period_sec end
-					MODULE.Post.process_doklad = true
-					lua_thread.create(function()
-						MODULE.Binder.state.isActive = true
-						if not report_send('post') then report_send_post_fallback() end
-						MODULE.Binder.state.isActive = false
-						MODULE.Post.process_doklad = false
-					end)
-				end
-			end
-		else
-			MODULE.Post.auto_doklad.next_at = nil
-		end
-		if settings.general.crosshair and memory_ok and isActiveCrosshairMode() then
-			local cd = modules.crosshair.data
-			local nm, sz = cd.font_name or 'Arial', cd.font_size or 15
-			if not _G.__crosshair_font or _G.__crosshair_font_nm ~= nm or _G.__crosshair_font_sz ~= sz then
-				_G.__crosshair_font, _G.__crosshair_font_nm, _G.__crosshair_font_sz = renderCreateFont(nm, sz, 1), nm, sz
-			end
-			local sx, sy = convertGameScreenCoordsToWindowScreenCoords(IS_MOBILE and 332.4 or 339.5, IS_MOBILE and 194.6 or 179.2)
-			local wx, wy, wz = convertScreenCoordsToWorld3D(sx, sy, 150)
-			local cx, cy, cz = getActiveCameraCoordinates()
-			local hit, ptr = processLineOfSight(cx, cy, cz, wx, wy, wz, false, false, true, false, false, false, false)
-			local enemy = false
-			if hit and isLineOfSightClear(cx, cy, cz, ptr.pos[1], ptr.pos[2], ptr.pos[3], true, true, false, true, true)
-			and ptr.entityType == 3 and ptr.entity ~= getCharPointer(PLAYER_PED) then
-				enemy = true
-				if cd.check_weapon_range then
-					local ppx, ppy, ppz = getCharCoordinates(PLAYER_PED)
-					MODULE.Crosshair.distance = getDistanceBetweenCoords3d(ppx, ppy, ppz, ptr.pos[1], ptr.pos[2], ptr.pos[3])
-					local wid = getCurrentCharWeapon(PLAYER_PED)
-					local weapon_range = nil
-					if modules.weapon and modules.weapon.data and modules.weapon.data.list then
-						for _, w in ipairs(modules.weapon.data.list) do
-							if w.id == wid and w.range then weapon_range = tonumber(w.range); break end
-						end
-					end
-					MODULE.Crosshair.currentWeaponRange = weapon_range + (cd.is_legendary_stripe and 8 or 0)
-					enemy = MODULE.Crosshair.distance <= MODULE.Crosshair.currentWeaponRange
-					if cd.show_weapon_range and _G.__crosshair_font then
-						local rgb = enemy and (cd.distance_color_in or {0,255,0}) or (cd.distance_color_out or {255,0,0})
-						renderFontDrawText(_G.__crosshair_font, string.format("%.1f / %.1f", MODULE.Crosshair.distance, MODULE.Crosshair.currentWeaponRange), sx - 60, sy + 55, join_argb(0xFF, rgb[1], rgb[2], rgb[3]))
-					end
-				else
-					enemy = false
-				end
-			end
-			changeCrosshairColor(enemy and cd.enemy_color or cd.standart_color)
-		elseif memory_ok and MODULE.Crosshair.orig_saved then
-			crosshair_restore_original()
-		end
-		if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then sampToggleScoreboard(false) end
-		if MODULE.Patrool.active then
-			MODULE.Patrool.time = os.difftime(os.time(), MODULE.Patrool.start_time)
-			if settings.mj.auto_doklad_patrool
-			   and MODULE.Patrool.patrol_type == 2
-			   and not MODULE.Patrool.process_doklad then
-				local period_sec = math.max(60, (tonumber(settings.mj.patrool_doklad_period) or 5) * 60)
-				local ad = MODULE.Patrool.auto_doklad
-				if not ad.next_at then
-					local next_at = MODULE.Patrool.start_time + period_sec
-					while next_at <= os.time() do next_at = next_at + period_sec end
-					ad.next_at = next_at
-				end
-				if os.time() >= ad.next_at then
-					ad.next_at = ad.next_at + period_sec
-					if ad.next_at <= os.time() then ad.next_at = os.time() + period_sec end
-					MODULE.Patrool.process_doklad = true
-					lua_thread.create(function()
-						MODULE.Binder.state.isActive = true
-						sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
-						wait(1500)
-						sampSendChat('/r Продолжаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. ' (' .. MODULE.Binder.tag.get_square() .. ').')
-						wait(1500)
-						if not report_send('patrool') then report_send_patrool_fallback() end
-						MODULE.Binder.state.isActive = false
-						MODULE.Patrool.process_doklad = false
-						MODULE.Patrool.auto_doklad.next_at = os.time() + math.max(60, (tonumber(settings.mj.patrool_doklad_period) or 5) * 60)
-					end)
-				end
-			end
-		else
-			MODULE.Patrool.auto_doklad.next_at = nil
-		end
+    
+    require_terms()
 
-		if (isMode('police') or isMode('fbi')) and MODULE.Patrool.active then
-			if settings.mj.auto_change_code_siren and isCharInAnyCar(PLAYER_PED) then
-				local car = storeCarCharIsInNoSave(PLAYER_PED)
-				if car and car ~= 0 then
-					local current = isCarSirenOn(car)
-					if MODULE.Patrool._lastSiren == nil then
-						MODULE.Patrool._lastSiren = current
-					elseif current ~= MODULE.Patrool._lastSiren then
-						MODULE.Patrool._lastSiren = current
-						local newCode = current and {'CODE 3', 4} or {'CODE 4', 5}
-						sampAddChatMessage("[" .. CHAT_PREFIX .. " | Ассистент] {ffffff}Проблесковые маячки " .. (current and "активированы (CODE 3)." or "деактивированы (CODE 4)."), message_color)
-						MODULE.Patrool.ComboCode[0] = newCode[2]
-						MODULE.Patrool.code = newCode[1]
-					end
-				end
-			end
-		end
-		
-		if settings.general.rp_weapon then
-			local current = getCurrentCharWeapon(PLAYER_PED)
-			if modules.weapon.data.nowGun ~= current then
-				modules.weapon.data.oldGun = modules.weapon.data.nowGun
-				modules.weapon.data.nowGun = current
-				processWeaponChange(modules.weapon.data.oldGun, current)
-			end
+    local start_check_update = os.clock()
+    check_update()
+    
+    if settings.general.updater then
+        while not isUpdateChecked do
+            wait(10)
+            if (os.clock() - start_check_update > 10) then
+                isUpdateChecked = true
+            end
         end
+        
+        if MODULE.Update.is_need_update and (MODULE.Update.downloading or MODULE.Update.auto_start_download) then
+            local download_timeout = 165
+            local download_start = os.clock()
+            while MODULE.Update.downloading do
+                wait(100)
+                if (os.clock() - download_start > download_timeout) then
+                    MODULE.Update.downloading = false
+                    MODULE.Update.download_start = nil
+                    break
+                end
+            end
+        end
+    end
+
+    check_resources() 
+    delete_old_helpers()
+
+    if wt_ok and type(wt_mod) == 'table' and type(wt_mod.apply) == 'function' then
+        MODULE.WeatherTime = wt_mod
+        MODULE.WeatherTime.apply(settings.general)
+        
+        local function wt_command(is_time)
+            local cmd    = is_time and 'st' or 'sw'
+            local what   = is_time and 'времени' or 'погоды'
+            local ok_msg = is_time and 'Установлено время: ' or 'Установлена погода: '
+            local unit   = is_time and ' ч.' or ''
+            local cd_key = is_time and '_cd_t' or '_cd_w'
+            
+            return function(arg)
+                local wt = MODULE.WeatherTime
+                if not wt then return end
+                
+                local pre = '[' .. CHAT_PREFIX .. '] {ffffff}'
+                local hex = message_color_hex or '{FFFFFF}'
+                
+                if settings.general.wt_enable ~= true then
+                    notify('auto_features', pre .. 'Функция отключена. Включите "Смена времени и погоды" в Ассистенте.', message_color)
+                    return
+                end
+                
+                local locked = is_time and wt.locked_time or wt.locked_weather
+                if locked then
+                    notify('auto_features', pre .. 'Сначала выключите фиксацию ' .. what .. ' (шестерёнка в Ассистенте).', message_color)
+                    return
+                end
+                
+                local maxv = tonumber(is_time and wt.MAX_TIME or wt.MAX_WEATHER) or (is_time and 23 or 45)
+                local v = tonumber(arg)
+                
+                if not v or v < 0 or v > maxv or v ~= math.floor(v) then
+                    notify('auto_features', pre .. 'Используйте ' .. hex .. '/' .. cmd .. ' [0-' .. maxv .. ']', message_color)
+                    return
+                end
+                
+                local now = os.clock()
+                if now - (wt[cd_key] or 0) < 0.5 then return end
+                wt[cd_key] = now
+
+                local ok = is_time and wt.set_time(v) or wt.set_weather(v)
+                if ok then
+                    notify('auto_features', pre .. ok_msg .. hex .. v .. unit, message_color)
+                end
+            end
+        end
+        
+        sampRegisterChatCommand('st', wt_command(true))
+        sampRegisterChatCommand('sw', wt_command(false))
+    else
+        MODULE.WeatherTime = nil
+        print('[WeatherTime] Библиотека не загружена или устарела. Обновите lib/arizona_weather_and_time.lua')
+    end
+
+    MODULE.AutoDoor = autodoor_ok and autodoor_mod or nil
+    if MODULE.AutoDoor then MODULE.AutoDoor.init(settings) end
+    
+    if settings.general.piemenu and pie_ok then MODULE.PieMenu.Window[0] = true end
+
+    do
+        local ok, edgo_setup = pcall(require, 'edgo')
+        if ok and type(edgo_setup) == 'function' then
+            edgo_setup({
+                u8 = u8, ffi = ffi, MODULE = MODULE,
+                settings = settings, modules = modules,
+            })
+        else
+            print('[EDGO] Не удалось загрузить lib/edgo.lua: ' .. tostring(edgo_setup))
+        end
+    end
+
+    if not is_account_fully_setup() then
+        repeat wait(0) until sampIsLocalPlayerSpawned()
+        MODULE.Initial.Window[0] = true
+        if hotkey_ok then loadHotkeys() end
+        
+        lua_thread.create(function()
+            while not is_account_fully_setup() do
+                wait(3000)
+                if not MODULE.Initial.Window[0] then
+                    MODULE.Initial.Window[0] = true
+                end
+            end
+        end)
+        return
+    end
+
+    initialize_commands()
+    initialize_vehicles()
+    initialize_weapon()
+    
+    if IS_MOBILE then render_buttons() end
+    
+    if jit.arch == 'arm' and memory_ok then
+        memory.setint8(MONET_GTASA_BASE + 0x5E49EE, 0x00, true)
+        memory.setint8(MONET_GTASA_BASE + 0x5E49EE + 1, 0xBF, true)
+    end
+    
+    welcome_message()
+    
+    function update_lssd_patrol_settings()
+        local rank_num = modules.player.data.fraction_rank_number or 1
+        local prefix = rank_num >= 9 and 'US' or rank_num >= 7 and 'C' or rank_num == 6 and 'L' or rank_num == 5 and 'D' or rank_num == 4 and 'S' or ''
+        local mark = MODULE.Patrool.mark or ''
+        local num = mark:find('%-') and 100 or (tonumber(mark:match('%d+$')) or 100)
+        if num < 100 then num = 100 elseif num > 130 then num = 130 end
+        MODULE.Patrool.lssd_prefix = prefix
+        MODULE.Patrool.mark = prefix .. num
+    end
+
+    local function report_active_text(kind)
+        local r = report_cfg(kind)
+        local idx = tonumber(r.active) or 0
+        local item = idx > 0 and r.items[idx] or nil
+        if item and type(item.text) == 'string' and item.text ~= '' then return item.text end
+        return nil
+    end
+
+    local function report_context(kind)
+        local t = MODULE.Binder.tag
+        return {
+            nick = t.my_doklad_nick(),
+            post = kind == 'post' and t.get_post_name() or '',
+            code = kind == 'post' and t.get_post_code() or t.get_patrool_code(),
+            time = kind == 'post' and t.get_post_format_time() or t.get_patrool_format_time(),
+            units = t.get_car_units(),
+            mark = t.get_patrool_mark(),
+            area = t.get_area(),
+            square = t.get_square(),
+        }
+    end
+
+    local function report_render(kind)
+        local text = report_active_text(kind)
+        if not text then return nil end
+        local ctx = report_context(kind)
+        return (text:gsub('{([%w_]+)}', function(k)
+            local v = ctx[k]
+            return v ~= nil and tostring(v) or ('{' .. k .. '}')
+        end))
+    end
+
+    function report_send(kind)
+        local text = report_render(kind)
+        if not text or text == '' then return false end
+        local out = {}
+        for line in text:gmatch('[^&\r\n]+') do
+            line = line:gsub('^%s+', ''):gsub('%s+$', '')
+            if line ~= '' then
+                line = apply_binder_tags(line)
+                if line:sub(1, 1) ~= '/' then line = '/r ' .. line end
+                out[#out + 1] = line
+            end
+        end
+        if #out == 0 then return false end
+        if #out == 1 then
+            sampSendChat(out[1])
+        else
+            lua_thread.create(function()
+                for i, line in ipairs(out) do
+                    if i > 1 then wait(math.floor((tonumber(settings.general.report_cd_sec) or 3) * 1000)) end
+                    sampSendChat(line)
+                end
+            end)
+        end
+        return true
+    end
+
+    function report_send_post_fallback()
+        sampSendChat('/r Докладывает ' .. MODULE.Binder.tag.my_doklad_nick() .. '. Пост: ' .. MODULE.Binder.tag.get_post_name() .. ', состояние ' .. MODULE.Binder.tag.get_post_code())
+        wait(1500)
+        sampSendChat('/r Нахожусь на посту уже ' .. MODULE.Binder.tag.get_post_format_time())
+    end
+
+    function report_send_patrool_fallback()
+        if MODULE.Binder.tag.get_car_units() ~= 'Нету' then
+            sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ' в составе юнита ' .. MODULE.Binder.tag.get_car_units() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
+        else
+            sampSendChat('/r Патрулирую уже ' .. MODULE.Binder.tag.get_patrool_format_time() .. ', состояние ' .. u8(MODULE.Binder.tag.get_patrool_code()) .. '.')
+        end
+    end
+
+    lua_thread.create(function()
+        while true do
+            wait(1000)
+            if MODULE.Update and MODULE.Update.pending_show and not MODULE.Update.Window[0] then
+                MODULE.Update.show_notice()
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        while true do
+            wait(250)
+            local cc = MODULE.CruiseControl
+            if cc and (cc.active or cc.pursuit_active) then
+                local bad = not isCharInAnyCar(PLAYER_PED)
+                if not bad then
+                    local ok, c = pcall(storeCarCharIsInNoSave, PLAYER_PED)
+                    if ok and c then bad = not isCarEngineOn(c) end
+                end
+                if bad then
+                    cruise_deactivate('Потеря контроля над т/с, круиз-контроль отключён.')
+                end
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        while true do
+            wait(1000)
+            if settings.general.aflip_domkrat and isCharInAnyCar(PLAYER_PED) then
+                local car = storeCarCharIsInNoSave(PLAYER_PED)
+                if getDriverOfCar(car) == PLAYER_PED and isCarUpsidedown(car) then
+                    if not MODULE.AutoFlipDomkrat.cooldown then
+                        MODULE.AutoFlipDomkrat.cooldown = true
+                        local delay_ms = (settings.general.aflip_domkrat_delay or 5) * 1000
+                        wait(delay_ms)
+                        if isCharInAnyCar(PLAYER_PED) and isCarUpsidedown(storeCarCharIsInNoSave(PLAYER_PED)) then
+                            sampSendChat("/domkrat")
+                            notify('auto_features', '[' .. CHAT_PREFIX .. '] {ffffff}Использую домкрат...', message_color)
+                        end
+                        MODULE.AutoFlipDomkrat.cooldown = false
+                    end
+                end
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        while true do
+            if settings.general.auto_clicker and MODULE.AutoClicker and MODULE.AutoClicker.active then
+                wait(settings.general.clicker_delay)
+                local command = "clickMinigame"
+                local bs = raknetNewBitStream()
+                raknetBitStreamWriteInt8(bs, 220)
+                raknetBitStreamWriteInt8(bs, 18)
+                raknetBitStreamWriteInt16(bs, #command)
+                raknetBitStreamWriteString(bs, command)
+                raknetBitStreamWriteInt32(bs, 0)
+                raknetSendBitStream(bs)
+                raknetDeleteBitStream(bs)
+            else
+                wait(250)
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        while true do
+            local md = modules.members and modules.members.data
+            local period = md and md.update_period or 3
+            wait(period * 1000)
+            if MODULE.Members and MODULE.Members.Window[0]
+               and md and md.auto_update
+               and MODULE.Members.upd and MODULE.Members.upd.check
+               and not MODULE.Members.info.check
+               and not (MODULE.Members.flood_suppress_until and MODULE.Members.flood_suppress_until > 0 and os.time() <= MODULE.Members.flood_suppress_until)
+               and not MODULE.Binder.state.isActive then
+                MODULE.Members.new = {}
+                MODULE.Members.info.check = true
+                MODULE.Members.flood_suppress_until = os.time() + 3
+                sampSendChat("/members")
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        while true do
+            wait(1000)
+            local ok, is_spawned = pcall(sampIsLocalPlayerSpawned)
+            local is_mj = isMode('police') or isMode('fbi')
+            if settings.mj.awanted and is_mj and ok and is_spawned and doesCharExist(PLAYER_PED) then
+                local my_x, my_y, my_z = getCharCoordinates(PLAYER_PED)
+                local _, my_id = sampGetPlayerIdByCharHandle(PLAYER_PED)
+                for id = 0, 999 do
+                    if sampIsPlayerConnected(id) and id ~= my_id then
+                        if not MODULE.Awanted.checked[id] then
+                            local res, handle = sampGetCharHandleBySampPlayerId(id)
+                            if res and doesCharExist(handle) then
+                                local px, py, pz = getCharCoordinates(handle)
+                                local dist = getDistanceBetweenCoords3d(my_x, my_y, my_z, px, py, pz)
+                                if dist <= (settings.mj.scan_radius or 50) then
+                                    table.insert(MODULE.Awanted.queue, id)
+                                    MODULE.Awanted.checked[id] = true
+                                end
+                            end
+                        end
+                    end
+                end
+                if MODULE.Awanted.last_target ~= -1 and not sampIsPlayerConnected(MODULE.Awanted.last_target) then
+                    MODULE.Awanted.last_target = -1
+                end
+                if MODULE.Awanted.last_target ~= -1
+                   and MODULE.Awanted.last_target_time
+                   and os.time() - MODULE.Awanted.last_target_time > (settings.mj.target_timeout or 10) then
+                    MODULE.Awanted.last_target = -1
+                end
+                if #MODULE.Awanted.queue > 0 and not MODULE.Awanted.scanning then
+                    local target_id = table.remove(MODULE.Awanted.queue, 1)
+                    if sampIsPlayerConnected(target_id) then
+                        MODULE.Awanted.scanning = true
+                        MODULE.Awanted.last_target = target_id
+                        MODULE.Awanted.last_target_time = os.time()
+                        sampSendChat('/z ' .. target_id)
+                        wait((settings.mj.scan_delay or 2) * 1000)
+                        MODULE.Awanted.scanning = false
+                    end
+                end
+                if os.time() - (MODULE.Awanted.last_reset or 0) >= (settings.mj.reset_interval or 45) then
+                    MODULE.Awanted.checked = {}
+                    MODULE.Awanted.last_reset = os.time()
+                end
+            else
+                MODULE.Awanted.queue = {}
+                MODULE.Awanted.checked = {}
+                MODULE.Awanted.scanning = false
+                MODULE.Awanted.last_target = -1
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        while true do
+            wait(1000)
+            if settings.mj.auto_update_wanteds and MODULE.Wanted.updwanteds.check and not MODULE.Wanted.checker then
+                local period = settings.mj.wanted_update_period or 10
+                local max_lvl = isMode('fbi') and 7 or 6
+                local last = MODULE.Wanted.updwanteds.last_time
+                if not last then
+                    MODULE.Wanted.updwanteds.last_time = os.time()
+                    last = MODULE.Wanted.updwanteds.last_time
+                end
+                local elapsed = os.time() - last
+                if elapsed >= (period - max_lvl) then
+                    MODULE.Wanted.checker = true
+                    MODULE.Wanted.new = {}
+                    MODULE.Wanted.scan_cancel = false
+                    for i = max_lvl, 1, -1 do
+                        if MODULE.Wanted.scan_cancel then break end
+                        sampSendChat('/wanted ' .. i)
+                        wait(1000)
+                    end
+                    MODULE.Wanted.checker = false
+                    MODULE.Wanted.updwanteds.last_time = os.time()
+                    if not MODULE.Wanted.scan_cancel then
+                        MODULE.Wanted.all = MODULE.Wanted.new
+                        MODULE.Wanted.Window[0] = (#MODULE.Wanted.new > 0)
+                    end
+                end
+            end
+        end
+    end)
+
+    lua_thread.create(function()
+        local tick = 0
+        local dirty = false
+        while true do
+            wait(1000)
+            if sampGetGamestate() == 3 and not isGamePaused() and not isPauseMenuActive() then
+                local acc = find_account(modules.accounts.data.current)
+                if acc then
+                    acc.total_seconds = (tonumber(acc.total_seconds) or 0) + 1
+                    dirty = true
+                end
+            end
+            tick = tick + 1
+            if tick >= 60 then
+                tick = 0
+                if dirty then
+                    dirty = false
+                    save_module('accounts')
+                end
+            end
+        end
+    end)
+
+	while true do
+        wait(0)
+        
+         if IS_MOBILE and settings.general.mobile_fastmenu_button then
+            local now_fm = os.clock()
+            if not MODULE.FastMenuButton._last_check or now_fm - MODULE.FastMenuButton._last_check >= 0.5 then
+                MODULE.FastMenuButton._last_check = now_fm
+                MODULE.FastMenuButton._has_players = (players_near_count(8) > 0)
+            end
+            if MODULE.FastMenuButton._has_players and not MODULE.FastMenu.Window[0] and not MODULE.FastMenuPlayers.Window[0] then
+                MODULE.FastMenuButton.Window[0] = true
+            else
+                MODULE.FastMenuButton.Window[0] = false
+            end
+        end
+
+        if MODULE.Post.active then
+            MODULE.Post.time = os.difftime(os.time(), MODULE.Post.start_time)
+            if settings.general.auto_doklad_post and not MODULE.Post.process_doklad then
+                local period_sec = math.max(60, (tonumber(settings.general.post_doklad_period) or 5) * 60)
+                local ad = MODULE.Post.auto_doklad
+                if not ad.next_at then
+                    local next_at = MODULE.Post.start_time + period_sec
+                    while next_at <= os.time() do next_at = next_at + period_sec end
+                    ad.next_at = next_at
+                end
+                if os.time() >= ad.next_at then
+                    ad.next_at = ad.next_at + period_sec
+                    if ad.next_at <= os.time() then ad.next_at = os.time() + period_sec end
+                    MODULE.Post.process_doklad = true
+                    lua_thread.create(function()
+                        MODULE.Binder.state.isActive = true
+                        if not report_send('post') then report_send_post_fallback() end
+                        MODULE.Binder.state.isActive = false
+                        MODULE.Post.process_doklad = false
+                    end)
+                end
+            end
+        else
+            MODULE.Post.auto_doklad.next_at = nil
+        end
+
+        if settings.general.crosshair and memory_ok and isActiveCrosshairMode() then
+            local cd = modules.crosshair.data
+            local nm, sz = cd.font_name or 'Arial', cd.font_size or 15
+            if not _G.__crosshair_font or _G.__crosshair_font_nm ~= nm or _G.__crosshair_font_sz ~= sz then
+                _G.__crosshair_font, _G.__crosshair_font_nm, _G.__crosshair_font_sz = renderCreateFont(nm, sz, 1), nm, sz
+            end
+            local sx, sy = convertGameScreenCoordsToWindowScreenCoords(IS_MOBILE and 332.4 or 339.5, IS_MOBILE and 194.6 or 179.2)
+            local wx, wy, wz = convertScreenCoordsToWorld3D(sx, sy, 150)
+            local cx, cy, cz = getActiveCameraCoordinates()
+            local hit, ptr = processLineOfSight(cx, cy, cz, wx, wy, wz, false, false, true, false, false, false, false)
+            local enemy = false
+            if hit and isLineOfSightClear(cx, cy, cz, ptr.pos[1], ptr.pos[2], ptr.pos[3], true, true, false, true, true)
+            and ptr.entityType == 3 and ptr.entity ~= getCharPointer(PLAYER_PED) then
+                enemy = true
+                if cd.check_weapon_range then
+                    local ppx, ppy, ppz = getCharCoordinates(PLAYER_PED)
+                    MODULE.Crosshair.distance = getDistanceBetweenCoords3d(ppx, ppy, ppz, ptr.pos[1], ptr.pos[2], ptr.pos[3])
+                    local wid = getCurrentCharWeapon(PLAYER_PED)
+                    local weapon_range = nil
+                    if modules.weapon and modules.weapon.data and modules.weapon.data.list then
+                        for _, w in ipairs(modules.weapon.data.list) do
+                            if w.id == wid and w.range then weapon_range = tonumber(w.range); break end
+                        end
+                    end
+                    MODULE.Crosshair.currentWeaponRange = weapon_range + (cd.is_legendary_stripe and 8 or 0)
+                    enemy = MODULE.Crosshair.distance <= MODULE.Crosshair.currentWeaponRange
+                    if cd.show_weapon_range and _G.__crosshair_font then
+                        local rgb = enemy and (cd.distance_color_in or {0,255,0}) or (cd.distance_color_out or {255,0,0})
+                        renderFontDrawText(_G.__crosshair_font, string.format("%.1f / %.1f", MODULE.Crosshair.distance, MODULE.Crosshair.currentWeaponRange), sx - 60, sy + 55, join_argb(0xFF, rgb[1], rgb[2], rgb[3]))
+                    end
+                else
+                    enemy = false
+                end
+            end
+            changeCrosshairColor(enemy and cd.enemy_color or cd.standart_color)
+        elseif memory_ok and MODULE.Crosshair.orig_saved then
+            crosshair_restore_original()
+        end
+
+        if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then 
+            sampToggleScoreboard(false) 
+        end
+
+        if MODULE.Patrool.active then
+            MODULE.Patrool.time = os.difftime(os.time(), MODULE.Patrool.start_time)
+            if settings.mj.auto_doklad_patrool
+               and MODULE.Patrool.patrol_type == 2
+               and not MODULE.Patrool.process_doklad then
+                local period_sec = math.max(60, (tonumber(settings.mj.patrool_doklad_period) or 5) * 60)
+                local ad = MODULE.Patrool.auto_doklad
+                if not ad.next_at then
+                    local next_at = MODULE.Patrool.start_time + period_sec
+                    while next_at <= os.time() do next_at = next_at + period_sec end
+                    ad.next_at = next_at
+                end
+                if os.time() >= ad.next_at then
+                    ad.next_at = ad.next_at + period_sec
+                    if ad.next_at <= os.time() then ad.next_at = os.time() + period_sec end
+                    MODULE.Patrool.process_doklad = true
+                    lua_thread.create(function()
+                        MODULE.Binder.state.isActive = true
+                        sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
+                        wait(1500)
+                        sampSendChat('/r Продолжаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. ' (' .. MODULE.Binder.tag.get_square() .. ').')
+                        wait(1500)
+                        if not report_send('patrool') then report_send_patrool_fallback() end
+                        MODULE.Binder.state.isActive = false
+                        MODULE.Patrool.process_doklad = false
+                        MODULE.Patrool.auto_doklad.next_at = os.time() + math.max(60, (tonumber(settings.mj.patrool_doklad_period) or 5) * 60)
+                    end)
+                end
+            end
+        else
+            MODULE.Patrool.auto_doklad.next_at = nil
+        end
+
+        if (isMode('police') or isMode('fbi')) and MODULE.Patrool.active then
+            if settings.mj.auto_change_code_siren and isCharInAnyCar(PLAYER_PED) then
+                local car = storeCarCharIsInNoSave(PLAYER_PED)
+                if car and car ~= 0 then
+                    local current = isCarSirenOn(car)
+                    if MODULE.Patrool._lastSiren == nil then
+                        MODULE.Patrool._lastSiren = current
+                    elseif current ~= MODULE.Patrool._lastSiren then
+                        MODULE.Patrool._lastSiren = current
+                        local newCode = current and {'CODE 3', 4} or {'CODE 4', 5}
+                        sampAddChatMessage("[" .. CHAT_PREFIX .. " | Ассистент] {ffffff}Проблесковые маячки " .. (current and "активированы (CODE 3)." or "деактивированы (CODE 4)."), message_color)
+                        MODULE.Patrool.ComboCode[0] = newCode[2]
+                        MODULE.Patrool.code = newCode[1]
+                    end
+                end
+            end
+        end
+
+        if settings.general.rp_weapon then
+            local current = getCurrentCharWeapon(PLAYER_PED)
+            if modules.weapon.data.nowGun ~= current then
+                modules.weapon.data.oldGun = modules.weapon.data.nowGun
+                modules.weapon.data.nowGun = current
+                processWeaponChange(modules.weapon.data.oldGun, current)
+            end
+        end
+
         local cc = MODULE.CruiseControl
         local SPEED_KMH_TO_GAME = 0.375
         local _speed = (settings.general.cruise_speed or 28) * SPEED_KMH_TO_GAME
@@ -4834,6 +4870,7 @@ end
         local _radius  = settings.general.cruise_radius  or 15
         local _stuck   = settings.general.cruise_stuck   or 4
         local _aggr_on = (settings.general.cruise_aggressive ~= false)
+        
         if settings.general.cruise_auto_accept
            and not cc.active and not cc.wait_point and not cc.pursuit_active
            and (os.clock() - (cc.last_deactivate_time or 0)) > 1.0 then
@@ -4855,6 +4892,7 @@ end
                 end
             end
         end
+        
         if cc.wait_point then
             local bool, x, y, z = getTargetBlipCoordinates()
             if bool then
@@ -4867,7 +4905,7 @@ end
                     sampSendChat('/me включает в своём т/с адаптивный круиз-контроль и настраивает GPS-навигатор.')
                     wait(1500)
                     sampSendChat('/do На экране загорается надпись "GPS-маршрут успешно проложен, можно ехать".')
-					cc.escape_phase = 0; cc.phase_start = 0; cc._aggr_tried = false
+                    cc.escape_phase = 0; cc.phase_start = 0; cc._aggr_tried = false
                     cc.drive_type = settings.general.cruise_drive or 2
                     cc.active = true
                     wait(2000)
@@ -4875,6 +4913,7 @@ end
                 end)
             end
         end
+        
         if cc.active then
             local car = storeCarCharIsInNoSave(PLAYER_PED)
             if not isCharInAnyCar(PLAYER_PED) then
@@ -4935,7 +4974,7 @@ end
                 end
             end
         end
-	end
+    end
 end
 function welcome_message()
 	if not sampIsLocalPlayerSpawned() then 
@@ -7929,17 +7968,14 @@ function check_resources()
 		pcall(os.remove, config_dir .. "/Resourse/notify.mp3")
 		downloadFileFromUrlToPath(RES_BASE .. 'notify.mp3', config_dir .. "/Resourse/notify.mp3", 'notify')
 	end
-	local veh_path = modules.vehicles.path
-	if not doesFileExist(veh_path) or is_html_garbage(veh_path) then
+	local veh_path = modules and modules.vehicles and modules.vehicles.path
+	if veh_path and (not doesFileExist(veh_path) or is_html_garbage(veh_path)) then
 		pcall(os.remove, veh_path)
 		downloadFileFromUrlToPath(VEHICLES_BASE .. ((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), veh_path, 'vehicles')
 	end
 	local ok, count = sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, nil, true)
 	if count and count > 0 and ok then
-		notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки хелпера успешно загружены! Выполняю автоматическую перезагрузку...', message_color)
-		wait(1500)
-		thisScript():reload()
-		return
+		notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки хелпера успешно загружены! Инициализация...', message_color)
 	end
 end
 function import_fraction_data(mode)
