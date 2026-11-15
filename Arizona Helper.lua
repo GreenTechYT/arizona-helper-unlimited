@@ -4767,11 +4767,44 @@ end
 			crosshair_restore_original()
 		end
 		if not IS_MOBILE and settings.general.scoreboard and sampIsScoreboardOpen() then sampToggleScoreboard(false) end
-		if isMode('police') or isMode('fbi') then
-			if MODULE.Patrool.active then
-				MODULE.Patrool.time = os.difftime(os.time(), MODULE.Patrool.start_time)
-				if settings.mj.auto_change_code_siren and isCharInAnyCar(PLAYER_PED) then
-					local current = isCarSirenOn(storeCarCharIsInNoSave(PLAYER_PED))
+		if MODULE.Patrool.active then
+			MODULE.Patrool.time = os.difftime(os.time(), MODULE.Patrool.start_time)
+			if settings.mj.auto_doklad_patrool
+			   and MODULE.Patrool.patrol_type == 2
+			   and not MODULE.Patrool.process_doklad then
+				local period_sec = math.max(60, (tonumber(settings.mj.patrool_doklad_period) or 5) * 60)
+				local ad = MODULE.Patrool.auto_doklad
+				if not ad.next_at then
+					local next_at = MODULE.Patrool.start_time + period_sec
+					while next_at <= os.time() do next_at = next_at + period_sec end
+					ad.next_at = next_at
+				end
+				if os.time() >= ad.next_at then
+					ad.next_at = ad.next_at + period_sec
+					if ad.next_at <= os.time() then ad.next_at = os.time() + period_sec end
+					MODULE.Patrool.process_doklad = true
+					lua_thread.create(function()
+						MODULE.Binder.state.isActive = true
+						sampSendChat('/r ' .. MODULE.Binder.tag.my_doklad_nick() .. ' на CONTROL.')
+						wait(1500)
+						sampSendChat('/r Продолжаю патруль, нахожусь в районе ' .. MODULE.Binder.tag.get_area() .. ' (' .. MODULE.Binder.tag.get_square() .. ').')
+						wait(1500)
+						if not report_send('patrool') then report_send_patrool_fallback() end
+						MODULE.Binder.state.isActive = false
+						MODULE.Patrool.process_doklad = false
+						MODULE.Patrool.auto_doklad.next_at = os.time() + math.max(60, (tonumber(settings.mj.patrool_doklad_period) or 5) * 60)
+					end)
+				end
+			end
+		else
+			MODULE.Patrool.auto_doklad.next_at = nil
+		end
+
+		if (isMode('police') or isMode('fbi')) and MODULE.Patrool.active then
+			if settings.mj.auto_change_code_siren and isCharInAnyCar(PLAYER_PED) then
+				local car = storeCarCharIsInNoSave(PLAYER_PED)
+				if car and car ~= 0 then
+					local current = isCarSirenOn(car)
 					if MODULE.Patrool._lastSiren == nil then
 						MODULE.Patrool._lastSiren = current
 					elseif current ~= MODULE.Patrool._lastSiren then
@@ -4782,7 +4815,7 @@ end
 						MODULE.Patrool.code = newCode[1]
 					end
 				end
-			end	
+			end
 		end
 		
 		if settings.general.rp_weapon then
@@ -5757,20 +5790,22 @@ end
 
 function ol_text(col, txt, outline)
     if not col then imgui.Text("%s", txt) return end
-    local need = (outline == true)
-    if not need then
-        local bg = (settings.ui.theme == 2) and 0.92 or 0.12
-        need = math.abs(0.299 * col.x + 0.587 * col.y + 0.114 * col.z - bg) < 0.38
-    end
     local thickness = tonumber(settings.ui.outline_thickness)
     if thickness == nil then thickness = 1.0 end
     thickness = math.max(0, math.min(thickness, 2))
+    local need = (outline == true)
+    if settings.ui.theme == 2 then
+        need = true
+    else
+        if not need then
+            local bg = 0.12
+            need = math.abs(0.299 * col.x + 0.587 * col.y + 0.114 * col.z - bg) < 0.38
+        end
+    end
     if need and thickness > 0 then
         local sp = imgui.GetCursorScreenPos()
         local dl = imgui.GetWindowDrawList()
-        local oc = (settings.ui.theme == 2)
-            and imgui.GetColorU32Vec4(imgui.ImVec4(0.05, 0.05, 0.08, 0.40))
-            or  imgui.GetColorU32Vec4(imgui.ImVec4(0.00, 0.00, 0.00, 0.45))
+        local oc = (settings.ui.theme == 2) and imgui.GetColorU32Vec4(imgui.ImVec4(0.00, 0.00, 0.00, 0.75)) or  imgui.GetColorU32Vec4(imgui.ImVec4(0.00, 0.00, 0.00, 0.45))
         pcall(function()
             for i = 1, math.ceil(thickness) do
                 local r = math.min(i, thickness)
@@ -11028,14 +11063,29 @@ imgui.OnFrame(
 				if not _G.helper_logo and not _G.helper_logo_failed then
 					local path = config_dir .. '/Resourse/logo.png'
 					if doesFileExist(path) then
-						local ok, tex = pcall(imgui.CreateTextureFromFile, path)
-						if ok and tex then
-							_G.helper_logo = tex
+						local temp_path = os.getenv('TEMP') or os.getenv('TMP') or getWorkingDirectory()
+						local safe_path = temp_path .. '/ah_logo_' .. (thisScript and thisScript().thisScriptName or 'helper'):gsub('[^%w%.%-]', '') .. '.png'
+						local copy_ok = pcall(function()
+							local f = io.open(path, 'rb')
+							if not f then error('src') end
+							local data = f:read('*a')
+							f:close()
+							local g = io.open(safe_path, 'wb')
+							if not g then error('dst') end
+							g:write(data)
+							g:close()
+						end)
+						local load_path = copy_ok and safe_path or path
+						local ok, tex_or_err = pcall(imgui.CreateTextureFromFile, load_path)
+						if ok and tex_or_err and type(tex_or_err) ~= 'string' then
+							_G.helper_logo = tex_or_err
 						else
 							_G.helper_logo_failed = true
+							_G.helper_logo_error = tostring(tex_or_err or 'unknown')
 						end
 					else
 						_G.helper_logo_failed = true
+						_G.helper_logo_error = 'Файл не найден'
 					end
 				end
 				if _G.helper_logo then
@@ -11048,6 +11098,9 @@ imgui.OnFrame(
 					if imgui.BeginChild('##1000000000000', imgui.ImVec2(589 * settings.ui.dpi, 161 * settings.ui.dpi), true) then
 						imgui.Text("\n\n\n")
 						imgui.CenterTextDisabled(u8('Не удалось загрузить дополнительные ресурсы хелпера!\n\n'))
+						if _G.helper_logo_error then
+							imgui.CenterTextDisabled(u8('Ошибка: ' .. _G.helper_logo_error))
+						end
 						imgui.CenterTextDisabled(u8('Для автоматической загрузки временно включите VPN или скачайте файлы вручную'))
 						imgui.CenterUnderlineText("https://github.com/GreenTechYT/arizona-helper-unlimited")
 						if imgui.IsItemClicked() then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited/tree/main/Resourse') end
@@ -16007,14 +16060,29 @@ imgui.OnFrame(
 			if not _G.helper_logo and not _G.helper_logo_failed then
 				local path = config_dir .. '/Resourse/logo.png'
 				if doesFileExist(path) then
-					local ok, tex = pcall(imgui.CreateTextureFromFile, path)
-					if ok and tex then
-						_G.helper_logo = tex
+					local temp_path = os.getenv('TEMP') or os.getenv('TMP') or getWorkingDirectory()
+					local safe_path = temp_path .. '/ah_logo_init_' .. (thisScript and thisScript().thisScriptName or 'helper'):gsub('[^%w%.%-]', '') .. '.png'
+					local copy_ok = pcall(function()
+						local f = io.open(path, 'rb')
+						if not f then error('src') end
+						local data = f:read('*a')
+						f:close()
+						local g = io.open(safe_path, 'wb')
+						if not g then error('dst') end
+						g:write(data)
+						g:close()
+					end)
+					local load_path = copy_ok and safe_path or path
+					local ok, tex_or_err = pcall(imgui.CreateTextureFromFile, load_path)
+					if ok and tex_or_err and type(tex_or_err) ~= 'string' then
+						_G.helper_logo = tex_or_err
 					else
 						_G.helper_logo_failed = true
+						_G.helper_logo_error = tostring(tex_or_err or 'unknown')
 					end
 				else
 					_G.helper_logo_failed = true
+					_G.helper_logo_error = 'Файл не найден'
 				end
 			end
 			if _G.helper_logo then
@@ -16027,6 +16095,9 @@ imgui.OnFrame(
 				if imgui.BeginChild('##init1_1', imgui.ImVec2(content_w, 150 * settings.ui.dpi), true) then
 					imgui.Text("\n\n\n")
 					imgui.CenterTextDisabled(u8('Не удалось загрузить дополнительные ресурсы хелпера!\n\n'))
+					if _G.helper_logo_error then
+						imgui.CenterTextDisabled(u8('Ошибка: ' .. _G.helper_logo_error))
+					end
 					imgui.CenterTextDisabled(u8('Для автоматической загрузки временно включите VPN или скачайте файлы вручную'))
 					imgui.CenterUnderlineText("https://github.com/GreenTechYT/arizona-helper-unlimited")
 					if imgui.IsItemClicked() then openLink('https://github.com/GreenTechYT/arizona-helper-unlimited/tree/main/Resourse') end
@@ -19092,31 +19163,6 @@ end
 	imgui.OnFrame(
 		function() return MODULE.Post.Window[0] end,
 		function(player)
-			if type(background_dim_color) == 'function' then
-				local dsx, dsy = sizeX, sizeY
-				pcall(function()
-					local d = imgui.GetIO().DisplaySize
-					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
-				end)
-				local PAD = 200
-				local st = imgui.GetStyle()
-				local old_round, old_border = nil, nil
-				pcall(function() old_round  = st.WindowRounding  end)
-				pcall(function() old_border = st.WindowBorderSize end)
-				pcall(function() st.WindowRounding  = 0 end)
-				pcall(function() st.WindowBorderSize = 0 end)
-				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
-				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
-				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
-				imgui.Begin('##dim_post', nil,
-					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
-					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
-					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
-				imgui.End()
-				imgui.PopStyleColor()
-				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
-				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
-			end
 			settings.windows_pos.post_menu = settings.windows_pos.post_menu
 				or { x = sizeX / 2 - 170, y = sizeY / 2 - 110 }
 			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.post_menu.x, settings.windows_pos.post_menu.y), imgui.Cond.FirstUseEver)
@@ -19147,28 +19193,26 @@ end
 					imgui.EndPopup()
 				end
 			end
-			imgui.PushStyleColor(imgui.Col.Text, accent)
-			imgui.Text(fa.BUILDING_SHIELD .. u8' ПОСТ')
-			imgui.PopStyleColor()
+			ol_text(accent, fa.BUILDING_SHIELD .. u8' ПОСТ')
 			imgui.SameLine()
 			if MODULE.Post.active then
-				imgui.TextColored(green, fa.CIRCLE_CHECK .. u8' НА ПОСТУ')
+				ol_text(green, fa.CIRCLE_CHECK .. u8' НА ПОСТУ')
 			else
-				imgui.TextDisabled(fa.CIRCLE .. u8' НЕ НА ПОСТУ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), fa.CIRCLE .. u8' НЕ НА ПОСТУ')
 			end
 			imgui.Separator()
 			imgui.Dummy(imgui.ImVec2(content_w, 0))
 			imgui.SetCursorPosY(imgui.GetCursorPosY() - st.ItemSpacing.y)
 			if MODULE.Post.active then
-				imgui.TextDisabled(u8'Пост: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Пост: ')
 				imgui.SameLine()
-				imgui.Text(u8(MODULE.Binder.tag.get_post_name()))
-				imgui.TextDisabled(u8'Время: ')
+				ol_text(nil, u8(MODULE.Binder.tag.get_post_name()))
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Время: ')
 				imgui.SameLine()
-				imgui.TextColored(accent, u8(MODULE.Binder.tag.get_post_time()))
-				imgui.TextDisabled(u8'Состояние: ')
+				ol_text(accent, u8(MODULE.Binder.tag.get_post_time()))
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Состояние: ')
 				imgui.SameLine()
-				imgui.TextColored(green, u8(MODULE.Binder.tag.get_post_code()))
+				ol_text(green, u8(MODULE.Binder.tag.get_post_code()))
 				render_code_picker()
 				if settings.general.auto_doklad_post then
 					local period_sec = math.max(60, (tonumber(settings.general.post_doklad_period) or 5) * 60)
@@ -19218,9 +19262,9 @@ end
 				end
 				if imgui.IsItemHovered() then imgui.SetTooltip(u8'Название поста, которое будет в докладах.') end
 				imgui.PopItemWidth()
-				imgui.TextDisabled(u8'Состояние: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Состояние: ')
 				imgui.SameLine()
-				imgui.TextColored(accent, u8(MODULE.Binder.tag.get_post_code()))
+				ol_text(accent, u8(MODULE.Binder.tag.get_post_code()))
 				render_code_picker()
 				if imgui.Button(fa.CIRCLE_XMARK .. u8' Отмена##post', imgui.ImVec2(imgui.GetMiddleButtonX(2), 25 * dpi)) then
 					MODULE.Post.Window[0] = false
@@ -19632,31 +19676,6 @@ if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
 	imgui.OnFrame(
 		function() return MODULE.Patrool.Window[0] end,
 		function(player)
-			if type(background_dim_color) == 'function' then
-				local dsx, dsy = sizeX, sizeY
-				pcall(function()
-					local d = imgui.GetIO().DisplaySize
-					if d and d.x and d.y and d.x > 0 and d.y > 0 then dsx, dsy = d.x, d.y end
-				end)
-				local PAD = 200
-				local st = imgui.GetStyle()
-				local old_round, old_border = nil, nil
-				pcall(function() old_round  = st.WindowRounding  end)
-				pcall(function() old_border = st.WindowBorderSize end)
-				pcall(function() st.WindowRounding  = 0 end)
-				pcall(function() st.WindowBorderSize = 0 end)
-				imgui.SetNextWindowPos(imgui.ImVec2(-PAD, -PAD), imgui.Cond.Always)
-				imgui.SetNextWindowSize(imgui.ImVec2(dsx + PAD * 2, dsy + PAD * 2), imgui.Cond.Always)
-				imgui.PushStyleColor(imgui.Col.WindowBg, background_dim_color())
-				imgui.Begin('##dim_patrool', nil,
-					imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize +
-					imgui.WindowFlags.NoMove + imgui.WindowFlags.NoScrollbar +
-					imgui.WindowFlags.NoCollapse + imgui.WindowFlags.NoInputs)
-				imgui.End()
-				imgui.PopStyleColor()
-				pcall(function() if old_round  then st.WindowRounding  = old_round  end end)
-				pcall(function() if old_border then st.WindowBorderSize = old_border end end)
-			end
 			settings.windows_pos.patrool_menu = settings.windows_pos.patrool_menu
 				or { x = sizeX / 2 - 150, y = sizeY / 2 - 120 }
 			imgui.SetNextWindowPos(imgui.ImVec2(settings.windows_pos.patrool_menu.x, settings.windows_pos.patrool_menu.y), imgui.Cond.FirstUseEver)
@@ -19725,37 +19744,35 @@ if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
 			end
 			local function render_units(avail_w)
 				local units = MODULE.Binder.tag.get_car_units()
-				imgui.TextDisabled(u8'Напарники: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Напарники: ')
 				imgui.SameLine()
 				local label_w = imgui.CalcTextSize(u8'Напарники: ').x
 				local u_disp, u_tr = fit_u8(units, math.max(40 * dpi, avail_w - label_w - st.ItemSpacing.x))
-				imgui.Text(u_disp)
+				ol_text(nil, u_disp)
 				if u_tr and imgui.IsItemHovered() then imgui.SetTooltip(u8(units)) end
 			end
-			imgui.PushStyleColor(imgui.Col.Text, accent)
-			imgui.Text(fa.SHIELD_HALVED .. u8' ПАТРУЛЬ')
-			imgui.PopStyleColor()
+			ol_text(accent, fa.SHIELD_HALVED .. u8' ПАТРУЛЬ')
 			imgui.SameLine()
 			if MODULE.Patrool.active then
-				imgui.TextColored(green, fa.CIRCLE_CHECK .. u8' АКТИВЕН')
+				ol_text(green, fa.CIRCLE_CHECK .. u8' АКТИВЕН')
 			else
-				imgui.TextDisabled(fa.CIRCLE .. u8' НЕ АКТИВЕН')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), fa.CIRCLE .. u8' НЕ АКТИВЕН')
 			end
 			imgui.Separator()
 			imgui.Dummy(imgui.ImVec2(content_w, 0))
 			imgui.SetCursorPosY(imgui.GetCursorPosY() - st.ItemSpacing.y)
 			if MODULE.Patrool.active then
-				imgui.TextDisabled(u8'Время: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Время: ')
 				imgui.SameLine()
-				imgui.TextColored(green, u8(MODULE.Binder.tag.get_patrool_time()))
+				ol_text(green, u8(MODULE.Binder.tag.get_patrool_time()))
 				imgui.SameLine()
 				imgui.SetCursorPosX(col2_x)
-				imgui.TextDisabled(u8'Маркировка: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Маркировка: ')
 				imgui.SameLine()
-				imgui.Text(u8(MODULE.Patrool.mark or MODULE.Binder.tag.get_patrool_mark()))
-				imgui.TextDisabled(u8'Состояние: ')
+				ol_text(nil, u8(MODULE.Patrool.mark or MODULE.Binder.tag.get_patrool_mark()))
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Состояние: ')
 				imgui.SameLine()
-				imgui.TextColored(orange, u8(MODULE.Binder.tag.get_patrool_code()))
+				ol_text(orange, u8(MODULE.Binder.tag.get_patrool_code()))
 				render_code_picker()
 				imgui.SameLine()
 				imgui.SetCursorPosX(col2_x)
@@ -19818,7 +19835,7 @@ if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
 				type_card('Системный', fa.SATELLITE_DISH, 1, tip_system)
 				imgui.SameLine()
 				type_card('Самостоятельный', fa.USER_GEAR, 2, tip_free)
-				imgui.TextDisabled(u8'Маркировка: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Маркировка: ')
 				imgui.SameLine()
 				if is_lssd then
 					if not MODULE.Patrool.mark_input_buf then
@@ -19845,7 +19862,7 @@ if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
 					end
 					imgui.PopItemWidth()
 					imgui.SameLine()
-					imgui.TextDisabled(u8('Auto-mark: ' .. (prefix == '' and 'Нету' or prefix)))
+					ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8('Auto-mark: ' .. (prefix == '' and 'Нету' or prefix)))
 				else
 					imgui.PushItemWidth(-1)
 					if imgui.Combo('##patrool_mark', MODULE.Patrool.ComboMark, MODULE.Patrool.ImItemsMark, #MODULE.Patrool.marks) then
@@ -19853,7 +19870,7 @@ if isMode('police') or isMode('fbi') or isMode('army') or isMode('prison') then
 					end
 					imgui.PopItemWidth()
 				end
-				imgui.TextDisabled(u8'Состояние: ')
+				ol_text(imgui.ImVec4(0.5, 0.5, 0.5, 1.0), u8'Состояние: ')
 				imgui.SameLine()
 				imgui.PushItemWidth(-1)
 				if imgui.Combo('##patrool_code', MODULE.Patrool.ComboCode, MODULE.Patrool.ImItemsCode, #MODULE.Patrool.codes) then
