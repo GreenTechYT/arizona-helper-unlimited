@@ -1,18 +1,29 @@
--- LIB_VERSION: 1.0
+-- LIB_VERSION: 1.1
 local M = {}
-M.enabled = false
-M.last_trigger = 0
-M.TRIGGER_COOLDOWN = 750
-M.NOTIFY_COOLDOWN = 5000
+M.enabled            = false
+M.loop_started       = false
+M.generation         = 0
+M._error_logged      = false
+M.notify_func        = nil
+M.TICK_MS            = 33
+M.CACHE_TTL          = 0.25
+M.CACHE_MOVE_SQ      = 225
+M.DOOR_DIST_SQ       = 6.25
+M.BARRIER_FOOT       = 5
+M.BARRIER_CAR        = 12
+M.DOOR_COOLDOWN      = 250
+M.BARRIER_COOLDOWN   = 700
+M.HEADING_TOL        = 3
+M.NOTIFY_COOLDOWN    = 5000
 M.last_no_key_notify = 0
-M.generation = 0
-M.loop_started = false
-M._error_logged = false
-M.notify_func = nil
-M.cached_targets = {}
-M.last_cache_update = 0
+M.last_trigger       = 0
+M.cached_targets     = {}
+M.last_cache_update  = 0
+
+local os_clock = os.clock
 local sync_mem = nil
-local last_px, last_py, last_pz = 0, 0, 0
+local cache_px, cache_py, cache_pz = 0, 0, 0
+local obj_cd = {}
 
 local DOOR_MODELS = {
     [1495] = true, [3089] = true, [1561] = true, [19938] = true,
@@ -29,11 +40,13 @@ local function isMonetLoader()
     return MONET_VERSION ~= nil
 end
 
-local function isValidHeading(heading)
-    return (heading > 179 and heading < 181) or
-           (heading > 89 and heading < 91) or
-           (heading > -1 and heading < 1) or
-           (heading > 269 and heading < 271)
+local function isValidHeading(h, tol)
+    tol = tonumber(tol) or 3
+    local function near(target)
+        local d = math.abs((h - target + 180) % 360 - 180)
+        return d <= tol
+    end
+    return near(0) or near(90) or near(180) or near(270)
 end
 
 local function sendKeyForCar()
@@ -44,12 +57,11 @@ local function sendClickKeySync()
     if not sync_mem then sync_mem = allocateMemory(68) end
     local _, myId = sampGetPlayerIdByCharHandle(PLAYER_PED)
     sampStorePlayerOnfootData(myId, sync_mem)
-    local weaponId = getCurrentCharWeapon(PLAYER_PED)
-    setStructElement(sync_mem, 36, 1, weaponId + 192, true)
+    setStructElement(sync_mem, 36, 1, getCurrentCharWeapon(PLAYER_PED) + 192, true)
     sampSendOnfootData(sync_mem)
 end
 
-local function sendOpenPacket()
+local function sendOpenPacket(inCar)
     if isMonetLoader() then
         local bs = raknetNewBitStream()
         raknetBitStreamWriteInt8(bs, 220)
@@ -62,103 +74,118 @@ local function sendOpenPacket()
         raknetSendBitStreamEx(bs, 1, 7, 1)
         raknetDeleteBitStream(bs)
     else
-        if isCharInAnyCar(PLAYER_PED) then
-            sendKeyForCar()
-        else
-            sendClickKeySync()
-        end
+        if inCar == nil then inCar = isCharInAnyCar(PLAYER_PED) end
+        if inCar then sendKeyForCar() else sendClickKeySync() end
     end
 end
 
-local function update_object_cache()
-    local targets = {}
-    for _, hObj in ipairs(getAllObjects()) do
-        if doesObjectExist(hObj) then
-            local model = getObjectModel(hObj)
-            if DOOR_MODELS[model] or BARRIER_MODELS[model] then
-                local res, ox, oy, oz = getObjectCoordinates(hObj)
-                if res then
-                    table.insert(targets, { h = hObj, m = model, x = ox, y = oy, z = oz })
+local function update_object_cache(px, py, pz)
+    local getAllObjects, doesObjectExist, getObjectModel, getObjectCoordinates = getAllObjects, doesObjectExist, getObjectModel, getObjectCoordinates
+    local targets, n, seen = {}, 0, {}
+    for _, h in ipairs(getAllObjects()) do
+        if doesObjectExist(h) then
+            local model = getObjectModel(h)
+            local kind = DOOR_MODELS[model] and 1 or (BARRIER_MODELS[model] and 2 or 0)
+            if kind ~= 0 then
+                local ok, x, y, z = getObjectCoordinates(h)
+                if ok then
+                    n = n + 1
+                    targets[n] = { h = h, m = model, k = kind, x = x, y = y, z = z }
+                    seen[h] = true
                 end
             end
         end
     end
+    for h in pairs(obj_cd) do
+        if not seen[h] then obj_cd[h] = nil end
+    end
     M.cached_targets = targets
-    M.last_cache_update = os.clock()
+    M.last_cache_update = os_clock()
+    cache_px, cache_py, cache_pz = px, py, pz
 end
 
 function M.check()
     if not M.enabled then return end
-    local now = os.clock() * 1000
-    if now - M.last_trigger < M.TRIGGER_COOLDOWN then return end
     if not isMonetLoader() then
-        if sampIsChatInputActive() or sampIsDialogActive() or 
-           isSampfuncsConsoleActive() or sampIsCursorActive() then
+        if sampIsChatInputActive() or sampIsDialogActive()
+            or isSampfuncsConsoleActive() or sampIsCursorActive() then
             return
         end
     end
     local px, py, pz = getCharCoordinates(PLAYER_PED)
-    local dx, dy, dz = px - last_px, py - last_py, pz - last_pz
-    if (dx*dx + dy*dy + dz*dz) < 0.1 then return end
-    last_px, last_py, last_pz = px, py, pz
-    if os.clock() - M.last_cache_update > 3.0 or #M.cached_targets == 0 then
-        update_object_cache()
+    local t = os_clock()
+    if t - M.last_cache_update >= M.CACHE_TTL then
+        update_object_cache(px, py, pz)
+    else
+        local mx, my, mz = px - cache_px, py - cache_py, pz - cache_pz
+        if mx * mx + my * my + mz * mz >= M.CACHE_MOVE_SQ then
+            update_object_cache(px, py, pz)
+        end
     end
+    local list = M.cached_targets
+    local n = #list
+    if n == 0 then return end
+    local now = t * 1000
     local inCar = isCharInAnyCar(PLAYER_PED)
-    local maxDist = inCar and 8 or 5
-    local maxDistSq = maxDist * maxDist
-    for _, obj in ipairs(M.cached_targets) do
-        if doesObjectExist(obj.h) then
-            local ox, oy, oz = obj.x, obj.y, obj.z
-            local distSq = (ox - px)^2 + (oy - py)^2 + (oz - pz)^2      
-            if distSq <= maxDistSq then
-                if DOOR_MODELS[obj.m] then
-                    if distSq <= 4.0 and isValidHeading(getObjectHeading(obj.h)) then
-                        sendOpenPacket()
-                        M.last_trigger = now
-                        return
+    local bDist = inCar and M.BARRIER_CAR or M.BARRIER_FOOT
+    local bDistSq = bDist * bDist
+    local doesObjectExist, getObjectModel, getObjectHeading = doesObjectExist, getObjectModel, getObjectHeading
+    local best_door, best_door_d2
+    local best_bar,  best_bar_d2
+    local stale = false
+    for i = 1, n do
+        local o = list[i]
+        local lim = (o.k == 1) and M.DOOR_DIST_SQ or bDistSq
+        local dx, dy, dz = o.x - px, o.y - py, o.z - pz
+        local d2 = dx * dx + dy * dy + dz * dz
+        if d2 <= lim then
+            if not doesObjectExist(o.h) or getObjectModel(o.h) ~= o.m then
+                stale = true
+            else
+                local cd = (o.k == 1) and M.DOOR_COOLDOWN or M.BARRIER_COOLDOWN
+                if now - (obj_cd[o.h] or 0) >= cd then
+                    if o.k == 1 then
+                        if isValidHeading(getObjectHeading(o.h), M.HEADING_TOL) then
+                            if not best_door_d2 or d2 < best_door_d2 then
+                                best_door, best_door_d2 = o, d2
+                            end
+                        end
+                    elseif not best_bar_d2 or d2 < best_bar_d2 then
+                        best_bar, best_bar_d2 = o, d2
                     end
-                elseif BARRIER_MODELS[obj.m] then
-                    sendOpenPacket()
-                    M.last_trigger = now
-                    return
                 end
             end
         end
     end
+    if stale then update_object_cache(px, py, pz) end
+    local target = best_door or best_bar
+    if target then
+        sendOpenPacket(inCar)
+        obj_cd[target.h] = now
+        M.last_trigger = now
+    end
 end
 
 function M.handleNoKeyMessage(text)
-    local now = os.clock() * 1000
+    if type(text) ~= 'string' then return false end
+    if not text:find('нет ключей', 1, true) then return false end
+    local now = os_clock() * 1000
     if now - M.last_no_key_notify < M.NOTIFY_COOLDOWN then return false end
-    if text:find("У вас нет ключей от данного шлагбаума", 1, true) or
-       text:find("У вас нет ключей от этого шлагбаума!", 1, true) or
-       text:find("У вас нет ключей от этой двери!", 1, true) or
-       text:find("У вас нет ключей от данной двери", 1, true) then
-        M.last_no_key_notify = now
-        return true
-    end
-    return false
-end
-
-function M.set_enabled(value)
-    M.enabled = value == true
-    if M.enabled then
-        M.start_loop()
-    else
-        M.stop_loop()
-    end
+    M.last_no_key_notify = now
+    return true
 end
 
 function M.start_loop()
     if M.loop_started then return end
     M.loop_started = true
+    M._error_logged = false
     M.generation = M.generation + 1
     local gen = M.generation
-    M.last_cache_update = 0 
+    M.last_cache_update = 0
+    obj_cd = {}
     lua_thread.create(function()
         while M.enabled and M.loop_started and M.generation == gen do
-            wait(33) 
+            wait(M.TICK_MS)
             local ok, err = pcall(M.check)
             if not ok and not M._error_logged then
                 M._error_logged = true
@@ -171,14 +198,19 @@ end
 
 function M.stop_loop()
     M.loop_started = false
+    M.cached_targets = {}
+    obj_cd = {}
+end
+
+function M.set_enabled(value)
+    M.enabled = value == true
+    if M.enabled then M.start_loop() else M.stop_loop() end
 end
 
 function M.init(settings, notify_func)
     M.enabled = settings.general.auto_door == true
     M.notify_func = notify_func
-    if M.enabled then
-        M.start_loop()
-    end
+    if M.enabled then M.start_loop() end
     return M
 end
 
