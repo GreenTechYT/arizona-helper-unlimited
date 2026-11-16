@@ -1,5 +1,5 @@
 {
-  "version": "1.8.2",
+  "version": "1.8.1",
   "url": "https://raw.githubusercontent.com/GreenTechYT/arizona-helper-unlimited/main/Arizona%20Helper.lua",
   "libs": ["edgo.lua", "mimgui_piemenu.lua", "arizona_crasher.lua", "arizona_backup.lua", "arizona_network.lua", "arizona_admin.lua", "arizona_autodoor.lua", "arizona_weather_and_time.lua"],
   "lib_versions": {"edgo.lua": "1.1", "mimgui_piemenu.lua": "1.0", "arizona_crasher.lua": "1.3", "arizona_backup.lua": "1.1", "arizona_network.lua": "1.2", "arizona_autodoor.lua": "1.0", "arizona_weather_and_time.lua": "1.0"},
