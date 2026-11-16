@@ -3,7 +3,7 @@
 script_name("Arizona Helper Unlimited")
 script_description('Универсальный хелпер для игроков Arizona Online и Rodina Online')
 script_author("GreenTechYT")
-script_version("1.8.2")
+script_version("1.8.3")
 -----------------------------------------------[ INIT ]---------------------------------------------
 local worked_dir = getWorkingDirectory():gsub('\\','/')
 pcall(os.remove, worked_dir .. '/Arizona Helper.lua.bak')
@@ -184,7 +184,6 @@ local function decodeJson(value)
 end
 local memory_ok, memory = pcall(require, "memory")
 local sam_ok, sam = pcall(require, "SAMemory")
-local widgets_ok, widgets = pcall(require, 'widgets')
 local monet_ok, moon_monet = pcall(require, 'MoonMonet')
 local hotkey_ok, hotkey = pcall(require, 'mimgui_hotkeys')
 local pie_ok, pie = pcall(require, 'mimgui_piemenu')
@@ -3995,7 +3994,9 @@ function registerCommandHotkey(command)
 		local keys = decodeJson(command.bind)
 		if type(keys) ~= 'table' or #keys == 0 then return end
 		if registerCommandHotkey(command) then
-			notify('hotkeys', '[' .. CHAT_PREFIX .. '] {ffffff}Создан хоткей для команды ' .. message_color_hex .. '/' .. command.cmd .. ' {ffffff}на клавишу ' .. message_color_hex .. getNameKeysFrom(command.bind), message_color)
+			if not _G.__ah_silent_boot then
+				notify('hotkeys', '[' .. CHAT_PREFIX .. '] {ffffff}Создан хоткей для команды ' .. message_color_hex .. '/' .. command.cmd .. ' {ffffff}на клавишу ' .. message_color_hex .. getNameKeysFrom(command.bind), message_color)
+			end
 		end
 	end
 	function removeHotkeyForCommand(cmd)
@@ -4337,64 +4338,53 @@ function main()
     end
 	
 	if reload_script then return end
-
-	check_resources() 
+	local lib_info_deadline = os.clock() + 10
+	while not isUpdateChecked and os.clock() < lib_info_deadline do wait(50) end
+	if check_resources() then return end
 	delete_old_helpers()
 
-    if wt_ok and type(wt_mod) == 'table' and type(wt_mod.apply) == 'function' then
-        MODULE.WeatherTime = wt_mod
-        MODULE.WeatherTime.apply(settings.general)
-        
-        local function wt_command(is_time)
-            local cmd    = is_time and 'st' or 'sw'
-            local what   = is_time and 'времени' or 'погоды'
-            local ok_msg = is_time and 'Установлено время: ' or 'Установлена погода: '
-            local unit   = is_time and ' ч.' or ''
-            local cd_key = is_time and '_cd_t' or '_cd_w'
-            
-            return function(arg)
-                local wt = MODULE.WeatherTime
-                if not wt then return end
-                
-                local pre = '[' .. CHAT_PREFIX .. '] {ffffff}'
-                local hex = message_color_hex or '{FFFFFF}'
-                
-                if settings.general.wt_enable ~= true then
-                    notify('auto_features', pre .. 'Функция отключена. Включите "Смена времени и погоды" в Ассистенте.', message_color)
-                    return
-                end
-                
-                local locked = is_time and wt.locked_time or wt.locked_weather
-                if locked then
-                    notify('auto_features', pre .. 'Сначала выключите фиксацию ' .. what .. ' (шестерёнка в Ассистенте).', message_color)
-                    return
-                end
-                
-                local maxv = tonumber(is_time and wt.MAX_TIME or wt.MAX_WEATHER) or (is_time and 23 or 45)
-                local v = tonumber(arg)
-                
-                if not v or v < 0 or v > maxv or v ~= math.floor(v) then
-                    notify('auto_features', pre .. 'Используйте ' .. hex .. '/' .. cmd .. ' [0-' .. maxv .. ']', message_color)
-                    return
-                end
-                
-                local now = os.clock()
-                if now - (wt[cd_key] or 0) < 0.5 then return end
-                wt[cd_key] = now
-
-                local ok = is_time and wt.set_time(v) or wt.set_weather(v)
-                if ok then
-                    notify('auto_features', pre .. ok_msg .. hex .. v .. unit, message_color)
-                end
-            end
-        end
-        
-        sampRegisterChatCommand('st', wt_command(true))
-        sampRegisterChatCommand('sw', wt_command(false))
-    else
-        MODULE.WeatherTime = nil
-        print('[WeatherTime] Библиотека не загружена или устарела. Обновите lib/arizona_weather_and_time.lua')
-    end
+	if wt_ok and type(wt_mod) == 'table' and type(wt_mod.apply) == 'function' then
+		MODULE.WeatherTime = wt_mod
+		MODULE.WeatherTime.apply(settings.general)
+		local wt_cfg = {
+			settime    = { cd = '_cd_t', lock = 'locked_time',    max = 'MAX_TIME',    def_max = 23, what = 'времени', msg = 'Установлено время: ',  unit = ' ч.' },
+			setweather = { cd = '_cd_w', lock = 'locked_weather', max = 'MAX_WEATHER', def_max = 45, what = 'погоды',  msg = 'Установлена погода: ', unit = '' }
+		}
+		local function make_handler(cmd, cfg)
+			return function(arg)
+				local wt = MODULE.WeatherTime
+				if not wt or settings.general.wt_enable ~= true then
+					notify('auto_features', '[' .. CHAT_PREFIX .. '] {ffffff}Функция отключена. Включите "Смена времени и погоды" в Ассистенте.', message_color)
+					return
+				end
+				if wt[cfg.lock] then
+					notify('auto_features', '[' .. CHAT_PREFIX .. '] {ffffff}Сначала выключите фиксацию ' .. cfg.what .. '.', message_color)
+					return
+				end
+				local maxv = tonumber(wt[cfg.max]) or cfg.def_max
+				local v = tonumber(arg)
+				if not v or v < 0 or v > maxv or v ~= math.floor(v) then
+					notify('auto_features', '[' .. CHAT_PREFIX .. '] {ffffff}Используйте ' .. (message_color_hex or '{FFFFFF}') .. '/' .. cmd .. ' [0-' .. maxv .. ']', message_color)
+					return
+				end
+				local now = os.clock()
+				if now - (wt[cfg.cd] or 0) < 0.5 then return end
+				wt[cfg.cd] = now
+				local ok
+				if cmd == 'settime' then ok = wt.set_time(v) else ok = wt.set_weather(v) end
+				if ok then
+					notify('auto_features', '[' .. CHAT_PREFIX .. '] {ffffff}' .. cfg.msg .. (message_color_hex or '{FFFFFF}') .. v .. cfg.unit, message_color)
+				end
+			end
+		end
+		for cmd, cfg in pairs(wt_cfg) do
+			pcall(sampUnregisterChatCommand, cmd)
+			sampRegisterChatCommand(cmd, make_handler(cmd, cfg))
+		end
+	else
+		MODULE.WeatherTime = nil
+		print('Не удалось загрузить lib/arizona_weather_and_time.lua')
+	end
 
     MODULE.AutoDoor = autodoor_ok and autodoor_mod or nil
     if MODULE.AutoDoor then MODULE.AutoDoor.init(settings) end
@@ -4409,7 +4399,7 @@ function main()
                 settings = settings, modules = modules,
             })
         else
-            print('[EDGO] Не удалось загрузить lib/edgo.lua: ' .. tostring(edgo_setup))
+            print('Не удалось загрузить lib/edgo.lua: ' .. tostring(edgo_setup))
         end
     end
 
@@ -4979,6 +4969,7 @@ function main()
     end
 end
 function welcome_message()
+    if _G.__ah_silent_boot then _G.__ah_silent_boot = false return end
 	if not sampIsLocalPlayerSpawned() then 
 		sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Для завершения загрузки хелпера войдите на сервер.', message_color)
 		repeat wait(0) until sampIsLocalPlayerSpawned()
@@ -7440,8 +7431,9 @@ local DOWNLOAD_HANDLERS = {
 		MODULE.Update.installing = false
 		notify('update', '[' .. CHAT_PREFIX .. '] {ffffff}Обновление установлено! Выполняется перезагрузка...', message_color)
 		lua_thread.create(function()
-			wait(1500) 
+			wait(1500)
 			reload_script = true
+			thisScript():reload()
 		end)
 		
 		return true
@@ -7472,7 +7464,14 @@ local DOWNLOAD_HANDLERS = {
 		return true
 	end,
 	notify = function() return true end,
-	lib = function() return true end,
+	lib = function(path)
+		local mod = (tostring(path or ''):match('[^/\\]+$') or ''):gsub('%.lua$', '')
+		if mod ~= '' then
+			package.loaded[mod] = nil
+			package.loaded['lib.' .. mod] = nil
+		end
+		return true
+	end,
 }
 
 local function validate_download(part, path, key)
@@ -7505,29 +7504,60 @@ local function validate_download(part, path, key)
 			return false, 'old version'
 		end
 	elseif key == 'lib' then
+		local name = path:match('[^/\\]+$')
 		local f_lib = io.open(part, 'rb')
-		if not f_lib then return false, 'corrupted' end
+		if not f_lib then
+			print(tostring(name) .. ': .tmp не открывается')
+			return false, 'corrupted'
+		end
 		local content = f_lib:read('*a')
 		f_lib:close()
-		if not content or content == '' then return false, 'empty' end		
-		local name = path:match('[^/\\]+$')
+		if not content or content == '' then
+			print(tostring(name) .. ': пустой ответ')
+			return false, 'empty'
+		end
+		local chunk, cerr = loadstring(content)
+		if not chunk then
+			print(tostring(name) .. ': не Lua (' .. tostring(#content) .. ' байт): ' .. tostring(cerr))
+			print('начало: ' .. content:sub(1, 120):gsub('[\r\n]', ' '))
+			return false, 'not lua'
+		end
+		local got = content:match('LIB_VERSION%s*[:=]%s*([%w%.%-_]+)')
 		local rv = MODULE.Update and MODULE.Update.lib_versions and name and MODULE.Update.lib_versions[name]
 		if rv then
-			local got = content:match('LIB_VERSION%s*[:=]%s*([%w%.%-_]+)')
-			if not got or compare_versions(got, rv) < 0 then 
-				return false, 'old version' 
+			if type(compare_versions) == 'function' and (not got or compare_versions(got, rv) < 0) then
+				print(tostring(name) .. ': ОТКЛОНЕНО, в файле ' .. tostring(got) .. ', требуется ' .. tostring(rv))
+				return false, 'old version'
 			end
+		elseif not got then
+			print(tostring(name) .. ': нет маркера LIB_VERSION')
+			return false, 'no version marker'
 		end
 	end
 	return true
 end
 
+local function replace_file(part, path)
+	local old = path .. '.old'
+	pcall(os.remove, old)
+	local moved = doesFileExist(path) and os.rename(path, old) or true
+	if not moved then return false end
+	if os.rename(part, path) then
+		pcall(os.remove, old)
+		return true
+	end
+	if doesFileExist(old) then os.rename(old, path) end
+	return false
+end
+
 local function download_file(url, path, key, on_done)
 	local part = path .. '.tmp'
 	pcall(os.remove, part)
-	pcall(os.remove, path)
 	
+	local finished = false
 	local function finish(ok, err)
+		if finished then return end
+		finished = true
 		if not ok then pcall(os.remove, part) end
 		if on_done then pcall(on_done, ok, err) end
 	end
@@ -7542,8 +7572,7 @@ local function download_file(url, path, key, on_done)
 			if not res or tonumber(code) ~= 200 then error('HTTP ' .. tostring(code)) end
 		end)
 		if ok and validate_download(part, path, key) then
-			pcall(os.remove, path)
-			if os.rename(part, path) then finish(true) else finish(false, 'rename') end
+			if replace_file(part, path) then finish(true) else finish(false, 'rename') end
 		else
 			finish(false, tostring(err))
 		end
@@ -7561,17 +7590,25 @@ local function download_file(url, path, key, on_done)
 					lua_thread.create(function() wait(1000 * n) attempt(n + 1) end); return
 				end
 				local f = io.open(part, 'wb')
-				if not f then lua_thread.create(function() wait(1000 * n) attempt(n + 1) end); return end
+				if not f then
+					lua_thread.create(function() wait(1000 * n) attempt(n + 1) end); return
+				end
 				f:write(body)
 				f:close()
-				if validate_download(part, path, key) then
-					pcall(os.remove, path)
-					if os.rename(part, path) then finish(true) else finish(false, 'rename') end
+				local vok, verr = validate_download(part, path, key)
+				if vok then
+					if replace_file(part, path) then
+						finish(true)
+					else
+						finish(false, 'rename')
+					end
 				else
+					print('[DL] валидация отклонила: ' .. tostring(verr))
 					pcall(os.remove, part)
 					lua_thread.create(function() wait(1000 * n) attempt(n + 1) end)
 				end
-			end, function()
+			end, function(err)
+				print('[DL] сетевая ошибка: ' .. tostring(err))
 				lua_thread.create(function() wait(1000 * n) attempt(n + 1) end)
 			end)
 			if not requested then lua_thread.create(function() wait(1000 * n) attempt(n + 1) end) end
@@ -7579,8 +7616,7 @@ local function download_file(url, path, key, on_done)
 			local launched = pcall(downloadUrlToFile, url, part, function(_, status)
 				if status == 6 then
 					if validate_download(part, path, key) then
-						pcall(os.remove, path)
-						if os.rename(part, path) then finish(true) else finish(false, 'rename') end
+						if replace_file(part, path) then finish(true) else finish(false, 'rename') end
 					else
 						pcall(os.remove, part)
 						lua_thread.create(function() wait(1000 * n) attempt(n + 1) end)
@@ -7611,9 +7647,10 @@ function downloadFileFromUrlToPath(url, path, key, on_done)
 		end
 		local handler = key and DOWNLOAD_HANDLERS[key] or nil
 		if handler then
-			local hok = pcall(handler, path)
-			if not hok and key == 'helper' then reset_update_state() end
-			if on_done then on_done(hok) end
+			local hok, hres = pcall(handler, path)
+			local success = hok and hres ~= false
+			if not success and key == 'helper' then reset_update_state() end
+			if on_done then on_done(success) end
 		else
 			if on_done then on_done(true) end
 		end
@@ -7624,41 +7661,41 @@ function sync_libs(names, only_missing, on_done, blocking)
 	names = names or DEFAULT_LIBS
 	local lib_dir = worked_dir .. '/lib'
 	if not doesDirectoryExist(lib_dir) then createDirectory(lib_dir) end
+	local lv = MODULE.Update and MODULE.Update.lib_versions
+	local has_cmp = type(compare_versions) == 'function'
 	local jobs = {}
 	for _, name in ipairs(names) do
 		local file = tostring(name)
 		local path = lib_dir .. '/' .. file
-		local need = (not only_missing) or not doesFileExist(path)
-		if only_missing and doesFileExist(path) then
+		local exists = doesFileExist(path)
+		local need = (not only_missing) or not exists
+		if only_missing and exists then
 			local f = io.open(path, 'rb')
 			if f then
 				local content = f:read('*a') or ''
 				f:close()
-				if content == '' then
-					need = true
-				else
-					local chunk = loadstring(content)
-					if not chunk then need = true end
-				end
+				if content == '' or not loadstring(content) then need = true end
 			else
 				need = true
 			end
 		end
-		local remote_ver = nil
-		if MODULE.Update and type(MODULE.Update.lib_versions) == 'table' then
-			remote_ver = MODULE.Update.lib_versions[file]
-		end
+		local remote_ver = (type(lv) == 'table') and lv[file] or nil
 		if remote_ver then
-			local f = io.open(path, 'r')
-			local local_ver = f and f:read(1024):match('LIB_VERSION%s*[:=]%s*([%w%.%-_]+)')
-			if f then f:close() end
-			if local_ver and compare_versions(local_ver, remote_ver) >= 0 then
-				need = false
-			else
+			local local_ver = nil
+			if exists then
+				local f = io.open(path, 'r')
+				if f then
+					local head = f:read(1024) or ''
+					f:close()
+					local_ver = head:match('LIB_VERSION%s*[:=]%s*([%w%.%-_]+)')
+				end
+			end
+			if not has_cmp then
 				need = true
+			else
+				need = not (local_ver and compare_versions(local_ver, remote_ver) >= 0)
 			end
 		end
-		
 		if need then table.insert(jobs, { url = LIBS_BASE .. file, path = path }) end
 	end
 	local total_jobs = #jobs
@@ -7676,15 +7713,21 @@ function sync_libs(names, only_missing, on_done, blocking)
 			if on_done then pcall(on_done, failed == 0, total_jobs) end
 			return
 		end
-		downloadFileFromUrlToPath(job.url, job.path, 'lib', function(ok)
-			if not ok then failed = failed + 1 end
+		downloadFileFromUrlToPath(job.url, job.path, 'lib', function(ok, err)
+			if not ok then
+				failed = failed + 1
+				print('[LIBS] Провал: ' .. tostring(job.path) .. ' — ' .. tostring(err))
+			end
 			step()
 		end)
 	end
 	step()
 	if blocking then
-		while not is_done do
-			wait(0)
+		local deadline = os.clock() + 120
+		while not is_done and os.clock() < deadline do wait(0) end
+		if not is_done then
+			print('[LIBS] Таймаут ожидания очереди')
+			return false, total_jobs
 		end
 	end
 	return failed == 0, total_jobs
@@ -7887,7 +7930,20 @@ function check_update(manual)
 		MODULE.Update.stable_info    = tostring(u.stable_info or u.info or "")
 		MODULE.Update.beta_info      = tostring(u.beta_info or "")
 		local is_beta = (betaVer ~= "") and not beta_closed and (settings.general.beta_tester == true)
-		MODULE.Update.libs, MODULE.Update.lib_versions = parse_libs_from_json(u, is_beta)
+		MODULE.Update.libs, MODULE.Update.lib_versions = parse_libs_from_json(u, is_beta and u.beta_closed ~= true)
+		if MODULE.Update._libs_no_versions then
+			MODULE.Update._libs_no_versions = false
+			print('[UPD] версии пришли после проверки библиотек — запускаю догонку')
+			sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, function(ok, count)
+				print('[UPD] догонка: ok=' .. tostring(ok) .. ' count=' .. tostring(count))
+				if ok and (count or 0) > 0 then
+					notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки обновлены! Перезагружаю хелпер для их активации...', message_color)
+					_G.__ah_silent_boot = true
+					_G.__ah_planned_reload = true
+					thisScript():reload()
+				end
+			end, false)
+		end
 		local function stable_status_info()
 			local key = tostring(u.stable_status or u.status or ""):lower()
 			return (UPDATE_STATUS[key] or { text = "Обновление", color = "{FFFFFF}" }), key
@@ -7962,13 +8018,17 @@ function check_resources()
 		pcall(os.remove, veh_path)
 		downloadFileFromUrlToPath(VEHICLES_BASE .. ((tonumber(getServerNumber()) > 300) and 'Rodina.json' or '.json'), veh_path, 'vehicles')
 	end
+	MODULE.Update._libs_no_versions = (type(MODULE.Update.lib_versions) ~= 'table')
 	local ok, count = sync_libs(MODULE.Update.libs or DEFAULT_LIBS, true, nil, true)
 	if count and count > 0 and ok then
 		notify('libs', '[' .. CHAT_PREFIX .. '] {ffffff}Библиотеки успешно загружены! Выполняю перезагрузку для их активации...', message_color)
+		_G.__ah_silent_boot = true
+		_G.__ah_planned_reload = true
 		wait(1500)
 		thisScript():reload()
-		return
+		return true
 	end
+	return false
 end
 function import_fraction_data(mode)
     local before_my = #modules.commands.data.commands.my
@@ -15654,6 +15714,7 @@ imgui.OnFrame(
 					if imgui.Button(fa.POWER_OFF .. su8" Отключить", imgui.ImVec2(imgui.GetMiddleButtonX(3), 25 * dpi)) then
 						sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Хелпер приостановил свою работу до следующего входа в игру.', message_color)
 						if not IS_MOBILE then sampAddChatMessage('[' .. CHAT_PREFIX .. '] {ffffff}Либо используйте сочетание клавиш ' .. message_color_hex .. 'CTRL {ffffff}+ ' .. message_color_hex .. 'R{ffffff}, чтобы повторно запустить хелпер.', message_color) end
+						_G.__ah_planned_unload = true
 						thisScript():unload()
 					end
 					if imgui.IsItemHovered() then imgui.SetTooltip(su8"Приостановить работу хелпера до следующего входа в игру") end
@@ -16645,7 +16706,7 @@ function first_render_assist_gui()
 	)
 	render_assist_item(
 		"Смена времени и погоды",
-		"Команды /st [0-23] и /sw [0-45] меняют время и погоду.\n\nДля фиксации используйте шестерёнку справа.",
+		"Команды /settime [0-23] и /setweather [0-45] меняют время и погоду.\n\nДля фиксации используйте шестерёнку справа.",
 		settings.general, "wt_enable", false,
 		function()
 			MODULE.WeatherTimeUI = MODULE.WeatherTimeUI or {}
@@ -22874,6 +22935,9 @@ end
 ------------------------------------------[ PC KEY ACTIONS ]--------------------------------------
 if not IS_MOBILE then
 	function onWindowMessage(msg, wparam, lparam)
+		if msg == 0x100 and wparam == 0x52 and isKeyDown(0x11) then
+			reload_script = true
+		end
 		if not terms_gate then return end
 		local function consume_safe()
 			if type(consumeWindowMessage) == 'function' then
@@ -22935,9 +22999,15 @@ imgui.OnFrame(
 --------------------------------------------[ TERMINATE ]------------------------------------------
 function onScriptTerminate(script, game_quit)
 	if script ~= thisScript() then return end
+	if _G.__ah_planned_reload then _G.__ah_planned_reload = false return end
+	local planned_unload = (_G.__ah_planned_unload == true) _G.__ah_planned_unload = false
 	pcall(function()
 		if MODULE.Network and MODULE.Network.stop then pcall(MODULE.Network.stop) end
-		if game_quit or reload_script then return end
+		if planned_unload then
+			if MODULE.InfraredVision then pcall(setInfraredVision, false) end
+			if MODULE.NightVision then pcall(setNightVision, false) end
+		end
+		if game_quit or reload_script or planned_unload then return end
 		if MODULE.InfraredVision then pcall(setInfraredVision, false) end
 		if MODULE.NightVision then pcall(setNightVision, false) end
 		local msg1 = '[' .. tostring(CHAT_PREFIX or '') .. '] {ffffff}Произошла неизвестная ошибка, хелпер приостановил свою работу!'
