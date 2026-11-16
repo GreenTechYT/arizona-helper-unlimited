@@ -107,10 +107,12 @@ local SERVER_ERRORS = {
     rate_limit_global = 'слишком часто: глобальный кулдаун сервера, подождите',
     admin_nick_protected = 'ник зарезервирован за администратором - используйте свой HWID',
 }
+
 local function one_line(t)
     local s = tostring(t):gsub('[\r\n]+', '. '):gsub('%.%s*%.', '.'):gsub('%s+', ' ')
     return s:gsub('^%s+', ''):gsub('%s+$', '')
 end
+
 local function is_utf8_string(text)
     local i, length = 1, #text
     while i <= length do
@@ -137,14 +139,17 @@ local function is_utf8_string(text)
     end
     return true
 end
+
 local su8
 local function trim(text) return (tostring(text or ''):gsub('^%s+', ''):gsub('%s+$', '')) end
 local function utf8_cut(s, n) s = tostring(s) if #s <= n then return s end local cut = s:sub(1, n) return cut:gsub('[\192-\255][\128-\191]*$', '') end
+
 function M.to_utf8(text)
     local value = tostring(text or '')
     if value == '' or is_utf8_string(value) then return value end
     return su8(value)
 end
+
 local function ru_system_text(t)
     local low = tostring(t):lower()
     for k, v in pairs(SERVER_ERRORS) do
@@ -162,6 +167,7 @@ local function ru_system_text(t)
     end
     return original
 end
+
 local function notice(text, kind)
     local final_text = M.to_utf8(tostring(text))
     M.notices = M.notices or {}
