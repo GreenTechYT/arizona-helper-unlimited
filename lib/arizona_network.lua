@@ -1,6 +1,6 @@
--- LIB_VERSION: 1.2
+-- LIB_VERSION: 1.3
 local M = {}
-M.version = '1.2'
+M.version = '1.3'
 M.ctx = nil
 M.base_url = ''
 M.default_url = 'https://my-helper-api.greentechyt-helper.workers.dev'
@@ -471,7 +471,7 @@ local function encode_json(data, pretty)
     return ''
 end
 
-local NET_CFG_VERSION = 1
+local NET_CFG_VERSION = 2
 local NET_DEFAULTS = {
 	server = 0,
 	hwid = '',
@@ -479,8 +479,7 @@ local NET_DEFAULTS = {
 	chat_nick_color = '{FFD700}',
 	show_avatars = true,
 	hide_system = false,
-	last_id = 0,
-	last_system_id = 0,
+	room_last_ids = {},
 	cleared_rooms = {},
 	avatar_mode = 'letters',
 	avatar_icon = 'FACE_SMILE',
@@ -489,6 +488,8 @@ local NET_DEFAULTS = {
 
 local NET_REMOVED = {
 	last_cleared_at = true,
+	last_id = true,
+	last_system_id = true,
 }
 
 local NET_KNOWN = { cfg_version = true, avatar_bg = true, avatar_fg = true }
@@ -574,7 +575,7 @@ local function net_merge_defaults(default, loaded)
 			if net_merge_defaults(v, loaded[k]) then changed = true end
 		elseif loaded[k] == nil then
 			loaded[k] = v; changed = true
-			print('[AHM] В HelperNetwork.json добавлено: ' .. k .. ' = ' .. tostring(v))
+			print('В HelperNetwork.json добавлено: ' .. k .. ' = ' .. tostring(v))
 		end
 	end
 	return changed
@@ -2854,8 +2855,7 @@ end
 local function enter_room(lobby)
     M.admin_lobby = lobby
     M.messages, M.system_messages = {}, {}
-    M.last_id, M.last_system_id = 0, 0
-    M.save_room_state()
+	M.last_id, M.last_system_id = 0, 0
     M.session = ''
     M.pending_initial_sync = true
     M.msg_reactions, M.pinned = {}, nil
@@ -2931,8 +2931,8 @@ function M.init(opts)
     M.base_url = M.default_url
     M.server = tonumber(ctx_opts.server or config.server or 1) or 1
     M.hwid = tostring(config.hwid or '')
-    M.room_last_ids = type(config.room_last_ids) == 'table' and config.room_last_ids or {}
-    M.last_id = 0
+	M.room_last_ids = type(config.room_last_ids) == 'table' and config.room_last_ids or {}
+	M.load_room_state()
     M.last_system_id = 0
     M.hide_system = config.hide_system == true
     M.show_avatars = config.show_avatars ~= false
